@@ -195,7 +195,7 @@ Dev only: pigeon 29.0 (BSD-3-Clause).
 
 ## 4.3 `feat/app-calls`
 
-PR: opened from `feat/app-calls` against `main`, not merged.
+PR: https://github.com/tangosierra007/voiceplatform-app/pull/16 (against `main`, not merged).
 
 ### What is built
 
