@@ -154,7 +154,7 @@ The five native components NOTICE marked "licence not established". Pins are lin
 - New files: `LICENSE.aom`, `LICENSE.aom-patents`, `LICENSE.gsm`, `LICENSE.decaf`, `LICENSE.mswebrtc-webrtc`, `LICENSE.mswebrtc-webrtc-patents` (46 files in `licenses/` now). `bundledLicences` lists them; BroadVoice16 is the only entry left with the "could not be obtained" note.
 - NOTICE's hand-kept section gives each pin, version, licence and pinned source URL next to its licence file, and says plainly where a version is not pinned.
 - The generated liblinphone section is unchanged: it still records only what the SDK's own files say.
-- Seen in passing, not changed: the binary also reports dav1d as `1.2.1-306-g1fd0bab` (NOTICE says "version not established" for it).
+- **dav1d** (follow-up): the binary reports `1.2.1-306-g1fd0bab`. The pin `1fd0bab` is Belledonne's commit (code.videolan.org's API returns 404 for it), 306 commits after upstream tag `1.2.1`, so the base is not pinned, as for aom. `LICENSE.dav1d` is now `COPYING` from tag `1.2.1` (`code.videolan.org/videolan/dav1d/-/blob/1.2.1/COPYING`, BSD-2-Clause; master's differs only in the copyright years).
 
 ### Tests
 

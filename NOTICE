@@ -144,8 +144,15 @@ Third-party components are listed below with their licences as they are added.
   - libjpeg-turbo: 3.0.3 (binary); IJG licence, BSD-3-Clause and zlib.
     packages/vp_linphone/licenses/LICENSE.libjpeg-turbo,
     packages/vp_linphone/licenses/LICENSE.libjpeg-turbo-ijg (from 3.0.3)
-  - dav1d, VideoLAN: version not established (fork pin 1fd0bab); BSD-2-Clause.
-    packages/vp_linphone/licenses/LICENSE.dav1d (from master)
+  - dav1d, VideoLAN: linphone-sdk 5.5.39 pins external/dav1d at
+    1fd0bab43674eef68eb8427b543bb8a5e4271f9f. That commit is Belledonne's (it
+    is not in code.videolan.org/videolan/dav1d), and the binary reports
+    "1.2.1-306-g1fd0bab", that is 306 commits after upstream tag 1.2.1. The
+    upstream commit the fork is based on is not pinned: the fork could not be
+    read. BSD-2-Clause. The text is from tag 1.2.1 (master's differs only in
+    the copyright years, 2018-2025).
+    packages/vp_linphone/licenses/LICENSE.dav1d, from
+    https://code.videolan.org/videolan/dav1d/-/blob/1.2.1/COPYING
   - jsoncpp: version not established (fork pin dadce78); MIT or public domain.
     packages/vp_linphone/licenses/LICENSE.jsoncpp (from master)
   - ZXing-C++: version not established (fork pin 722123a); Apache-2.0.
