@@ -8,7 +8,11 @@ import 'package:call_engine/call_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:vp_linphone/vp_linphone.dart';
 
-void main() => runApp(const BenchApp());
+void main() {
+  // What the app does at start (WS4): the native licences into the licence list.
+  addVpLinphoneLicenses();
+  runApp(const BenchApp());
+}
 
 class BenchApp extends StatefulWidget {
   const BenchApp({super.key, this.engine});

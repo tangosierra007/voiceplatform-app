@@ -58,13 +58,13 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
 ### Tests
 
 - `flutter analyze` (package and example): no issues.
-- `flutter test` (package): 57 tests pass.
+- `flutter test` (package): 61 tests pass, including `licenses_test.dart`: every licence file is listed and declared as an asset, NOTICE names each one, and `addVpLinphoneLicenses()` yields one LicenseRegistry entry per component.
   - `incoming_headers_test.dart`: the parser.
   - `log_scrubber_test.dart`: the same sample lines as Kotlin, including an Authorization header, the password and full numbers.
   - `engine_test.dart`: the Dart side against a fake host API, including the emergency table (every emergency number throws `EmergencyNumberUseDialler` with nothing sent, also before `start()` and `register()`; the table agrees with `isEmergencyNumber()`).
   - `channel_test.dart`: real Pigeon messages on a mock platform channel, including the error envelope.
 - `flutter test` (example): 1 test passes.
-- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 37 tests pass.
+- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 38 tests pass (`dialString` keeps ASCII digits 0-9 only, like the emergency rule).
   - `LogScrubberTest`: the log sink's scrubber on lines with an Authorization header, a password and full phone numbers.
   - `CallLogFileTest`
   - `MappingTest`: call states, end reasons (answered elsewhere), registration failures, codec order, HD, routes.
@@ -87,6 +87,15 @@ So the release says GPL-3.0 in its metadata and AGPL-3.0-or-later / GPL-2.0-or-l
 
 **NOTICE is generated** (TJ, 27 Oct). The liblinphone section is written by `packages/vp_linphone/tool/liblinphone_notice.dart`. Re-run it on an upgrade from `packages/vp_linphone`: `dart run tool/liblinphone_notice.dart --version <v> --write ../../NOTICE`. It reads only the SDK's own files and checks each download against the repository's `.sha256`: the POM `<licenses>`, any LICENSE, COPYING or NOTICE file in the AAR or sources jar (there are none), each Java source's header, the root CA bundle's header, and licence-like strings inside the native libraries. Each statement names its source file. The only licence the SDK states is for the SDK as a whole (POM) and for the Java sources (their headers). **For every native component the licence is not stated in the SDK**, ML-KEM and libxml2 included, and NOTICE says so plainly. The only text found in a native library is a copyright line in libjpeg-turbo's `libjpeg.so` and `libturbojpeg.so` ("Copyright (C) 1991-2024 The libjpeg-turbo Project and many others"), with no licence. The root CA bundle states no licence either. The upstream licences I listed in the previous round came from Belledonne's source repositories, not from the SDK, so they were removed from NOTICE.
 
+**Licence texts for the native code (hand-kept, WS6 round 4).** The generated section only records what the SDK's own files say, and they state none of the native licences. So NOTICE has a second, hand-kept section with each bundled component's upstream project, version and licence, and its licence text in `packages/vp_linphone/licenses/` (35 files):
+
+- **Belledonne components:** texts are exact, from linphone-sdk tag 5.5.39 on GitHub. liblinphone, mediastreamer2 and oRTP ship AGPL-3.0 texts; bctoolbox, belle-sip, belr, bzrtp, lime, postquantumcryptoengine, msaaudio and msandroidcamera2 ship GPL-3.0 texts; mswebrtc ships a **GPL-2.0** COPYING.
+- **Third-party code:** it is built from Belledonne's forks on gitlab.linphone.org, pinned in `external/` at 5.5.39. That server could not be reached from this PC or dev-1, so the texts come from the upstream GitHub projects:
+  - at the version the binary reports: opus 1.3.1, libvpx 1.9.0 base, libsrtp 2.7.0, zlib 1.2.8, SQLite 3.46.0, libjpeg-turbo 3.0.3;
+  - at a stated nearby version or the default branch where the binary names none: speex, Mbed TLS 3.6.2, dav1d, jsoncpp, ZXing-C++, xerces-c, SOCI, libxml2, OpenLDAP, liboqs.
+- **libc++:** the text is from the local NDK r28c NOTICE.
+- **Upstream licence not established:** aom, GSM 06.10, BroadVoice16, decaf (Ed448), WebRTC audio processing inside mswebrtc, and liboqs's third-party subfolder licences (the ML-KEM code may sit there). NOTICE says so, and the in-app list shows "could not be obtained" for each.
+- **In the APK:** the texts ship as plugin assets (35 files, checked in the example APK). `addVpLinphoneLicenses()` adds them to Flutter's `LicenseRegistry`. **WS4 must call `addVpLinphoneLicenses()` once at app start** (the example does, in `main`). Flutter's licence page then lists them.
 ### Header formats assumed (WS2 emits these on INVITEs to app contacts)
 
 ```
@@ -123,5 +132,5 @@ Answered by mobile-lead (27 Oct): the contract gained `instanceId` (used for `+s
 
 1. **Call history on the device.** liblinphone keeps its own call-log database by default; it is not exported or uploaded. Should it be turned off?
 2. **Release date.** 5.5.39 was published to Belledonne's repository on 27 Oct. It is pinned as specified. Belledonne's release notes for it were not reviewed.
-3. **Native licences are not stated in the SDK** (see NOTICE): about 28 components, ML-KEM and libxml2 among them. For distribution, their licence texts have to come from somewhere: the linphone-sdk 5.5.39 source tag, or Belledonne directly. That is a call for you and TJ; nothing in this branch infers them.
+3. **Licences still open:** aom, GSM 06.10, BroadVoice16, decaf, WebRTC and liboqs's third-party parts have no established upstream licence, and versions are not confirmed for most third-party components (texts and versions from Belledonne's forks need gitlab.linphone.org access). **mswebrtc ships a GPL-2.0 COPYING**: whether that is GPL-2.0-only, and so incompatible with this AGPL-3.0 app, needs checking against mswebrtc's source headers. Previously: native licences are not stated in the SDK (see NOTICE): about 28 components, ML-KEM and libxml2 among them. For distribution, their licence texts have to come from somewhere: the linphone-sdk 5.5.39 source tag, or Belledonne directly. That is a call for you and TJ; nothing in this branch infers them.
 4. **The root app** needs, in 3.2, its merged manifest checked against the spec's permission list. Nothing in `lib/`, the root `pubspec.yaml` or the root `android/` was touched.

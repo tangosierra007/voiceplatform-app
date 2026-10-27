@@ -148,6 +148,17 @@ class RulesTest {
     }
 
     @Test
+    fun dialStringsKeepAsciiDigitsOnly() {
+        // Arabic-Indic, Devanagari and full-width digits are not dialled.
+        assertEquals("", Rules.dialString("٠١٢"))
+        assertEquals("", Rules.dialString("०१२"))
+        assertEquals("12", Rules.dialString("1０2"))
+        assertFalse(Rules.isDialable("٢٠٤"))
+        // Same digit set as the emergency rule: neither treats these as 000.
+        assertFalse(Rules.isEmergency("٠٠٠"))
+    }
+
+    @Test
     fun normalNumbersNeedAnAccountRegistrationAndMicrophone() {
         assertNull(Rules.callGate("204", hasAccount = true, registered = true, micGranted = true))
         assertEquals("not_registered", Rules.callGate("204", hasAccount = false, registered = false, micGranted = true))

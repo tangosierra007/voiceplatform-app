@@ -57,6 +57,89 @@ Third-party components are listed below with their licences as they are added.
     - LLVM libc++ (in libc++_shared.so): licence not stated in the SDK
 [end of the generated liblinphone section]
 
+- Components compiled into the liblinphone SDK's native libraries (jni/*.so),
+  which ship in the APK. Kept by hand. The SDK itself states none of these
+  licences (above), so each upstream project, version and licence text is
+  given here. Belledonne's own components come from linphone-sdk tag 5.5.39
+  (exact). Third-party code is built from Belledonne's forks, pinned in
+  linphone-sdk 5.5.39's external/ submodules (commit given). Those forks
+  (gitlab.linphone.org) could not be reached, so each text below comes from
+  the upstream project at the version the binary reports, or at a stated
+  nearby version when the binary names none. The texts are in
+  packages/vp_linphone/licenses/ and are shown in the app's licence list.
+  The licence named for each component is that text's.
+
+  Belledonne Communications SARL, linphone-sdk 5.5.39:
+  - liblinphone, mediastreamer2, oRTP: GNU AGPL-3.0
+    packages/vp_linphone/licenses/liblinphone/LICENSE.txt
+    packages/vp_linphone/licenses/mediastreamer2/LICENSE.txt
+    packages/vp_linphone/licenses/ortp/LICENSE.txt
+  - bctoolbox, belle-sip, belr, bzrtp, lime, postquantumcryptoengine,
+    msaaudio, msandroidcamera2: GNU GPL-3.0
+    packages/vp_linphone/licenses/bctoolbox/LICENSE.txt
+    packages/vp_linphone/licenses/belle-sip/LICENSE.txt
+    packages/vp_linphone/licenses/belr/LICENSE.txt
+    packages/vp_linphone/licenses/bzrtp/LICENSE.txt
+    packages/vp_linphone/licenses/lime/LICENSE.txt
+    packages/vp_linphone/licenses/postquantumcryptoengine/LICENSE.txt
+    packages/vp_linphone/licenses/msaaudio/LICENSE.txt
+    packages/vp_linphone/licenses/msandroidcamera2/LICENSE.txt
+  - mswebrtc: GNU GPL-2.0 (its COPYING), with third-party code inside it:
+    packages/vp_linphone/licenses/mswebrtc/COPYING
+    Ooura FFT: packages/vp_linphone/licenses/mswebrtc-ooura/LICENSE
+    Abseil, Apache-2.0: packages/vp_linphone/licenses/mswebrtc-abseil/LICENSE
+    WebRTC audio processing itself: upstream licence not established (no
+    WebRTC licence file in mswebrtc's tree at 5.5.39).
+
+  Third-party code (upstream, version, licence, text):
+  - opus, Xiph.Org: 1.3.1 (binary: "libopus 1.3.1-fixed"; fork pin f86ad14);
+    BSD-3-Clause. packages/vp_linphone/licenses/opus/COPYING (from v1.3.1)
+  - speex, Xiph.Org: version not confirmed (fork pin 52f01d5; a "1.2.1"
+    string is in libmediastreamer2.so); BSD-3-Clause.
+    packages/vp_linphone/licenses/speex/COPYING (from Speex-1.2.1)
+  - libvpx, WebM Project: Belledonne fork v1.9.0-1385-g5a4dda49f (binary);
+    BSD-3-Clause with a patent grant.
+    packages/vp_linphone/licenses/libvpx/LICENSE,
+    packages/vp_linphone/licenses/libvpx/PATENTS (from v1.9.0)
+  - libsrtp, Cisco: 2.7.0 (binary); BSD-3-Clause.
+    packages/vp_linphone/licenses/libsrtp/LICENSE (from v2.7.0)
+  - Mbed TLS: 3.x (TLS 1.3 symbols), exact version not established (fork pin
+    857ff3a); Apache-2.0 OR GPL-2.0-or-later.
+    packages/vp_linphone/licenses/mbedtls/LICENSE (from mbedtls-3.6.2)
+  - zlib: 1.2.8 (binary); zlib licence.
+    packages/vp_linphone/licenses/zlib/README (from v1.2.8; the licence is its
+    "Copyright notice" section)
+  - SQLite: 3.46.0 (binary source id of 2024-05-23); public domain.
+    packages/vp_linphone/licenses/sqlite/LICENSE.md (from version-3.46.0)
+  - libjpeg-turbo: 3.0.3 (binary); IJG licence, BSD-3-Clause and zlib.
+    packages/vp_linphone/licenses/libjpeg-turbo/LICENSE.md,
+    packages/vp_linphone/licenses/libjpeg-turbo/README.ijg (from 3.0.3)
+  - dav1d, VideoLAN: version not established (fork pin 1fd0bab); BSD-2-Clause.
+    packages/vp_linphone/licenses/dav1d/COPYING (from master)
+  - jsoncpp: version not established (fork pin dadce78); MIT or public domain.
+    packages/vp_linphone/licenses/jsoncpp/LICENSE (from master)
+  - ZXing-C++: version not established (fork pin 722123a); Apache-2.0.
+    packages/vp_linphone/licenses/zxing-cpp/LICENSE (from master)
+  - Apache Xerces-C++: 3.x, exact version not established (fork pin cb8467f);
+    Apache-2.0. packages/vp_linphone/licenses/xerces-c/LICENSE,
+    packages/vp_linphone/licenses/xerces-c/NOTICE (from master)
+  - SOCI: version not established (fork pin 3a9c790); BSL-1.0.
+    packages/vp_linphone/licenses/soci/LICENSE_1_0.txt (from master)
+  - libxml2: version not established (fork pin d6131eb); MIT.
+    packages/vp_linphone/licenses/libxml2/Copyright (from master)
+  - OpenLDAP client library: version not established (fork pin c4d9145);
+    OpenLDAP Public License 2.8. packages/vp_linphone/licenses/openldap/LICENSE,
+    packages/vp_linphone/licenses/openldap/COPYRIGHT (from master)
+  - liboqs, Open Quantum Safe (the ML-KEM code): version not established
+    (fork pin e219b1a); MIT in general. Its third-party parts carry their own
+    licences in subfolders, and those texts were not obtained.
+    packages/vp_linphone/licenses/liboqs/LICENSE.txt (from main)
+  - LLVM libc++ (libc++_shared.so): Android NDK; the NDK version Belledonne
+    built with is not stated. Apache-2.0 WITH LLVM-exception.
+    packages/vp_linphone/licenses/libc++/LICENSE.TXT (from NDK r28c's NOTICE)
+  - aom (AV1), GSM 06.10, BroadVoice16 and decaf (Ed448): upstream licence
+    not established. Their sources (Belledonne's forks) could not be reached
+    and no canonical upstream copy was available here.
 - AndroidX Core (androidx.core:core-ktx 1.16.0), The Android Open Source
   Project. Apache-2.0. Used by packages/vp_linphone.
 

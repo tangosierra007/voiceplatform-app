@@ -179,13 +179,16 @@ object Rules {
         if (!micGranted) return "microphone_denied"
         return null
     }
-    /** Keeps digits, `+` (leading only), `*` and `#`; drops spaces and punctuation. */
+    /**
+     * Keeps ASCII digits 0-9 (as the emergency rule does; other Unicode digits
+     * are dropped), `+` (leading only), `*` and `#`; drops everything else.
+     */
     fun dialString(number: String): String {
         val trimmed = number.trim()
         val sb = StringBuilder()
         trimmed.forEachIndexed { i, c ->
             when {
-                c.isDigit() || c == '*' || c == '#' -> sb.append(c)
+                c in '0'..'9' || c == '*' || c == '#' -> sb.append(c)
                 c == '+' && sb.isEmpty() && i == trimmed.indexOfFirst { !it.isWhitespace() } -> sb.append(c)
             }
         }
@@ -194,7 +197,7 @@ object Rules {
 
     /** A user part we can put in a SIP URI: an extension, a number, or a feature code. */
     fun isDialable(dial: String): Boolean = dial.isNotEmpty() && dial.length <= 32 &&
-        dial.trimStart('+').isNotEmpty() && dial.trimStart('+').all { it.isDigit() || it == '*' || it == '#' }
+        dial.trimStart('+').isNotEmpty() && dial.trimStart('+').all { it in '0'..'9' || it == '*' || it == '#' }
 
     private val UUID_RE = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
