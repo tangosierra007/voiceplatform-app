@@ -175,7 +175,7 @@ Branch `feat/srtp-mandatory` from `main` at `cbce9a0`. One PR, not merged. Requi
 ### Open
 
 1. **Edge:** the app now needs the edge to offer and answer RTP/SAVP with SDES on every app branch and app-originated call. PR #117 (WS2 2.2) as read today has no SRTP change (its SIPp scenarios still use RTP/AVP). Until the edge's SRTP-only change lands, every app call fails with 488.
-2. **UI copy:** `docs/store/listing.md` still says calls are encrypted "where your workplace's connection supports it". With APP13 they always are. Owner: WS5.
+2. **Store copy:** `docs/store/listing.md` now says every call is encrypted (TLS signalling, SRTP audio). **Do not merge** until the edge offers SDES RTP/SAVP on every app leg (WS2 `feat/app-srtp-mandatory`); merged first, every app call fails with 488.
 3. **Proposed guardrail row** for `docs/guardrails.md` (main repo): APP13, "Every app call's audio is SRTP (SDES), mandatory: the SDP never offers RTP/AVP, and a call that would carry plain RTP is refused (488) or ended (`failed`)". Test: app `MediaSecurityTest`; edge SIPp from WS2. Status: partial until the handset test.
 
 ## 3.2 (Android) `feat/telecom-fcm`

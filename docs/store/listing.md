@@ -30,7 +30,7 @@ Draft for task 5.4. Nothing here is uploaded yet. Plain Australian English, sent
 > - Choose which of your work numbers people see when you call out.
 > - Transfer a call to a colleague, talk to them first if you like, or add a third person.
 > - Mute, keypad, speaker, hold, Bluetooth and car audio.
-> - Calls are encrypted where your workplace's connection supports it, and the screen tells you when they are.
+> - Every call is encrypted: call setup travels over TLS and your voice over SRTP. The app won't connect a call without it.
 >
 > **Voicemail and call history**
 > - Play voicemail in the app, call back, and mark it heard. Your desk phone's message light goes off too.
@@ -56,6 +56,8 @@ Draft for task 5.4. Nothing here is uploaded yet. Plain Australian English, sent
 >
 > **Open source**
 > VoicePlatform is free software under the GNU Affero General Public License, version 3. The source code is at github.com/tangosierra007/voiceplatform-app.
+
+Encryption line: SIP signalling is TLS and call audio is mandatory SRTP on every app call (APP13). The guardrail number stays out of the store copy.
 
 ## Graphics still to make
 
