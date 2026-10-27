@@ -1,0 +1,1336 @@
+openapi: 3.1.0
+info:
+  title: VoicePlatform app API
+  version: 0.1.0
+  description: |
+    The API the VoicePlatform phone and desktop apps call (spec 22). Contract owned by
+    mobile-lead; WS1 builds it in `apps/api/src/app-api/`, WS4 generates the Dart client
+    from it and runs `tool/mock_server` against it. A change goes through the lead only.
+
+    - Prefix `/app/v1`, separate from the portal's cookie-based `/v1` (decision 136, proposed).
+      Bearer access tokens only; no cookies are set or read, so the portal's Origin check (T10)
+      does not apply here and CSRF has nothing to ride on.
+    - Every authenticated route runs as the signed-in end user under RLS, with the same
+      permission names as `/v1` (`packages/shared/src/permissions.ts`), and reuses the `/v1`
+      services. Routes are thin (CLAUDE.md).
+    - Every request sends `X-VP-App: <platform>/<version>` (for example `android/1.0.3`).
+      Below the platform's minimum version every authenticated route answers 426
+      `update_required` (APP7).
+    - Errors are `{ "error": code, "message": text }`, as `/v1`. A row outside the user's reach
+      is 404, never 403 (RLS rejections map to 404, as `/v1`).
+    - Lists use cursor pagination: `?limit=` (1 to 100, default 50) and `?before=` the
+      `nextBefore` of the previous page.
+    - Phone numbers are E.164. Times are RFC 3339 UTC.
+    - No SIP password appears in any response except `POST /devices/me/sip-credentials`, and
+      none in any log (APP4, S1, S4). Phone contacts from the device never reach this API (APP12).
+servers:
+  - url: https://portal.voiceplatform.com.au/app/v1
+    description: Production (a reseller's portal host serves the same paths)
+  - url: http://localhost:3000/app/v1
+    description: Mock server (`tool/mock_server`) and local API
+
+security:
+  - appBearer: []
+
+tags:
+  - name: signin
+  - name: me
+  - name: device
+  - name: calls
+  - name: directory
+  - name: history
+  - name: voicemail
+  - name: recordings
+  - name: messages
+  - name: diagnostics
+
+paths:
+  /config:
+    get:
+      tags: [signin]
+      summary: Minimum and recommended app versions (AppUpdate)
+      security: []
+      parameters:
+        - { name: platform, in: query, required: true, schema: { $ref: "#/components/schemas/Platform" } }
+      responses:
+        "200":
+          description: Version rules for the platform
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppConfig" }
+
+  /auth/email-requests:
+    post:
+      tags: [signin]
+      summary: Start sign-in by email (AppSignIn)
+      description: |
+        The app generates a 32-byte request secret, keeps it in memory, and sends it here. The
+        email holds a link and a 6-digit code, both tied to this request; completing needs the
+        secret, so a forwarded link is useless (APP1). Same 202 whether or not the email exists,
+        is an end user, or is Advanced (APP2). Rate limited per email and per IP (429).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailRequestInput" }
+      responses:
+        "202":
+          description: Always, for any well-formed email
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailRequestAccepted" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/email-requests/{requestId}/resend:
+    post:
+      tags: [signin]
+      summary: Send again (AppCode timer)
+      security: []
+      parameters: [{ $ref: "#/components/parameters/RequestId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestSecret]
+              properties: { requestSecret: { type: string } }
+      responses:
+        "202":
+          description: Always; a new code replaces the old one, the link stays the same request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailRequestAccepted" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/email-requests/{requestId}/complete:
+    post:
+      tags: [signin]
+      summary: Finish sign-in with the code or the link token, and bind this device
+      description: |
+        Exactly one of `code` or `linkToken`. Single use, 10 minutes, the request locks after
+        5 wrong codes (APP1). Refused for Basic extensions with 403 `licence_basic` (APP3). The
+        device's public key (Android Keystore, P-256) is bound to the refresh token. A user
+        already at 5 app and desktop devices gets 409 `device_limit` (A3).
+      security: []
+      parameters: [{ $ref: "#/components/parameters/RequestId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteInput" }
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: "`licence_basic` (AppBasic), or `account_disabled`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LicenceRefusal" }
+        "409": { $ref: "#/components/responses/DeviceLimit" }
+        "410":
+          description: "`code_expired`, `code_used` or `request_locked`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/qr/complete:
+    post:
+      tags: [signin]
+      summary: Sign in from the QR on the end user portal ("Scan the QR code instead")
+      description: |
+        The portal's "Sign in the VoicePlatform app" QR (new `POST /v1/me/app-qr`, WS1 1.1) holds
+        `vpapp://signin/<qrToken>`: 32 random bytes, SHA-256 stored, single use, 10 minutes,
+        refused for Basic at generation and here.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QrCompleteInput" }
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "403":
+          description: "`licence_basic`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LicenceRefusal" }
+        "409": { $ref: "#/components/responses/DeviceLimit" }
+        "410":
+          description: "`qr_used` or `qr_expired`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/refresh:
+    post:
+      tags: [signin]
+      summary: New access token; rotates the refresh token
+      description: |
+        Signed with the device key. Re-checks the licence (APP3), the device's revocation and
+        the minimum version. Reuse of an old refresh token revokes the device.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshInput" }
+      responses:
+        "200":
+          description: New tokens
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tokens" }
+        "401":
+          description: "`device_revoked` (AppSignedOut) or `refresh_invalid`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignedOut" }
+        "403":
+          description: "`licence_basic`: the extension moved to Basic; the device is revoked"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LicenceRefusal" }
+        "426": { $ref: "#/components/responses/UpdateRequired" }
+
+  /auth/licence-requests:
+    post:
+      tags: [signin]
+      summary: '"Ask my admin to upgrade" (AppBasic, A6)'
+      description: |
+        Carries the `refusalToken` from a `licence_basic` refusal (single use, 1 hour). Notifies
+        the tenant admins in the portal and by email, linking to the extension's licence
+        setting. One open request per extension; a repeat answers 202 without a new email.
+        Audited `app.licence_requested`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refusalToken]
+              properties: { refusalToken: { type: string } }
+      responses:
+        "202": { description: Sent, or already open }
+        "410": { description: "`refusal_expired`" }
+
+  /me:
+    get:
+      tags: [me]
+      summary: Who is signed in, and what they may do (AppMe header, tab gating)
+      responses:
+        "200":
+          description: The signed-in user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "426": { $ref: "#/components/responses/UpdateRequired" }
+
+  /me/status:
+    put:
+      tags: [me]
+      summary: Available, Do not disturb (optionally until a time), or Away (AppMe, A4)
+      description: Synced with desk phones (DND as `*78`/`*79` and the phone-side state). Audited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StatusInput" }
+      responses:
+        "200":
+          description: New status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+
+  /me/call-settings:
+    get:
+      tags: [me]
+      summary: '"When I don''t answer" (rings, timing, then voicemail)'
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallSettings" }
+    patch:
+      tags: [me]
+      summary: Change "When I don't answer"; same rules and audit as `PATCH /v1/me/call-settings`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CallSettingsPatch" }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallSettings" }
+
+  /me/caller-ids:
+    get:
+      tags: [calls]
+      summary: Numbers this user may present (AppKeypad picker), plus withheld when allowed
+      responses:
+        "200":
+          description: Choices, the default first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CallerId" }
+
+  /me/office-hours:
+    get:
+      tags: [me]
+      summary: Business hours this user may override (AppMe "Office hours")
+      description: Only time conditions where the tenant admin granted this user the override flag (APP11). Empty otherwise.
+      responses:
+        "200":
+          description: Overridable schedules with their current state
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OfficeHours" }
+
+  /me/office-hours/{id}/override:
+    post:
+      tags: [me]
+      summary: Open, Closed or Follow schedule; audited "via app" (APP11)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OverrideInput" }
+      responses:
+        "200":
+          description: New state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfficeHours" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/devices:
+    get:
+      tags: [device]
+      summary: Signed-in devices and desk phones (AppMe, DeskDevices)
+      responses:
+        "200":
+          description: This user's devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DeviceSummary" }
+
+  /me/devices/{id}:
+    patch:
+      tags: [device]
+      summary: Rings switch for an app or desktop device (A3)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rings]
+              properties: { rings: { type: boolean } }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceSummary" }
+
+  /me/devices/{id}/sign-out:
+    post:
+      tags: [device]
+      summary: Sign out another of my app or desktop devices; audited
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "204": { description: Revoked; its registration is removed now (APP4) }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /devices/me/sip-credentials:
+    post:
+      tags: [device]
+      summary: This device's SIP identity, for CallEngine.register only
+      description: |
+        The only response carrying a SIP password (APP4). POST so nothing caches it; the app
+        keeps it in memory and the Keystore, never in logs or GlitchTip. Refused for Basic
+        (APP3), a revoked device (401) and below the minimum version (426, APP7). Calling it
+        again rotates the password and drops the old registration.
+      responses:
+        "200":
+          description: SIP account
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SipCredentials" }
+        "401": { $ref: "#/components/responses/SignedOutResponse" }
+        "403":
+          description: "`licence_basic`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LicenceRefusal" }
+        "426": { $ref: "#/components/responses/UpdateRequired" }
+
+  /devices/me/push-token:
+    put:
+      tags: [device]
+      summary: Store or replace this device's FCM token (APNs later)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushTokenInput" }
+      responses:
+        "204": { description: Stored }
+
+  /devices/me/sign-out:
+    post:
+      tags: [device]
+      summary: Sign out this device (AppMe "Sign out"); revokes tokens and SIP identity
+      responses:
+        "204": { description: Signed out }
+
+  /calls/via-desk-phone:
+    post:
+      tags: [calls]
+      summary: '"Call from my desk phone instead" (AppMicrophone, A1)'
+      description: |
+        Rings the user's desk phone first; on answer the platform calls the number with the
+        chosen caller ID, through the same outbound checks as a desk phone call (caller ID,
+        toll fraud, barring). The app hands emergency numbers to the dialler before this; one
+        that arrives here is routed as an emergency call from the desk phone (CLAUDE.md
+        rule 8) and raises the `app_emergency_via_platform` alert. Audited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ViaDeskPhoneInput" }
+      responses:
+        "202":
+          description: Desk phone is ringing
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deskPhone]
+                properties: { deskPhone: { type: string, description: "For example `Desk phone 202`" } }
+        "409": { description: "`no_desk_phone`: no registered desk phone" }
+        "422": { description: "`number_barred`" }
+
+  /directory/colleagues:
+    get:
+      tags: [directory]
+      summary: Colleagues in the tenant with presence (AppContacts, AppTransfer)
+      responses:
+        "200":
+          description: Colleagues and the free count
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Colleagues" }
+
+  /directory/teams:
+    get:
+      tags: [directory]
+      summary: Ring groups as teams, with members and how many are free (AppContacts Teams)
+      responses:
+        "200":
+          description: Teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Team" }
+
+  /directory/shared-contacts:
+    get:
+      tags: [directory]
+      summary: The tenant phonebook entries marked "in the apps" (B18)
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 64 } }
+      responses:
+        "200":
+          description: Shared contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SharedContact" }
+
+  /events:
+    get:
+      tags: [directory]
+      summary: Live presence and badge events (Server-Sent Events), foreground only
+      description: |
+        Opened while the app is in the foreground, closed when it goes to the background.
+        Events, each `data` a JSON object:
+        - `presence.snapshot`: `{ items: PresenceEntry[] }`, first, for the user's tenant
+        - `presence`: one `PresenceEntry`, per change, at most one per extension per second
+        - `badges`: `{ recents, messages }` when either changes
+        - `reauth`: the access token expires within a minute; reconnect with a new one
+        A comment line every 25 s keeps the connection open. One stream per device; a second
+        one closes the first. Changes fan out across API replicas with PostgreSQL NOTIFY on a
+        per-tenant channel, so a stream only ever carries its own tenant's events (T1).
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          description: Ignored for presence (a fresh snapshot is sent); kept for the SSE client
+          schema: { type: string }
+      responses:
+        "200":
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "426": { $ref: "#/components/responses/UpdateRequired" }
+
+  /presence:
+    get:
+      tags: [directory]
+      summary: Presence snapshot; the fallback when the event stream fails three times (polled every 30 s while Contacts or Transfer is open)
+      parameters:
+        - name: If-None-Match
+          in: header
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current presence
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PresenceEntry" }
+        "304": { description: Unchanged }
+
+  /history:
+    get:
+      tags: [history]
+      summary: Recents from CDRs (AppRecents)
+      parameters:
+        - name: filter
+          in: query
+          schema: { type: string, enum: [all, missed, voicemail], default: all }
+        - name: mine
+          in: query
+          description: '"Mine only": calls to or from this extension, not its groups'
+          schema: { type: boolean, default: false }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Before" }
+      responses:
+        "200":
+          description: A page of calls, newest first, with the tab badge counts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoryPage" }
+
+  /history/seen:
+    post:
+      tags: [history]
+      summary: Clears the missed-call badge up to a time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upTo]
+              properties: { upTo: { type: string, format: date-time } }
+      responses:
+        "204": { description: Saved }
+
+  /voicemail/boxes:
+    get:
+      tags: [voicemail]
+      summary: All, Mine and shared boxes with counts (AppVoicemail)
+      responses:
+        "200":
+          description: Boxes this user may open
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VoicemailBox" }
+
+  /voicemail/messages:
+    get:
+      tags: [voicemail]
+      summary: Messages, newest first
+      parameters:
+        - { name: boxId, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [new, heard, all], default: all } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Before" }
+      responses:
+        "200":
+          description: A page of messages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VoicemailPage" }
+
+  /voicemail/messages/{id}/media-url:
+    post:
+      tags: [voicemail]
+      summary: 5-minute signed URL to stream one message (APP8); played, never saved
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/MediaUrl" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /voicemail/messages/{id}/read:
+    post:
+      tags: [voicemail]
+      summary: Mark heard or new; updates MWI
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [heard]
+              properties: { heard: { type: boolean } }
+      responses:
+        "204": { description: Saved }
+
+  /voicemail/messages/{id}/delete:
+    post:
+      tags: [voicemail]
+      summary: Delete by POST, audited, refused under legal hold (T12)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "204": { description: Deleted }
+        "409": { description: "`legal_hold`" }
+
+  /voicemail/greetings:
+    get:
+      tags: [voicemail]
+      summary: My greetings (the "Greeting" link)
+      responses:
+        "200":
+          description: Greetings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Greeting" }
+
+  /voicemail/greetings/{kind}:
+    put:
+      tags: [voicemail]
+      summary: Upload a greeting recorded in the app (WAV or M4A, up to 2 minutes, 5 MB)
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [unavailable, busy, name] } }
+      requestBody:
+        required: true
+        content:
+          audio/wav: { schema: { type: string, format: binary } }
+          audio/mp4: { schema: { type: string, format: binary } }
+      responses:
+        "200":
+          description: Stored and active
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Greeting" }
+        "413": { description: "`greeting_too_large`" }
+    delete:
+      tags: [voicemail]
+      summary: Back to the default greeting
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [unavailable, busy, name] } }
+      responses:
+        "204": { description: Removed }
+
+  /voicemail/greetings/{kind}/media-url:
+    post:
+      tags: [voicemail]
+      summary: Signed URL to play my greeting back
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [unavailable, busy, name] } }
+      responses:
+        "200": { $ref: "#/components/responses/MediaUrl" }
+
+  /voicemail/pin:
+    post:
+      tags: [voicemail]
+      summary: Change my voicemail PIN; audited, never logged
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties: { pin: { type: string, pattern: "^[0-9]{4,8}$" } }
+      responses:
+        "204": { description: Changed }
+        "422": { description: "`pin_weak` (repeated or sequential digits)" }
+
+  /recordings:
+    get:
+      tags: [recordings]
+      summary: My recorded calls, last 90 days, by permission (AppMe "Recordings")
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Before" }
+      responses:
+        "200":
+          description: A page of recordings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingPage" }
+        "403": { description: "`no_permission`" }
+
+  /recordings/{id}/media-url:
+    post:
+      tags: [recordings]
+      summary: 5-minute signed URL; streamed, never saved on the device (APP8)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/MediaUrl" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /media/{token}:
+    get:
+      tags: [voicemail, recordings]
+      summary: Streams the audio a signed URL names; needs the bearer token as well
+      description: "Range requests supported. `Cache-Control: no-store`."
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Audio
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+            audio/wav: { schema: { type: string, format: binary } }
+        "206": { description: Partial content }
+        "410": { description: "`url_expired`" }
+
+  /messages/lines:
+    get:
+      tags: [messages]
+      summary: Mobile lines this user may text from (filter chips; Messages tab hidden if empty)
+      responses:
+        "200":
+          description: Lines
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SmsLine" }
+
+  /messages/threads:
+    get:
+      tags: [messages]
+      summary: Conversations across my lines, newest first (AppMessages)
+      parameters:
+        - { name: lineId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Before" }
+      responses:
+        "200":
+          description: A page of threads with the unread total
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ThreadPage" }
+
+  /messages/threads/{id}/messages:
+    get:
+      tags: [messages]
+      summary: One conversation (AppThread)
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Before" }
+      responses:
+        "200":
+          description: A page of messages, oldest first within the page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessagePage" }
+
+  /messages/threads/{id}/read:
+    post:
+      tags: [messages]
+      summary: Mark a conversation read
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "204": { description: Saved }
+
+  /messages/send:
+    post:
+      tags: [messages]
+      summary: Send a text from a line (reply box, "From Sales mobile 0491 571 266")
+      description: Same checks as `POST /v1/me/sms/lines/:lineId/messages` (GW rules, `sms.send`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendInput" }
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "403": { description: "`no_permission`" }
+        "422": { description: "`too_long` (more than 10 parts) or `number_barred`" }
+
+  /diagnostics/call-logs:
+    post:
+      tags: [diagnostics]
+      summary: '"Send call logs to support": the scrubbed engine log for the last call'
+      description: |
+        Gzipped text, up to 2 MB, already scrubbed on the device (APP9); the API scrubs again
+        before storing in object storage for 30 days, visible to platform and reseller support
+        for this tenant. Audited. Answers with a reference to quote to support.
+      requestBody:
+        required: true
+        content:
+          application/gzip: { schema: { type: string, format: binary } }
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reference]
+                properties: { reference: { type: string, examples: ["LOG-7F3K9Q"] } }
+        "413": { description: "`log_too_large`" }
+
+components:
+  securitySchemes:
+    appBearer:
+      type: http
+      scheme: bearer
+      description: Opaque 32-byte access token, 15 minutes, SHA-256 stored (decision 136, proposed)
+
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    RequestId: { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+    Before: { name: before, in: query, schema: { type: string } }
+
+  responses:
+    BadRequest:
+      description: "`invalid_code` (attempts left in the message) or `validation`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: "`not_found`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    TooManyRequests:
+      description: "`rate_limited`, with Retry-After"
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    DeviceLimit:
+      description: "`device_limit`: 5 app and desktop devices already signed in"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    UpdateRequired:
+      description: "`update_required` (AppUpdate)"
+      content: { application/json: { schema: { $ref: "#/components/schemas/AppConfig" } } }
+    SignedOutResponse:
+      description: "`device_revoked` (AppSignedOut)"
+      content: { application/json: { schema: { $ref: "#/components/schemas/SignedOut" } } }
+    MediaUrl:
+      description: Signed URL
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [url, expiresAt]
+            properties:
+              url: { type: string, description: "`/app/v1/media/<token>`, 5 minutes" }
+              expiresAt: { type: string, format: date-time }
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string }
+        message: { type: string }
+
+    Platform: { type: string, enum: [android, ios, windows, macos] }
+
+    AppConfig:
+      type: object
+      required: [platform, minimumVersion, recommendedVersion, storeUrl]
+      properties:
+        platform: { $ref: "#/components/schemas/Platform" }
+        minimumVersion: { type: string, examples: ["1.0.2"] }
+        recommendedVersion: { type: string, examples: ["1.0.3"] }
+        storeUrl: { type: string, examples: ["https://play.google.com/store/apps/details?id=au.com.voiceplatform.app"] }
+
+    DeviceInfo:
+      type: object
+      required: [platform, model, appVersion]
+      properties:
+        platform: { $ref: "#/components/schemas/Platform" }
+        model: { type: string, maxLength: 64, examples: ["Pixel 8"] }
+        osVersion: { type: string, maxLength: 32 }
+        appVersion: { type: string, maxLength: 32 }
+
+    EmailRequestInput:
+      type: object
+      required: [email, requestSecret, device]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        requestSecret: { type: string, description: "32 random bytes, base64url; only its SHA-256 is stored" }
+        device: { $ref: "#/components/schemas/DeviceInfo" }
+
+    EmailRequestAccepted:
+      type: object
+      required: [requestId, expiresInSeconds, resendAfterSeconds]
+      properties:
+        requestId: { type: string, format: uuid, description: "Random even for an unknown email" }
+        expiresInSeconds: { type: integer, const: 600 }
+        resendAfterSeconds: { type: integer, examples: [60] }
+
+    CompleteInput:
+      type: object
+      required: [requestSecret, devicePublicKey, device]
+      properties:
+        requestSecret: { type: string }
+        code: { type: string, pattern: "^[0-9]{6}$" }
+        linkToken: { type: string, description: "From the App Link `https://<portal host>/app/signin/<requestId>/<linkToken>`" }
+        devicePublicKey: { type: string, description: "SPKI DER, base64url, P-256 from Android Keystore (Secure Enclave on iOS)" }
+        device: { $ref: "#/components/schemas/DeviceInfo" }
+      oneOf:
+        - required: [code]
+        - required: [linkToken]
+
+    QrCompleteInput:
+      type: object
+      required: [qrToken, devicePublicKey, device]
+      properties:
+        qrToken: { type: string }
+        devicePublicKey: { type: string }
+        device: { $ref: "#/components/schemas/DeviceInfo" }
+
+    RefreshInput:
+      type: object
+      required: [deviceId, refreshToken, timestamp, signature]
+      properties:
+        deviceId: { type: string, format: uuid }
+        refreshToken: { type: string }
+        timestamp: { type: string, format: date-time, description: "Within 2 minutes of server time" }
+        signature: { type: string, description: "ECDSA P-256 SHA-256 over `deviceId.refreshToken.timestamp`, base64url" }
+
+    Tokens:
+      type: object
+      required: [accessToken, accessExpiresAt, refreshToken, refreshExpiresAt]
+      properties:
+        accessToken: { type: string }
+        accessExpiresAt: { type: string, format: date-time }
+        refreshToken: { type: string, description: "Rotates on every refresh; 30 days from last use" }
+        refreshExpiresAt: { type: string, format: date-time }
+
+    Session:
+      allOf:
+        - $ref: "#/components/schemas/Tokens"
+        - type: object
+          required: [deviceId, me]
+          properties:
+            deviceId: { type: string, format: uuid }
+            me: { $ref: "#/components/schemas/Me" }
+
+    LicenceRefusal:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, enum: [licence_basic, account_disabled] }
+        message: { type: string }
+        extension: { type: string, examples: ["204"] }
+        extensionName: { type: string, examples: ["Warehouse"] }
+        refusalToken: { type: string, description: "For POST /auth/licence-requests; 1 hour" }
+
+    SignedOut:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, enum: [device_revoked, refresh_invalid] }
+        message: { type: string }
+        revokedBy: { type: string, description: "Name and role as the screen shows, for example `Priya Shah, your admin`" }
+        revokedAt: { type: string, format: date-time }
+        extension: { type: string }
+        support: { $ref: "#/components/schemas/Support" }
+
+    Support:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, description: "The reseller's name, for example `Demo Telco`" }
+        phone: { type: string, examples: ["+61355504000"] }
+
+    Me:
+      type: object
+      required: [userId, name, extension, tenantName, licence, status, permissions, support]
+      properties:
+        userId: { type: string, format: uuid }
+        name: { type: string, examples: ["Ava Nguyen"] }
+        initials: { type: string, examples: ["AN"] }
+        email: { type: string }
+        extension: { type: string, examples: ["202"] }
+        extensionName: { type: string }
+        tenantName: { type: string, examples: ["Demo Co"] }
+        licence: { type: string, enum: [advanced] }
+        status: { $ref: "#/components/schemas/Status" }
+        permissions:
+          type: object
+          required: [recordings, officeHours, messages, sharedVoicemail]
+          properties:
+            recordings: { type: boolean }
+            officeHours: { type: boolean, description: "At least one time condition grants this user the override (APP11)" }
+            messages: { type: boolean, description: "At least one SMS line" }
+            sharedVoicemail: { type: boolean }
+        badges:
+          type: object
+          properties:
+            recents: { type: integer, description: "New voicemail plus unseen missed calls" }
+            messages: { type: integer }
+        support: { $ref: "#/components/schemas/Support" }
+        brandingKey: { type: string, description: "Reserved for per-reseller branding later; ignored in Stage A" }
+
+    StatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [available, dnd, away] }
+        dndUntil: { type: string, format: date-time, description: "Only with `dnd`; cleared by itself at that time (A4)" }
+
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [available, dnd, away] }
+        dndUntil: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+
+    CallSettings:
+      type: object
+      required: [ringDevices, ringSeconds, thenTo]
+      properties:
+        ringDevices:
+          type: array
+          description: What rings first, for the summary "Desk phone and app 15 s, then voicemail"
+          items: { type: string, enum: [desk_phone, apps, mobile_number] }
+        ringSeconds: { type: integer, minimum: 5, maximum: 120 }
+        followMeTo: { type: string, description: "E.164, rung after ringSeconds when set" }
+        followMeSeconds: { type: integer, minimum: 5, maximum: 120 }
+        followMeConfirm: { type: boolean }
+        thenTo: { type: string, enum: [voicemail, hangup] }
+        forwardAlwaysTo: { type: string, description: "E.164 or extension; null when off" }
+
+    CallSettingsPatch:
+      type: object
+      properties:
+        ringSeconds: { type: integer, minimum: 5, maximum: 120 }
+        followMeTo: { type: [string, "null"] }
+        followMeSeconds: { type: integer, minimum: 5, maximum: 120 }
+        followMeConfirm: { type: boolean }
+        forwardAlwaysTo: { type: [string, "null"] }
+
+    CallerId:
+      type: object
+      required: [value, label, isDefault]
+      properties:
+        value: { type: string, description: "E.164, or `withheld`" }
+        label: { type: string, examples: ["Main 03 5550 1200", "Sales mobile 0491 571 266", "Withheld"] }
+        isDefault: { type: boolean }
+
+    OfficeHours:
+      type: object
+      required: [id, name, mode, openNow]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, examples: ["Business hours"] }
+        mode: { type: string, enum: [schedule, open, closed] }
+        openNow: { type: boolean }
+        until: { type: string, format: date-time }
+        summary: { type: string, examples: ["Following the schedule, open now"] }
+
+    OverrideInput:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [schedule, open, closed] }
+        until: { type: string, format: date-time, description: "Time-boxed overrides expire by themselves (spec 11)" }
+
+    DeviceSummary:
+      type: object
+      required: [id, kind, label, isThisDevice, rings, canSignOut]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [android, ios, windows, macos, desk_phone, dect, softphone] }
+        label: { type: string, examples: ["Pixel 8", "Windows PC", "Desk phone T54W"] }
+        isThisDevice: { type: boolean }
+        rings: { type: boolean }
+        canSignOut: { type: boolean, description: "False for desk phones (managed by the admin)" }
+        lastSeenAt: { type: string, format: date-time }
+        signedInAt: { type: string, format: date-time }
+
+    SipCredentials:
+      type: object
+      required: [authUsername, password, domain, outboundProxy, displayName, expiresSeconds]
+      description: Maps one to one onto `SipAccount` in `call_engine.dart`
+      properties:
+        authUsername: { type: string }
+        password: { type: string, writeOnly: false }
+        domain: { type: string }
+        outboundProxy: { type: string, examples: ["sip:sip.voiceplatform.com.au:5061;transport=tls"] }
+        displayName: { type: string }
+        expiresSeconds: { type: integer, examples: [600] }
+        pushParam: { type: string, const: voiceplatform-app }
+
+    PushTokenInput:
+      type: object
+      required: [provider, token]
+      properties:
+        provider: { type: string, enum: [fcm, apns] }
+        token: { type: string, maxLength: 4096 }
+
+    ViaDeskPhoneInput:
+      type: object
+      required: [number]
+      properties:
+        number: { type: string }
+        callerId: { type: string, description: "From /me/caller-ids" }
+
+    Presence:
+      type: string
+      enum: [available, on_call, dnd, away, offline, mobile_only]
+      description: "Dots: green available and mobile_only, orange on_call, red dnd, grey away and offline"
+
+    PresenceEntry:
+      type: object
+      required: [extension, presence]
+      properties:
+        extension: { type: string }
+        presence: { $ref: "#/components/schemas/Presence" }
+        since: { type: string, format: date-time, description: "For the call timer, `On a call · 1:37`" }
+        dndUntil: { type: string, format: date-time }
+        detail: { type: string, description: "Text the user set, for desktop" }
+
+    Colleague:
+      type: object
+      required: [userId, name, initials, extension, presence]
+      properties:
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        initials: { type: string }
+        extension: { type: string }
+        team: { type: string, examples: ["Sales"] }
+        role: { type: string, examples: ["Reception"] }
+        mobile: { type: string, description: "Only when the colleague shares it" }
+        presence: { $ref: "#/components/schemas/PresenceEntry" }
+
+    Colleagues:
+      type: object
+      required: [total, freeNow, items]
+      properties:
+        total: { type: integer, examples: [22] }
+        freeNow: { type: integer, examples: [4] }
+        items: { type: array, items: { $ref: "#/components/schemas/Colleague" } }
+
+    Team:
+      type: object
+      required: [id, name, memberCount, freeCount, members]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        number: { type: string, description: "Extension or DID that rings the team" }
+        memberCount: { type: integer }
+        freeCount: { type: integer }
+        ringOrder: { type: string, enum: [all_at_once, in_order] }
+        members: { type: array, items: { type: string, description: "userId" } }
+
+    SharedContact:
+      type: object
+      required: [id, name, numbers]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        company: { type: string }
+        numbers:
+          type: array
+          items:
+            type: object
+            required: [label, number]
+            properties: { label: { type: string }, number: { type: string } }
+
+    HistoryEntry:
+      type: object
+      required: [id, at, direction, outcome, number]
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        direction: { type: string, enum: [incoming, outgoing] }
+        outcome: { type: string, enum: [answered, missed, voicemail, answered_elsewhere, busy, failed] }
+        number: { type: string, description: "E.164, or `anonymous` (shown as Private)" }
+        name: { type: string, description: "Colleague or shared contact; the app may overlay a phone contact locally" }
+        durationSeconds: { type: integer }
+        answeredBy: { type: string, description: "`Mia on her desk phone`" }
+        line: { type: string, description: "Number or group called, for example `Sales`" }
+        mine: { type: boolean }
+        voicemailId: { type: string, format: uuid }
+
+    HistoryPage:
+      type: object
+      required: [items, counts]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/HistoryEntry" } }
+        nextBefore: { type: string }
+        counts:
+          type: object
+          required: [missed, voicemail]
+          properties: { missed: { type: integer }, voicemail: { type: integer } }
+
+    VoicemailBox:
+      type: object
+      required: [id, name, kind, newCount, totalCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, examples: ["Mine", "Sales", "Rentals"] }
+        kind: { type: string, enum: [own, shared] }
+        newCount: { type: integer }
+        totalCount: { type: integer }
+
+    VoicemailMessage:
+      type: object
+      required: [id, boxId, boxName, at, number, durationSeconds, heard]
+      properties:
+        id: { type: string, format: uuid }
+        boxId: { type: string, format: uuid }
+        boxName: { type: string }
+        at: { type: string, format: date-time }
+        number: { type: string }
+        name: { type: string }
+        durationSeconds: { type: integer }
+        heard: { type: boolean }
+        waveform: { type: array, items: { type: number, minimum: 0, maximum: 1 }, maxItems: 64, description: "Peaks for the inline player" }
+        transcript: { type: "null", description: "Reserved; transcripts land later with self-hosted speech to text" }
+
+    VoicemailPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/VoicemailMessage" } }
+        nextBefore: { type: string }
+
+    Greeting:
+      type: object
+      required: [kind, isCustom]
+      properties:
+        kind: { type: string, enum: [unavailable, busy, name] }
+        isCustom: { type: boolean }
+        durationSeconds: { type: integer }
+        updatedAt: { type: string, format: date-time }
+
+    Recording:
+      type: object
+      required: [id, at, direction, number, durationSeconds]
+      properties:
+        id: { type: string, format: uuid }
+        at: { type: string, format: date-time }
+        direction: { type: string, enum: [incoming, outgoing] }
+        number: { type: string }
+        name: { type: string }
+        durationSeconds: { type: integer }
+
+    RecordingPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Recording" } }
+        nextBefore: { type: string }
+
+    SmsLine:
+      type: object
+      required: [id, label, number, canSend]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string, examples: ["Sales mobile"] }
+        number: { type: string, examples: ["+61491571266"] }
+        canSend: { type: boolean }
+
+    Thread:
+      type: object
+      required: [id, lineId, lineLabel, number, lastAt, lastText, unread]
+      properties:
+        id: { type: string, format: uuid }
+        lineId: { type: string, format: uuid }
+        lineLabel: { type: string }
+        number: { type: string }
+        name: { type: string }
+        lastAt: { type: string, format: date-time }
+        lastText: { type: string, description: "Prefixed `You: ` when mine; `Sent a picture message (not shown yet)` for MMS" }
+        unread: { type: integer }
+        channel: { type: string, enum: [sms], description: "Generic conversations model; whatsapp later" }
+
+    ThreadPage:
+      type: object
+      required: [items, unreadTotal]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Thread" } }
+        nextBefore: { type: string }
+        unreadTotal: { type: integer }
+
+    Message:
+      type: object
+      required: [id, threadId, direction, at, kind, status]
+      properties:
+        id: { type: string, format: uuid }
+        threadId: { type: string, format: uuid }
+        direction: { type: string, enum: [in, out] }
+        at: { type: string, format: date-time }
+        kind: { type: string, enum: [text, picture] }
+        text: { type: string }
+        senderName: { type: string, description: "Who in the tenant sent it, for `Ava · 2:16 pm · Delivered`" }
+        status: { type: string, enum: [queued, sent, delivered, failed, received] }
+
+    MessagePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Message" } }
+        nextBefore: { type: string }
+
+    SendInput:
+      type: object
+      required: [lineId, to, text]
+      properties:
+        lineId: { type: string, format: uuid }
+        to: { type: string }
+        text: { type: string, minLength: 1, maxLength: 1530 }
+
+    PushMessage:
+      description: |
+        FCM data message, high priority, from the push gateway (WS2). Carries no caller or
+        message content (APP5): the app wakes and fetches. Incoming-call facts come in the SIP
+        INVITE headers (spec 22, Incoming call path), not the push.
+      type: object
+      required: [type, pushId]
+      properties:
+        type: { type: string, enum: [incoming_call, call_cancelled, voicemail, message, signed_out, config] }
+        pushId: { type: string, description: "Random per push, for de-duplication and the Homer trace" }
+        sentAt: { type: string, format: date-time }

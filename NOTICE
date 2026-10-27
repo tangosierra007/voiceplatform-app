@@ -1,0 +1,11 @@
+VoicePlatform app
+Copyright (C) 2026 MILAVO PTY LTD
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 of the License. See LICENSE.
+
+Third-party components are listed below with their licences as they are added.
+
+- liblinphone (linphone-sdk-android 5.5.39), Belledonne Communications.
+  Licence as stated in the release's own files; recorded when it is added.
