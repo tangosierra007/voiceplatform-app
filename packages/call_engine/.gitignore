@@ -1,3 +1,2 @@
-
-# Library packages don't commit lock files
-packages/*/pubspec.lock
+.dart_tool/
+pubspec.lock
