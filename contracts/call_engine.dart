@@ -8,8 +8,11 @@
 // - SIP credentials go in through register() and are never readable back,
 //   never logged and never part of any event (APP4).
 // - The UI hands emergency numbers to the phone's dialler first (APP6). call()
-//   never refuses one: if it gets here it is placed, and the platform routes it
-//   like any emergency call and raises an alert (CLAUDE.md rule 8, decision 139).
+//   never refuses one because of the number: if it gets here it is placed, and
+//   the platform routes it like any emergency call and raises an alert
+//   (CLAUDE.md rule 8, decision 139). With no account held (signed out,
+//   revoked, update required, before start) it throws NotRegistered as for any
+//   call, and the UI opens the phone's dialler instead.
 // - Nothing here touches the network except SIP and RTP to the platform edge.
 // - Platform-neutral: no Android or iOS type crosses this interface.
 
@@ -225,6 +228,8 @@ abstract interface class CallEngine {
   /// Places a call. [callerId] is an E.164 from GET /app/v1/me/caller-ids or
   /// `withheld`; null uses the extension default. Sent as the X-VP-Caller-Id
   /// header, which the platform checks against the tenant's numbers.
+  /// Never refuses a number for being an emergency number; throws
+  /// [NotRegistered] when no account is held, whatever the number.
   Future<String> call(String number, {String? callerId});
   Future<void> answer(String callId);
 
