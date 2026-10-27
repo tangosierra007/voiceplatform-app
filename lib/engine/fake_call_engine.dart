@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show gzip;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -356,8 +357,8 @@ class FakeCallEngine implements CallEngine {
   @override
   Future<Uint8List> exportLastCallLog() async {
     // Already scrubbed: numbers are masked as they are logged, and the
-    // account's password is never written.
-    return Uint8List.fromList(utf8.encode('${_log.join('\n')}\n'));
+    // account's password is never written. Gzipped, as the contract says.
+    return Uint8List.fromList(gzip.encode(utf8.encode('${_log.join('\n')}\n')));
   }
 
   // ------------------------------------------------------ scripting hooks

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show gzip;
 
 import 'package:call_engine/call_engine.dart';
 import 'package:fake_async/fake_async.dart';
@@ -52,7 +53,7 @@ void main() {
       expect(events, [RegistrationState.progress, RegistrationState.ok]);
       expect(e.registeredAs, 'mock-202-pixel8@sip.demo-co.example');
       expect(e.pushParams!.provider, 'fcm');
-      final log = utf8.decode(await e.exportLastCallLog());
+      final log = utf8.decode(gzip.decode(await e.exportLastCallLog()));
       expect(log, isNot(contains(_account.password)));
       expect(_account.toString(), isNot(contains(_account.password)));
     });
@@ -281,7 +282,7 @@ void main() {
     test('the log masks numbers', () async {
       final e = await _ready();
       await e.call('+61491570737');
-      final log = utf8.decode(await e.exportLastCallLog());
+      final log = utf8.decode(gzip.decode(await e.exportLastCallLog()));
       expect(log, isNot(contains('491570737')));
       expect(log, contains('737'));
     });
