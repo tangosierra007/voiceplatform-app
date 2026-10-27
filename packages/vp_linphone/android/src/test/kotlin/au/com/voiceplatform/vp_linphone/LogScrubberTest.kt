@@ -89,6 +89,32 @@ class LogScrubberTest {
     }
 
     @Test
+    fun authenticationInfoParameters() {
+        val out = LogScrubber().scrub("Authentication-Info: nextnonce=\"47364c23432d2e\", qop=auth, rspauth=\"6629fae4\", cnonce=\"0a4f\"")
+        assertEquals("Authentication-Info: nextnonce=[scrubbed], qop=auth, rspauth=[scrubbed], cnonce=[scrubbed]", out)
+    }
+
+    @Test
+    fun jsonStyleKeys() {
+        val s = LogScrubber()
+        assertEquals("{\"password\":[scrubbed],\"user\":\"ava\"}", s.scrub("{\"password\":\"hunter2hunter\",\"user\":\"ava\"}"))
+        assertEquals("{\"token\": [scrubbed]}", s.scrub("{\"token\": \"abc.def\"}"))
+        assertEquals("{password: [scrubbed]}", s.scrub("{password: hunter2hunter}"))
+        assertEquals("{\"access_token\":[scrubbed]}", s.scrub("{\"access_token\":abcdef}"))
+        assertEquals("pass=[scrubbed]&u=1", s.scrub("pass=hunter2hunter&u=1"))
+    }
+
+    @Test
+    fun numbersWithDotsAndSlashes() {
+        val s = LogScrubber()
+        assertEquals("dial [n] now", s.scrub("dial 0491.570.737 now"))
+        assertEquals("dial [n] now", s.scrub("dial 03/5550/1201 now"))
+        assertEquals("dial [n] now", s.scrub("dial +61.3.5550.1201 now"))
+        // A dotted IPv4 address is not a number to hide.
+        assertEquals("via 192.0.2.20:5061", s.scrub("via 192.0.2.20:5061"))
+    }
+
+    @Test
     fun clearSecretsForgetsThePassword() {
         val s = scrubber()
         s.clearSecrets()

@@ -38,7 +38,7 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
   - `transferBlind` = REFER (`transferTo`). `transferAttended` = REFER with Replaces (`transferToAnother`); the held call shows `transferring` until it ends.
   - `merge` creates a local audio conference (it adds to one if a call is already in a conference).
   - `setAudioRoute` picks from liblinphone's audio devices (earpiece, speaker, Bluetooth, wired/USB). `car` is refused until Telecom arrives (3.2).
-- **Emergency (rule 8):** `call()` never refuses 000, 112 or 106 (with or without a leading 0, ignoring spaces and punctuation). It skips the registration and microphone checks and places the call. The one case it can't place is when no account was ever registered, because there is no domain to send it to; it throws `NotRegistered`.
+- **Emergency (rule 8):** nothing in `call()` refuses a number for being an emergency number; the checks are in one pure function, `Rules.callGate`, with JVM tests. With no account held (never registered, or after `unregister()` dropped revoked credentials) every call, an emergency number included, throws the same `NotRegistered`; the UI has already offered the phone's dialler. With an account held, an emergency number (000, 112, 106, also with a leading 0) skips the "registered right now" and microphone checks and is placed. `requireCore` (engine not started) and the register path's address checks treat every number alike.
 - **Snapshots:**
   - `encrypted` is true only when the account's transport is TLS and the call's current media encryption is SRTP.
   - `hdAudio` is true for opus or G722 as the used payload type.
@@ -46,7 +46,7 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
 - **Logs:**
   - `Factory.enableLogcatLogs(false)`, log collection disabled, liblinphone log level **Warning**. At Message level belle-sip dumps whole SIP messages, Authorization headers included.
   - Every liblinphone line goes through `LogScrubber` before it reaches memory or disk.
-  - The scrubber removes: Authorization and Proxy-Authorization values; digest params (response, nonce, cnonce, opaque, nc); password, passwd, pwd, ha1 and secret pairs; `pn-prid` and other tokens; Bearer tokens; the exact current password and push token; email addresses (SIP URIs are kept); and runs of 6 or more digits, allowing up to two of space, dash or brackets between digits.
+  - The scrubber removes: Authorization and Proxy-Authorization values; digest params (response, rspauth, nonce, nextnonce, cnonce, opaque, nc); password, passwd, pass, pwd, ha1 and secret pairs and `pn-prid` and other tokens, with `=` or `:` and also as JSON keys (`"password":"x"`); Bearer tokens; the exact current password and push token; email addresses (SIP URIs are kept); and runs of 6 or more digits, allowing up to two of space, dash, dot, slash or brackets between digits (a dotted IPv4 address is kept).
 - **`exportLastCallLog()`:** `noBackupFilesDir/vp_linphone/lastcall.log`, which rotates once at 512 KB. Each file starts with a 200-line in-memory lead-in, runs from the first call starting until 3 s after the last call ends, and is scrubbed again on export (Kotlin, then Dart). Timestamps are written as `2026 Oct 27 03:15:00.123Z` so the digit rule never eats them.
 - **Manifest (merged from the plugin):**
   - Declared: INTERNET, ACCESS_NETWORK_STATE, RECORD_AUDIO, MANAGE_OWN_CALLS, POST_NOTIFICATIONS, FOREGROUND_SERVICE, FOREGROUND_SERVICE_PHONE_CALL, FOREGROUND_SERVICE_MICROPHONE, BLUETOOTH_CONNECT, WAKE_LOCK, VIBRATE, and the service.
@@ -58,17 +58,17 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
 ### Tests
 
 - `flutter analyze` (package and example): no issues.
-- `flutter test` (package): 49 tests pass.
+- `flutter test` (package): 53 tests pass.
   - `incoming_headers_test.dart`: the parser.
   - `log_scrubber_test.dart`: the same sample lines as Kotlin, including an Authorization header, the password and full numbers.
   - `engine_test.dart`: the Dart side against a fake host API.
   - `channel_test.dart`: real Pigeon messages on a mock platform channel, including the error envelope.
 - `flutter test` (example): 1 test passes.
-- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 28 tests pass.
+- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 39 tests pass.
   - `LogScrubberTest`: the log sink's scrubber on lines with an Authorization header, a password and full phone numbers.
   - `CallLogFileTest`
   - `MappingTest`: call states, end reasons (answered elsewhere), registration failures, codec order, HD, routes.
-  - `RulesTest`: emergency, dial strings, DTMF, instance ids.
+  - `RulesTest`: emergency, `callGate` (an emergency number with an account is placed; with no account it gets the same `not_registered` as a normal number; no outcome refuses on the number), dial strings, DTMF, instance ids.
 - `flutter build apk --debug` (example): builds (277 MB debug APK: four ABIs, unstripped liblinphone).
 - **Not done (not allowed in 3.1):** any live registration or call. Everything that talks to liblinphone at runtime is unproven until the live SIP tests.
 
@@ -83,7 +83,7 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
   - 162 files (the generated API wrappers, for example `Account.java`): "GNU General Public License ... either version 2 of the License, or (at your option) any later version".
   - 5 files have no licence header.
 
-So the release says GPL-3.0 in its metadata and AGPL-3.0-or-later / GPL-2.0-or-later in its source headers, not the "AGPL-3.0" the spec expected. Both combine with this AGPL-3.0 app (GPL-3.0 section 13 / AGPL-3.0 section 13). `NOTICE` records this.
+So the release says GPL-3.0 in its metadata and AGPL-3.0-or-later / GPL-2.0-or-later in its source headers, which differs from the plain AGPL-3.0 that was expected. Both combine with this AGPL-3.0 app (GPL-3.0 section 13 / AGPL-3.0 section 13). `NOTICE` records this.
 
 ### Header formats assumed (WS2 emits these on INVITEs to app contacts)
 

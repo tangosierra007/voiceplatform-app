@@ -131,6 +131,44 @@ class RulesTest {
     }
 
     @Test
+    fun emergencyWithAnAccountIsPlaced() {
+        for (n in listOf("000", "112", "106", "0000")) {
+            assertNull(Rules.callGate(n, hasAccount = true, registered = true, micGranted = true), n)
+            // Even while not registered right now or without the microphone.
+            assertNull(Rules.callGate(n, hasAccount = true, registered = false, micGranted = false), n)
+        }
+    }
+
+    @Test
+    fun noAccountIsNotRegisteredForEmergencyAndNormalAlike() {
+        assertEquals("not_registered", Rules.callGate("000", hasAccount = false, registered = false, micGranted = true))
+        assertEquals("not_registered", Rules.callGate("204", hasAccount = false, registered = false, micGranted = true))
+        assertEquals(
+            Rules.callGate("0491 570 737", hasAccount = false, registered = false, micGranted = false),
+            Rules.callGate("112", hasAccount = false, registered = false, micGranted = false),
+        )
+    }
+
+    @Test
+    fun normalNumbersNeedRegistrationAndMicrophone() {
+        assertNull(Rules.callGate("204", hasAccount = true, registered = true, micGranted = true))
+        assertEquals("not_registered", Rules.callGate("204", hasAccount = true, registered = false, micGranted = true))
+        assertEquals("microphone_denied", Rules.callGate("204", hasAccount = true, registered = true, micGranted = false))
+    }
+
+    @Test
+    fun noRuleRefusesOnTheNumberItself() {
+        // The only codes callGate can return are about the account and the mic.
+        for (n in listOf("000", "112", "106", "0000", "0112", "0106", "(000)", "1-1-2")) {
+            for (acc in listOf(true, false)) for (reg in listOf(true, false)) for (mic in listOf(true, false)) {
+                val r = Rules.callGate(n, acc, reg, mic)
+                assertTrue(r == null || (r == "not_registered" && !acc), "$n $acc $reg $mic -> $r")
+            }
+            assertTrue(Rules.isDialable(Rules.dialString(n)), n)
+        }
+    }
+
+    @Test
     fun instanceIds() {
         assertEquals(
             "0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6",

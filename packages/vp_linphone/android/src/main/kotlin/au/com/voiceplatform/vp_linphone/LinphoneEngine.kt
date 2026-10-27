@@ -145,20 +145,16 @@ object LinphoneEngine {
     }
 
     /** Called by [EngineService.onCreate] once it is in the foreground. */
+    /** Called by [EngineService] once it is in the foreground; throws if the Core can't start. */
     internal fun onServiceCreated(svc: EngineService) {
         service = svc
-        try {
-            startCore(svc.applicationContext)
-            finishStart(null)
-        } catch (e: Exception) {
-            log("core start failed: ${e.javaClass.simpleName}")
-            finishStart(e)
-            svc.stopSelf()
-        }
+        startCore(svc.applicationContext)
+        finishStart(null)
     }
 
+    /** The service's start failed (foreground refused, or the Core); it stops itself next. */
     internal fun onServiceStartFailed(error: Throwable) {
-        log("foreground start refused: ${error.javaClass.simpleName}")
+        log("engine start failed: ${error.javaClass.simpleName}")
         finishStart(error)
     }
 
@@ -193,9 +189,15 @@ object LinphoneEngine {
         lastInstance?.let { config.setString("misc", "uuid", it) }
         val c = factory.createCoreWithConfig(config, context)
         coreInstance = lastInstance
-        configure(c)
-        c.addListener(coreListener)
-        check(c.start() == 0) { "Core.start failed" }
+        try {
+            configure(c)
+            c.addListener(coreListener)
+            check(c.start() == 0) { "Core.start failed" }
+        } catch (t: Throwable) {
+            c.removeListener(coreListener)
+            c.stop()
+            throw t
+        }
         core = c
         log("core started ${c.version}")
         emitAudio()
@@ -432,15 +434,21 @@ object LinphoneEngine {
 
     fun call(number: String, callerId: String?): String {
         val c = requireCore()
-        val acc = account ?: throw VpFlutterError("not_registered", "Not registered")
+        val acc = account
         val emergency = Rules.isEmergency(number)
-        // Rule 8: an emergency number is always placed, registered or not, mic or not.
-        if (!emergency) {
-            if (acc.state != RegistrationState.Ok && acc.state != RegistrationState.Refreshing) {
-                throw VpFlutterError("not_registered", "Not registered")
-            }
-            if (!micGranted()) throw VpFlutterError("microphone_denied", "Microphone permission not granted")
+        // Never refuses on the number itself; see Rules.callGate.
+        when (
+            Rules.callGate(
+                number,
+                hasAccount = acc != null,
+                registered = acc?.state == RegistrationState.Ok || acc?.state == RegistrationState.Refreshing,
+                micGranted = micGranted(),
+            )
+        ) {
+            "not_registered" -> throw VpFlutterError("not_registered", "Not registered")
+            "microphone_denied" -> throw VpFlutterError("microphone_denied", "Microphone permission not granted")
         }
+        if (acc == null) throw VpFlutterError("not_registered", "Not registered")
         val address = target(number)
         val params = c.createCallParams(null) ?: throw VpFlutterError("invalid_state", "No call params")
         params.account = acc

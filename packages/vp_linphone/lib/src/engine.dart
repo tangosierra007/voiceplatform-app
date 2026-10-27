@@ -84,8 +84,10 @@ final class VpLinphoneEngine implements CallEngine {
 
   // ------------------------------------------------------------ calls
 
-  /// Never refuses an emergency number (CLAUDE.md rule 8): the platform side
-  /// places 000, 112 and 106 even when not registered or without the
+  /// Never refuses a number for being an emergency number (CLAUDE.md rule 8).
+  /// With no account held it throws [NotRegistered], as for any number (the UI
+  /// has offered the phone's dialler first). With an account, the platform side
+  /// places 000, 112 and 106 even while not registered right now or without the
   /// microphone permission.
   @override
   Future<String> call(String number, {String? callerId}) => _guard(() => _host.call(number, callerId));

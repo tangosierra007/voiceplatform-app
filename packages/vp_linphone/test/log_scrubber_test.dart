@@ -76,6 +76,29 @@ void main() {
     expect(s.scrub(line), line);
   });
 
+  test('Authentication-Info parameters', () {
+    expect(
+      s.scrub('Authentication-Info: nextnonce="47364c23432d2e", qop=auth, rspauth="6629fae4", cnonce="0a4f"'),
+      'Authentication-Info: nextnonce=[scrubbed], qop=auth, rspauth=[scrubbed], cnonce=[scrubbed]',
+    );
+  });
+
+  test('JSON-style keys and pass=', () {
+    final plain = LogScrubber();
+    expect(plain.scrub('{"password":"hunter2hunter","user":"ava"}'), '{"password":[scrubbed],"user":"ava"}');
+    expect(plain.scrub('{"token": "abc.def"}'), '{"token": [scrubbed]}');
+    expect(plain.scrub('{password: hunter2hunter}'), '{password: [scrubbed]}');
+    expect(plain.scrub('{"access_token":abcdef}'), '{"access_token":[scrubbed]}');
+    expect(plain.scrub('pass=hunter2hunter&u=1'), 'pass=[scrubbed]&u=1');
+  });
+
+  test('numbers with dots and slashes; IPv4 kept', () {
+    expect(s.scrub('dial 0491.570.737 now'), 'dial [n] now');
+    expect(s.scrub('dial 03/5550/1201 now'), 'dial [n] now');
+    expect(s.scrub('dial +61.3.5550.1201 now'), 'dial [n] now');
+    expect(s.scrub('via 192.0.2.20:5061'), 'via 192.0.2.20:5061');
+  });
+
   test('idempotent', () {
     final once = s.scrub('Authorization: Digest response="x" from 0491 570 737 $password');
     expect(s.scrub(once), once);

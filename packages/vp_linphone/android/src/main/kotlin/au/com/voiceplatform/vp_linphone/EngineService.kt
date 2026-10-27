@@ -25,16 +25,18 @@ class EngineService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createChannel()
-        try {
-            goForeground(inCall = false, mic = false)
-        } catch (e: RuntimeException) {
-            // For example ForegroundServiceStartNotAllowedException.
-            LinphoneEngine.onServiceStartFailed(e)
-            stopSelf()
-            return
-        }
-        LinphoneEngine.onServiceCreated(this)
+        EngineStartup.run(
+            // First, before anything else can throw: the notification and
+            // startForeground with the plain phoneCall type.
+            goForeground = {
+                createChannel()
+                goForeground(inCall = false, mic = false)
+            },
+            // Then liblinphone: native libraries, the Core, its start.
+            setUp = { LinphoneEngine.onServiceCreated(this) },
+            report = { LinphoneEngine.onServiceStartFailed(it) },
+            stop = { stopSelf() },
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY

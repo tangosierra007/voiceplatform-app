@@ -218,11 +218,34 @@ void main() {
     expect(host.calls.single[7], 'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6');
   });
 
-  test('emergency numbers go straight to the platform side', () async {
+  test('an emergency number with no account is NotRegistered, like any number', () async {
+    Future<Object?> err(String n) async {
+      host.nextError = PlatformException(code: 'not_registered', message: 'Not registered');
+      try {
+        await engine.call(n);
+      } catch (e) {
+        return e;
+      }
+      return null;
+    }
+
+    final emergency = await err('000');
+    final normal = await err('0491 570 737');
+    expect(emergency, isA<NotRegistered>());
+    expect(normal, isA<NotRegistered>());
+    expect((emergency as NotRegistered).message, (normal as NotRegistered).message);
+  });
+
+  test('emergency numbers with an account go straight to the platform side and are placed', () async {
+    await engine.register(account);
+    host.calls.clear();
+    final ids = <String>[];
     for (final n in ['000', '112', '106', '0000']) {
-      await engine.call(n);
+      host.nextCallId = 'call-$n';
+      ids.add(await engine.call(n));
     }
     expect(host.calls.map((c) => c[1]), ['000', '112', '106', '0000']);
+    expect(ids, ['call-000', 'call-112', 'call-106', 'call-0000']);
   });
 
   group('platform errors become CallEngineError', () {
