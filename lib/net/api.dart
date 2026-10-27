@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/export.dart';
+import '../auth/auth.dart';
 
 export '../api/app_api.dart';
 export '../api/export.dart';
@@ -14,6 +15,7 @@ class ApiConfig {
     required this.baseUrl,
     required this.platform,
     required this.appVersion,
+    this.deviceModel = 'Android',
   });
 
   /// For example `http://10.0.2.2:3000/app/v1` (the mock server from the
@@ -25,6 +27,9 @@ class ApiConfig {
 
   /// The app's version name from pubspec, for example `1.0.0`.
   final String appVersion;
+
+  /// The phone's model, for example `Pixel 8` (DeviceInfo at sign-in).
+  final String deviceModel;
 
   /// The `X-VP-App` header every request carries (APP7).
   String get appHeader => '$platform/$appVersion';
@@ -87,26 +92,22 @@ final apiConfigProvider = Provider<ApiConfig>(
   ),
 );
 
-/// The access token in memory. Sign-in (4.2) sets it; for the mock server in
-/// debug builds `--dart-define=VP_DEV_TOKEN=<anything>` starts signed in.
+/// The access token, in memory only (15 minutes; refreshed with the device
+/// key). Sign-in and refresh set it.
 final accessTokenProvider = NotifierProvider<AccessTokenNotifier, String?>(
   AccessTokenNotifier.new,
 );
 
 class AccessTokenNotifier extends Notifier<String?> {
-  static const _devToken = String.fromEnvironment('VP_DEV_TOKEN');
-
   @override
-  String? build() => kDebugMode && _devToken.isNotEmpty ? _devToken : null;
+  String? build() => null;
 
   void set(String? token) => state = token;
 }
 
-final dioProvider = Provider<Dio>((ref) {
-  final config = ref.watch(apiConfigProvider);
-  return buildDio(config, accessToken: () => ref.read(accessTokenProvider));
-});
-
+/// X-VP-App and the bearer on every request; a 401 refreshes once and
+/// retries; a 426 switches to AppUpdate (see SessionInterceptor).
+final dioProvider = Provider<Dio>(buildSessionDio);
 final appApiProvider = Provider<AppApi>(
   (ref) => AppApi(ref.watch(dioProvider)),
 );

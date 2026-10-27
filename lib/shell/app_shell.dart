@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/version.dart';
 import '../net/live_events.dart';
+import '../screens/signin/update_screen.dart';
 import 'shell_status.dart';
 import 'vp_tab_bar.dart';
 
@@ -36,7 +38,21 @@ class AppShell extends ConsumerWidget {
       );
     }
     return Scaffold(
-      body: shell,
+      body: ref.watch(updateBannerProvider)
+          ? Column(
+              children: [
+                // Between minimum and recommended versions, once a day.
+                const SafeArea(bottom: false, child: UpdateBanner()),
+                Expanded(
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeTop: true,
+                    child: shell,
+                  ),
+                ),
+              ],
+            )
+          : shell,
       bottomNavigationBar: VpTabBar(
         tabs: tabs,
         current: current,

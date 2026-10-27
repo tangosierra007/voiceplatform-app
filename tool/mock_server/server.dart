@@ -27,12 +27,22 @@ class MockServer {
     this.presenceEvery,
     this.heartbeatEvery,
     this.minimumVersion,
+    this.recommendedVersion,
+    this.now,
+    this.resendAfter,
+    this.accessLifetime,
   );
 
   final HttpServer _server;
   final Duration presenceEvery;
   final Duration heartbeatEvery;
   final String minimumVersion;
+  final String recommendedVersion;
+
+  /// The mock's clock, for code expiry, resend waits and token lifetimes.
+  final DateTime Function() now;
+  final Duration resendAfter;
+  final Duration accessLifetime;
 
   static const basePath = '/app/v1';
 
@@ -49,6 +59,10 @@ class MockServer {
   final Set<String> _readThreads = {};
   final List<Map<String, Object?>> _sent = [];
   final Map<String, _SignInRequest> _requests = {};
+  final Map<String, DateTime> _accessTokens = {};
+  final Map<String, _RefreshState> _refreshTokens = {};
+  final Map<String, DateTime> _refusalTokens = {};
+  final Set<String> _usedQr = {};
   final Map<String, String> _presence = {
     for (final c in colleagues) '${c['n']}': c['presence'] as String,
   };
@@ -64,6 +78,10 @@ class MockServer {
     Duration presenceEvery = const Duration(seconds: 5),
     Duration heartbeatEvery = const Duration(seconds: 25),
     String minimumVersion = '1.0.0',
+    String? recommendedVersion,
+    DateTime Function()? now,
+    Duration resendAfter = const Duration(seconds: 60),
+    Duration accessLifetime = const Duration(minutes: 15),
   }) async {
     final server = await HttpServer.bind(
       address ?? InternetAddress.loopbackIPv4,
@@ -74,11 +92,15 @@ class MockServer {
       presenceEvery,
       heartbeatEvery,
       minimumVersion,
+      recommendedVersion ?? minimumVersion,
+      now ?? DateTime.now,
+      resendAfter,
+      accessLifetime,
     );
-    final now = DateTime.now().toUtc();
+    final started = mock.now().toUtc();
     for (final c in colleagues) {
       if (c['ago'] != null) {
-        mock._presenceSince['${c['n']}'] = now.subtract(
+        mock._presenceSince['${c['n']}'] = started.subtract(
           Duration(seconds: c['ago'] as int),
         );
       }
@@ -105,7 +127,7 @@ class MockServer {
     ('POST', _p('/auth/email-requests/{id}/complete'), false, _complete),
     ('POST', _p('/auth/qr/complete'), false, _qrComplete),
     ('POST', _p('/auth/refresh'), false, _refresh),
-    ('POST', _p('/auth/licence-requests'), false, (r) => r.empty(202)),
+    ('POST', _p('/auth/licence-requests'), false, _licenceRequest),
     ('GET', _p('/me'), true, (r) => r.json(200, me(status: _status))),
     ('PUT', _p('/me/status'), true, _putStatus),
     ('GET', _p('/me/call-settings'), true, (r) => r.json(200, callSettings)),
@@ -212,6 +234,12 @@ class MockServer {
         if (!auth.startsWith('Bearer ') || auth.length <= 7) {
           return await r.error(401, 'unauthorized', 'Bearer token required');
         }
+        // Tokens this mock issued expire; any other non-empty bearer is
+        // accepted, for hand testing with curl.
+        final expires = _accessTokens[auth.substring(7)];
+        if (expires != null && !now().isBefore(expires)) {
+          return await r.error(401, 'token_expired', 'Access token expired');
+        }
       }
       await route.$4(r);
     } catch (e) {
@@ -238,7 +266,7 @@ class MockServer {
   Map<String, Object?> _appConfig(String platform) => {
     'platform': platform,
     'minimumVersion': minimumVersion,
-    'recommendedVersion': minimumVersion,
+    'recommendedVersion': recommendedVersion,
     'storeUrl': 'https://play.google.com/store/apps/details?id=au.com.voiceplatform.app',
   };
 
@@ -264,78 +292,144 @@ class MockServer {
     return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
   }
 
+  Map<String, Object?> _accepted(String id) => {
+    'requestId': id,
+    'expiresInSeconds': 600,
+    'resendAfterSeconds': resendAfter.inSeconds,
+  };
+
+  /// The same 202 for any well-formed email: known, unknown, Basic (APP2).
   Future<void> _emailRequest(_Req r) async {
     final body = await r.body();
     final email = body['email'];
     if (email is! String ||
-        !email.contains('@') ||
-        body['requestSecret'] is! String) {
-      return r.error(400, 'validation', 'email and requestSecret are required');
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email) ||
+        body['requestSecret'] is! String ||
+        body['device'] is! Map) {
+      return r.error(
+        400,
+        'validation',
+        'email, requestSecret and device are required',
+      );
     }
     final id = _uuid();
     _requests[id] = _SignInRequest(
       email.toLowerCase(),
       body['requestSecret'] as String,
+      now(),
     );
-    return r.json(202, {
-      'requestId': id,
-      'expiresInSeconds': 600,
-      'resendAfterSeconds': 60,
-    });
+    return r.json(202, _accepted(id));
   }
 
   Future<void> _resend(_Req r) async {
     final body = await r.body();
     final req = _requests[r.params[0]];
-    if (req != null && req.secret == body['requestSecret']) req.attempts = 0;
-    return r.json(202, {
-      'requestId': r.params[0],
-      'expiresInSeconds': 600,
-      'resendAfterSeconds': 60,
-    });
+    if (req != null && req.secret == body['requestSecret']) {
+      final wait = req.sentAt.add(resendAfter).difference(now());
+      if (wait > Duration.zero) {
+        r.req.response.headers.set('Retry-After', '${wait.inSeconds + 1}');
+        return r.error(
+          429,
+          'rate_limited',
+          'Wait a moment before sending again.',
+        );
+      }
+      // A new code replaces the old one; the link stays the same request.
+      req
+        ..attempts = 0
+        ..sentAt = now()
+        ..createdAt = now();
+    }
+    return r.json(202, _accepted(r.params[0]));
   }
 
-  Map<String, Object?> _session() {
-    final now = DateTime.now().toUtc();
+  Map<String, Object?> _session(String email) {
+    final at = now().toUtc();
+    final access = _token();
+    final refresh = _token();
+    _accessTokens[access] = at.add(accessLifetime);
+    _refreshTokens[refresh] = _RefreshState(email);
     return {
-      'accessToken': _token(),
-      'accessExpiresAt': now.add(const Duration(minutes: 15)).toIso8601String(),
-      'refreshToken': _token(),
-      'refreshExpiresAt': now.add(const Duration(days: 30)).toIso8601String(),
+      'accessToken': access,
+      'accessExpiresAt': at.add(accessLifetime).toIso8601String(),
+      'refreshToken': refresh,
+      'refreshExpiresAt': at.add(const Duration(days: 30)).toIso8601String(),
       'deviceId': uid(0x6, 1),
       'me': me(status: _status),
     };
   }
 
-  Map<String, Object?> _basicRefusal() => {
-    'error': 'licence_basic',
-    'message': 'This app needs an Advanced licence',
-    'extension': '204',
-    'extensionName': 'Warehouse',
-    'refusalToken': _token(),
-  };
+  Map<String, Object?> _basicRefusal() {
+    final token = _token();
+    _refusalTokens[token] = now().add(const Duration(hours: 1));
+    return {
+      'error': 'licence_basic',
+      'message': 'This app needs an Advanced licence',
+      'extension': '204',
+      'extensionName': 'Warehouse',
+      'refusalToken': token,
+    };
+  }
+
+  Future<void> _deviceLimit(_Req r) => r.error(
+    409,
+    'device_limit',
+    "You're signed in on 5 phones and computers already. Sign out a device first.",
+  );
+
+  /// What the account behind [email] gets once the code or link is right.
+  Future<void> _finish(_Req r, String email) {
+    if (email == SignInFixtures.basicEmail) return r.json(403, _basicRefusal());
+    if (email == SignInFixtures.deviceLimitEmail) return _deviceLimit(r);
+    return r.json(200, _session(email));
+  }
 
   Future<void> _complete(_Req r) async {
     final body = await r.body();
+    final hasCode = body['code'] is String;
+    final hasLink = body['linkToken'] is String;
+    if (hasCode == hasLink ||
+        body['requestSecret'] is! String ||
+        body['devicePublicKey'] is! String ||
+        body['device'] is! Map) {
+      return r.error(
+        400,
+        'validation',
+        'Exactly one of code or linkToken, with the secret, key and device',
+      );
+    }
     final req = _requests[r.params[0]];
+    // Without the secret of the phone that asked, nothing completes (APP1).
     if (req == null || req.secret != body['requestSecret']) {
+      return r.error(
+        410,
+        'code_expired',
+        'This sign-in has expired. Start again.',
+      );
+    }
+    if (req.used) {
+      return r.error(410, 'code_used', 'This code has been used. Start again.');
+    }
+    if (req.attempts >= 5) {
+      return r.error(
+        410,
+        'request_locked',
+        'Too many wrong codes. Start again.',
+      );
+    }
+    if (now().isAfter(req.createdAt.add(const Duration(minutes: 10)))) {
       return r.error(
         410,
         'code_expired',
         'This code has expired. Send a new one.',
       );
     }
-    if (req.used) return r.error(410, 'code_used', 'This code has been used.');
-    if (req.attempts >= 5) {
-      return r.error(
-        410,
-        'request_locked',
-        'Too many wrong codes. Send a new one.',
-      );
-    }
+    // An unknown email never got a code, so no code is right for it.
+    final known = SignInFixtures.knownEmails.contains(req.email);
     final ok =
-        body['code'] == SignInFixtures.code ||
-        body['linkToken'] == SignInFixtures.linkToken;
+        known &&
+        (body['code'] == SignInFixtures.code ||
+            body['linkToken'] == SignInFixtures.linkToken);
     if (!ok) {
       req.attempts++;
       final left = 5 - req.attempts;
@@ -343,40 +437,68 @@ class MockServer {
         return r.error(
           410,
           'request_locked',
-          'Too many wrong codes. Send a new one.',
+          'Too many wrong codes. Start again.',
         );
       }
       return r.error(
         400,
         'invalid_code',
-        'That code is not right. $left attempts left.',
+        "That code isn't right. $left ${left == 1 ? 'try' : 'tries'} left.",
       );
     }
     req.used = true;
-    if (req.email == SignInFixtures.basicEmail) {
-      return r.json(403, _basicRefusal());
-    }
-    if (req.email != SignInFixtures.advancedEmail) {
-      return r.error(
-        410,
-        'code_expired',
-        'This code has expired. Send a new one.',
-      );
-    }
-    return r.json(200, _session());
+    return _finish(r, req.email);
   }
 
   Future<void> _qrComplete(_Req r) async {
     final body = await r.body();
-    if (body['qrToken'] != SignInFixtures.qrToken) {
-      return r.error(410, 'qr_expired', 'This QR code has expired.');
+    final token = body['qrToken'];
+    if (token is! String || body['devicePublicKey'] is! String) {
+      return r.error(
+        400,
+        'validation',
+        'qrToken and devicePublicKey are required',
+      );
     }
-    return r.json(200, _session());
+    if (_usedQr.contains(token)) {
+      return r.error(
+        410,
+        'qr_used',
+        'This QR code has been used. Make a new one in the portal.',
+      );
+    }
+    final email = switch (token) {
+      SignInFixtures.qrToken => SignInFixtures.advancedEmail,
+      SignInFixtures.qrBasicToken => SignInFixtures.basicEmail,
+      _ => null,
+    };
+    if (email == null) {
+      return r.error(
+        410,
+        'qr_expired',
+        'This QR code has expired. Make a new one in the portal.',
+      );
+    }
+    _usedQr.add(token);
+    return _finish(r, email);
   }
 
   Future<void> _refresh(_Req r) async {
     final body = await r.body();
-    if (body['refreshToken'] == SignInFixtures.revokedRefreshToken) {
+    final token = body['refreshToken'];
+    final ts = DateTime.tryParse('${body['timestamp']}');
+    if (token is! String ||
+        body['deviceId'] is! String ||
+        ts == null ||
+        body['signature'] is! String ||
+        (body['signature'] as String).isEmpty) {
+      return r.error(
+        400,
+        'validation',
+        'deviceId, refreshToken, timestamp and signature are required',
+      );
+    }
+    if (token == SignInFixtures.revokedRefreshToken) {
       return r.json(401, {
         'error': 'device_revoked',
         'message': "You've been signed out",
@@ -386,10 +508,43 @@ class MockServer {
         'support': support,
       });
     }
-    final s = _session()
+    if (token == SignInFixtures.basicRefreshToken) {
+      return r.json(403, _basicRefusal());
+    }
+    if (ts.difference(now()).abs() > const Duration(minutes: 2)) {
+      return r.error(400, 'validation', 'timestamp must be within 2 minutes');
+    }
+    final state = _refreshTokens[token];
+    if (state == null) {
+      return r.json(401, {
+        'error': 'refresh_invalid',
+        'message': 'Sign in again.',
+      });
+    }
+    if (state.rotated) {
+      // Reuse of an old refresh token revokes the device (theft signal).
+      _refreshTokens.removeWhere((_, s) => s.email == state.email);
+      return r.json(401, {
+        'error': 'device_revoked',
+        'message': "You've been signed out",
+        'extension': '202',
+        'support': support,
+      });
+    }
+    state.rotated = true;
+    final s = _session(state.email)
       ..remove('me')
       ..remove('deviceId');
     return r.json(200, s);
+  }
+
+  Future<void> _licenceRequest(_Req r) async {
+    final body = await r.body();
+    final expires = _refusalTokens[body['refusalToken']];
+    if (expires == null || now().isAfter(expires)) {
+      return r.error(410, 'refusal_expired', 'Start again to ask your admin.');
+    }
+    return r.empty(202);
   }
 
   // ----------------------------------------------------------------- me
@@ -832,11 +987,21 @@ class MockServer {
 }
 
 class _SignInRequest {
-  _SignInRequest(this.email, this.secret);
+  _SignInRequest(this.email, this.secret, DateTime at)
+    : createdAt = at,
+      sentAt = at;
   final String email;
   final String secret;
+  DateTime createdAt;
+  DateTime sentAt;
   int attempts = 0;
   bool used = false;
+}
+
+class _RefreshState {
+  _RefreshState(this.email);
+  final String email;
+  bool rotated = false;
 }
 
 class _Req {

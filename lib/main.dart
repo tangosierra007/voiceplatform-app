@@ -1,3 +1,4 @@
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ Future<void> main() async {
   // appear under Open source licences.
   final prefs = await SharedPreferences.getInstance();
   final info = await PackageInfo.fromPlatform();
+  final model = await _deviceModel();
   runApp(
     ProviderScope(
       overrides: [
@@ -26,6 +28,7 @@ Future<void> main() async {
             baseUrl: ApiConfig.defaultBaseUrl,
             platform: ApiConfig.platformName(defaultTargetPlatform),
             appVersion: info.version,
+            deviceModel: model,
           ),
         ),
       ],
@@ -46,4 +49,17 @@ void registerFontLicences() {
       ], await rootBundle.loadString(path));
     }
   });
+}
+
+/// The phone's model for DeviceInfo at sign-in, for example `Pixel 8`.
+Future<String> _deviceModel() async {
+  try {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final a = await DeviceInfoPlugin().androidInfo;
+      return a.model.length > 64 ? a.model.substring(0, 64) : a.model;
+    }
+  } catch (_) {
+    // Fall through.
+  }
+  return 'Android';
 }

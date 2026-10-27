@@ -9,7 +9,8 @@ export 'tokens.g.dart';
 /// Rules from the design system kept here:
 /// - Orange (`brand`, #ea7500) is a fill with ink (`on-brand`) text and icons,
 ///   never white; orange as text uses `brand-text`.
-/// - Call controls are the one place for green and red: [VpCallColours].
+/// - Call controls use answer green and hang-up red: [VpCallColours]. Red as a
+///   status (the tab badges, emergency) is the danger tokens, by TJ's choice.
 /// - In-call and incoming screens are ink in both themes: [AppTheme.callScreen].
 abstract final class AppTheme {
   static ThemeData light() => _build(Brightness.light, vpLightColors);
@@ -153,7 +154,8 @@ abstract final class AppTheme {
   }
 }
 
-/// Call-control colours (tokens, by role). Green and red appear only here.
+/// Call-control colours (tokens, by role): answer green and hang-up red. The
+/// same danger-600 red also marks the tab badges and AppEmergency (TJ, 27 Oct).
 abstract final class VpCallColours {
   /// Ink ground of the in-call and incoming screens, in both themes.
   static const background = VpPalette.ink900;

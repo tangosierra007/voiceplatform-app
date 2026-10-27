@@ -2,10 +2,13 @@
 // server URL). From the Android emulator it is http://10.0.2.2:3000/app/v1:
 //
 //   dart run tool/mock_server/main.dart
-//   flutter run --dart-define=VP_DEV_TOKEN=mock
+//   flutter run
+//
+// then sign in as ava@democo.example with code 123456 (SignInFixtures).
 //
 // Options: --port <n>, --host <address> (default 127.0.0.1; 0.0.0.0 for a
-// phone on the LAN), --presence-every <seconds>, --minimum-version <x.y.z>.
+// phone on the LAN), --presence-every <seconds>, --minimum-version <x.y.z>,
+// --recommended-version <x.y.z>. Sign-in values: SignInFixtures in fixtures.dart.
 import 'dart:io';
 
 import 'server.dart';
@@ -25,6 +28,7 @@ Future<void> main(List<String> args) async {
       seconds: int.tryParse(opt('presence-every') ?? '') ?? 5,
     ),
     minimumVersion: opt('minimum-version') ?? '1.0.0',
+    recommendedVersion: opt('recommended-version'),
   );
   stdout.writeln('Mock app API on ${server.baseUri}');
   ProcessSignal.sigint.watch().listen((_) async {

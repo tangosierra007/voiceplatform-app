@@ -34,22 +34,3 @@ class TabPlaceholder extends StatelessWidget {
     );
   }
 }
-
-/// Stand-in for AppSignIn and the rest of getting in (4.2).
-class SignInPlaceholder extends StatelessWidget {
-  const SignInPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Text(
-            'Sign in',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-        ),
-      ),
-    );
-  }
-}

@@ -29,7 +29,7 @@ Map<String, Object?> me({required String status}) => {
   'userId': avaId,
   'name': 'Ava Nguyen',
   'initials': 'AN',
-  'email': 'ava.nguyen@demo-co.example',
+  'email': 'ava@democo.example',
   'extension': '202',
   'extensionName': 'Ava Nguyen',
   'tenantName': 'Demo Co',
@@ -557,16 +557,31 @@ final threadMessages = <String, List<Map<String, Object?>>>{
 
 /// Sign-in fixtures. Mock-only values: never a real account or code.
 abstract final class SignInFixtures {
-  static const advancedEmail = 'ava.nguyen@demo-co.example';
+  /// Ava Nguyen, ext 202, Advanced (the address AppSignIn and AppCode show).
+  static const advancedEmail = 'ava@democo.example';
 
   /// Extension 204 Warehouse is on Basic (AppBasic).
-  static const basicEmail = 'warehouse@demo-co.example';
+  static const basicEmail = 'warehouse@democo.example';
+
+  /// A user already signed in on 5 phones and computers: 409 device_limit.
+  static const deviceLimitEmail = 'limit@democo.example';
+
+  /// Accounts the mock "emails" a code to; any other address gets the same
+  /// 202 but no code ever works for it (APP2).
+  static const knownEmails = {advancedEmail, basicEmail, deviceLimitEmail};
+
   static const code = '123456';
   static const linkToken = 'mock-link-token';
+
+  /// `vpapp://signin/<token>`: Ava, and a Basic extension.
   static const qrToken = 'mock-qr-token';
+  static const qrBasicToken = 'mock-qr-basic';
 
   /// A refresh with this token answers 401 device_revoked (AppSignedOut).
   static const revokedRefreshToken = 'mock-revoked';
+
+  /// A refresh with this token answers 403 licence_basic (moved to Basic).
+  static const basicRefreshToken = 'mock-now-basic';
 }
 
 /// The live presence script the event stream plays, one step per interval.

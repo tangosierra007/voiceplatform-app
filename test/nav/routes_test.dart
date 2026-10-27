@@ -7,6 +7,8 @@ import 'package:voiceplatform_app/engine/fake_call_engine.dart';
 import 'package:voiceplatform_app/nav/routes.dart';
 import 'package:voiceplatform_app/screens/call_placeholders.dart';
 import 'package:voiceplatform_app/screens/placeholders.dart';
+import 'package:voiceplatform_app/screens/signin/sign_in_screen.dart';
+import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
 
@@ -40,14 +42,25 @@ void main() {
       ProviderScope.containerOf(tester.element(find.byType(Navigator).first))
           .read(routerProvider);
 
-  testWidgets('sign-in route opens without the tab bar', (tester) async {
+  testWidgets('signed in, sign-in routes go to Keypad', (tester) async {
     usePhone(tester);
     await tester.pumpWidget(await appUnderTest());
     await tester.pumpAndSettle();
     router(tester).go(Routes.signIn);
     await tester.pumpAndSettle();
-    expect(find.byType(SignInPlaceholder), findsOneWidget);
+    expect(find.byType(SignInScreen), findsNothing);
+    expect(find.byType(VpTabBar), findsOneWidget);
+  });
+
+  testWidgets('signed out opens AppSignIn without the tab bar', (tester) async {
+    usePhone(tester);
+    await tester.pumpWidget(await appUnderTest(auth: const NotSignedIn()));
+    await tester.pumpAndSettle();
+    expect(find.byType(SignInScreen), findsOneWidget);
     expect(find.byType(VpTabBar), findsNothing);
+    router(tester).go(Routes.keypad);
+    await tester.pumpAndSettle();
+    expect(find.byType(SignInScreen), findsOneWidget);
   });
 
   testWidgets(

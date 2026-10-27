@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth.dart';
 import 'api.dart';
 import 'events.dart';
 
@@ -228,15 +229,15 @@ final liveEventsProvider = Provider<LiveEvents>((ref) {
   final live = LiveEvents(
     connect: () => connectEvents(dio),
     poll: (etag) => pollPresence(dio, etag),
-    // Sign-in (4.2) supplies the refresh; until then the stream reopens with
-    // the token it has.
+    // `reauth`: a new access token with the device key, then reopen.
+    refreshToken: () => ref.read(authProvider.notifier).refresh(),
   );
   ref.onDispose(live.dispose);
   return live;
 });
 
-/// Opens the stream while the app is in the foreground and closes it in the
-/// background. Wrap the app in it once.
+/// Opens the stream while the app is in the foreground and someone is signed
+/// in, and closes it otherwise. Wrap the app in it once.
 class LiveEventsLifecycle extends ConsumerStatefulWidget {
   const LiveEventsLifecycle({super.key, required this.child});
 
@@ -249,22 +250,35 @@ class LiveEventsLifecycle extends ConsumerStatefulWidget {
 
 class _LiveEventsLifecycleState extends ConsumerState<LiveEventsLifecycle> {
   late final AppLifecycleListener _listener;
+  late bool _foreground;
+
+  void _apply() {
+    final live = ref.read(liveEventsProvider);
+    if (_foreground && ref.read(authProvider) is SignedIn) {
+      live.resume();
+    } else {
+      live.pause();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    final live = ref.read(liveEventsProvider);
     final state = WidgetsBinding.instance.lifecycleState;
-    if (state == null || state == AppLifecycleState.resumed) live.resume();
+    _foreground = state == null || state == AppLifecycleState.resumed;
+    _apply();
     _listener = AppLifecycleListener(
       onStateChange: (s) {
         if (s == AppLifecycleState.resumed) {
-          live.resume();
+          _foreground = true;
         } else if (s == AppLifecycleState.paused ||
             s == AppLifecycleState.hidden ||
             s == AppLifecycleState.detached) {
-          live.pause();
+          _foreground = false;
+        } else {
+          return;
         }
+        _apply();
       },
     );
   }
@@ -276,5 +290,8 @@ class _LiveEventsLifecycleState extends ConsumerState<LiveEventsLifecycle> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen(authProvider, (_, _) => _apply());
+    return widget.child;
+  }
 }
