@@ -84,15 +84,37 @@ Third-party components are listed below with their licences as they are added.
     packages/vp_linphone/licenses/LICENSE.postquantumcryptoengine
     packages/vp_linphone/licenses/LICENSE.msaaudio
     packages/vp_linphone/licenses/LICENSE.msandroidcamera2
-  - mswebrtc: GNU GPL-2.0 (its COPYING), with third-party code inside it:
-    packages/vp_linphone/licenses/LICENSE.mswebrtc
+  - mswebrtc: GPL-2.0-or-later. mswebrtc.c and vad.cc say "either version 2
+    of the License, or (at your option) any later version"; aec3.cc and
+    mswebrtc_aec3.cc are AGPL-3.0-or-later. Its COPYING holds the GPL-2.0
+    text. "Or later" lets it combine with this AGPL-3.0 app. It contains
+    third-party code:    packages/vp_linphone/licenses/LICENSE.mswebrtc
     Ooura FFT: packages/vp_linphone/licenses/LICENSE.mswebrtc-ooura
     Abseil, Apache-2.0: packages/vp_linphone/licenses/LICENSE.mswebrtc-abseil
     WebRTC audio processing itself: upstream licence not established (no
     WebRTC licence file in mswebrtc's tree at 5.5.39).
 
+  - CodeSynthesis XSD runtime (libxsd), linked into liblinphone.so
+    (xsd::cxx::tree symbols); Belledonne's copy in liblinphone/libxsd at
+    linphone-sdk 5.5.39 (exact). GPL-2.0 with Code Synthesis's FLOSS
+    Exception (and a Xerces-C++ linking exception).
+    packages/vp_linphone/licenses/LICENSE.xsd
+    packages/vp_linphone/licenses/LICENSE.xsd-flosse
+    packages/vp_linphone/licenses/LICENSE.xsd-gplv2
+    Compatible with AGPL-3.0 through the FLOSS Exception. It lets the
+    combined work be licensed as a whole under any licence on the FSF's
+    free-software licence list, and AGPL-3.0 is on it. Its conditions 2.b
+    and 2.c are met: liblinphone and this app are FLOSS works that use the
+    runtime for their own XML handling.
+
   Third-party code (upstream, version, licence, text):
-  - opus, Xiph.Org: 1.3.1 (binary: "libopus 1.3.1-fixed"; fork pin f86ad14);
+  - libyuv (exported from libmediastreamer2.so: I420Scale, ARGBToI420,
+    NV12ToI420, ScalePlane; linphone-sdk 5.5.39 pins external/libyuv at
+    a3a7937): version not established; BSD-3-Clause with a patent grant.
+    packages/vp_linphone/licenses/LICENSE.libyuv
+    packages/vp_linphone/licenses/LICENSE.libyuv-patents (from the
+    lemenkov/libyuv GitHub mirror's default branch: the pinned commit isn't
+    in that mirror and chromium.googlesource.com wasn't used)  - opus, Xiph.Org: 1.3.1 (binary: "libopus 1.3.1-fixed"; fork pin f86ad14);
     BSD-3-Clause. packages/vp_linphone/licenses/LICENSE.opus (from v1.3.1)
   - speex, Xiph.Org: version not confirmed (fork pin 52f01d5; a "1.2.1"
     string is in libmediastreamer2.so); BSD-3-Clause.

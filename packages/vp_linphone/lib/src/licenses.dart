@@ -49,6 +49,12 @@ const List<BundledLicence> bundledLicences = [
   BundledLicence('ZXing-C++', ['LICENSE.zxing-cpp']),
   BundledLicence('xerces-c', ['LICENSE.xerces-c', 'LICENSE.xerces-c-notice']),
   BundledLicence('soci', ['LICENSE.soci']),
+  BundledLicence('CodeSynthesis XSD runtime (libxsd, in liblinphone)', [
+    'LICENSE.xsd',
+    'LICENSE.xsd-flosse',
+    'LICENSE.xsd-gplv2',
+  ]),
+  BundledLicence('libyuv', ['LICENSE.libyuv', 'LICENSE.libyuv-patents']),
   BundledLicence('libxml2', ['LICENSE.libxml2']),
   BundledLicence('OpenLDAP', ['LICENSE.openldap', 'LICENSE.openldap-copyright']),
   BundledLicence('liboqs (ML-KEM)', ['LICENSE.liboqs']),
