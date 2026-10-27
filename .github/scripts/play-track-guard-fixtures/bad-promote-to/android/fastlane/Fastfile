@@ -1,3 +1,0 @@
-lane :beta do
-  upload_to_play_store(track: 'internal', track_promote_to: 'alpha')
-end

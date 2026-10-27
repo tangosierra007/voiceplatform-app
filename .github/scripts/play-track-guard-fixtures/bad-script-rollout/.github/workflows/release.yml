@@ -1,6 +1,0 @@
-on: push
-jobs:
-  r:
-    runs-on: ubuntu-latest
-    steps:
-      - run: bash tool/release.sh

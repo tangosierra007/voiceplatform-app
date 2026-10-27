@@ -1,3 +1,0 @@
-lane :internal do
-  upload_to_play_store(track: 'internal', aab: 'app-release.aab')
-end
