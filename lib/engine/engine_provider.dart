@@ -120,10 +120,16 @@ final engineSessionProvider = Provider<void>((ref) {
     ref.onDispose(sub.cancel);
   }
 
+  /// Every sign-out path, even when the engine never started in this process
+  /// (a cold start that refreshes into `device_revoked`): `unregister()` also
+  /// clears the SIP account the native side keeps for push wakes, so a later
+  /// push can't register it again.
   Future<void> down() async {
-    if (!started) return;
     try {
       await engine.unregister();
+    } catch (_) {}
+    if (!started) return;
+    try {
       await engine.stop();
     } catch (_) {}
     started = false;

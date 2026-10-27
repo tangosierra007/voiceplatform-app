@@ -44,14 +44,17 @@ class MyStatusNotifier extends Notifier<StatusStatus?> {
   StatusStatus? build() => ref.watch(meProvider).value?.status.status;
 
   /// `PUT /me/status` (built by WS1 1.3a; the mock answers today).
-  Future<void> set(StatusInputStatus s) async {
+  /// [dndUntil] ends Do not disturb at that time; null is until changed.
+  Future<void> set(StatusInputStatus s, {DateTime? dndUntil}) async {
     final before = state;
     state = StatusStatus.fromJson(s.json!);
     try {
       final r = await ref
           .read(appApiProvider)
           .me
-          .putMeStatus(body: StatusInput(status: s));
+          .putMeStatus(
+            body: StatusInput(status: s, dndUntil: dndUntil?.toUtc()),
+          );
       state = r.status;
     } catch (_) {
       state = before;

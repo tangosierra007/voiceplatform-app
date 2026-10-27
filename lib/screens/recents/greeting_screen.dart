@@ -177,6 +177,7 @@ class _GreetingRow extends ConsumerWidget {
       );
       final p = ref.read(mediaPlayerProvider);
       await p.open(url, headers);
+      ref.read(mediaOwnerProvider.notifier).set('greeting:${kind.json}');
       await p.setSpeaker(true);
       unawaited(p.play());
     } catch (_) {

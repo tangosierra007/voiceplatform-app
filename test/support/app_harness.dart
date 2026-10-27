@@ -19,7 +19,11 @@ import 'package:voiceplatform_app/platform/device_keys.dart';
 import 'package:voiceplatform_app/platform/phone.dart';
 import 'package:voiceplatform_app/engine/engine_provider.dart';
 import 'package:voiceplatform_app/engine/fake_call_engine.dart';
+import 'package:voiceplatform_app/engine/phone_extras.dart';
+import 'package:voiceplatform_app/features/me/me_data.dart';
+import 'package:voiceplatform_app/features/messages/messages_data.dart';
 import 'package:voiceplatform_app/features/recents/greetings.dart';
+import 'package:voiceplatform_app/screens/me/me_screen.dart';
 import 'package:voiceplatform_app/features/recents/media_player.dart';
 import 'package:voiceplatform_app/features/recents/recents_data.dart';
 import 'package:voiceplatform_app/net/events.dart';
@@ -77,6 +81,9 @@ Future<Widget> appUnderTest({
   FakeApi? api,
   String? accessToken,
   void Function(Iterable<String>)? addressBook,
+  FakeExtras? extras,
+  PresetStatus? statusController,
+  Future<String?> Function()? sendCallLogs,
 }) async {
   SharedPreferences.setMockInitialValues({
     if (theme != ThemePreference.system)
@@ -161,10 +168,26 @@ Future<Widget> appUnderTest({
         (ref, box) async => fixtureVoicemails(box: box),
       ),
       greetingsProvider.overrideWith((ref) async => fixtureGreetings()),
+      smsLinesProvider.overrideWith((ref) async => fixtureLines()),
+      threadsProvider.overrideWith(
+        (ref, line) async => fixtureThreads(lineId: line),
+      ),
+      threadMessagesProvider.overrideWith(
+        (ref, id) async => fixtureThreadMessages(id),
+      ),
+      callSettingsProvider.overrideWith((ref) async => fixtureCallSettings()),
+      officeHoursProvider.overrideWith((ref) async => fixtureOfficeHours()),
+      devicesProvider.overrideWith((ref) async => fixtureDevices()),
+      recordingsProvider.overrideWith((ref) async => fixtureRecordings()),
+      phoneExtrasProvider.overrideWithValue(extras ?? FakeExtras()),
+      if (sendCallLogs != null)
+        sendCallLogsProvider.overrideWithValue(sendCallLogs),
       mediaPlayerProvider.overrideWithValue(player ?? FakeMediaPlayer()),
       sharedContactsProvider.overrideWith((ref) async => fixtureShared()),
       callerIdsProvider.overrideWith((ref) async => fixtureCallerIds()),
-      myStatusProvider.overrideWith(() => PresetStatus(myStatus)),
+      myStatusProvider.overrideWith(
+        () => statusController ?? PresetStatus(myStatus),
+      ),
       if (offline) offlineProvider.overrideWith(PresetOffline.new),
       if (pending != null)
         pendingSignInProvider.overrideWith(() => PresetPending(pending)),

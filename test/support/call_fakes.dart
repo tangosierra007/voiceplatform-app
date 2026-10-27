@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:voiceplatform_app/calls/call_actions.dart';
 import 'package:voiceplatform_app/calls/directory.dart';
 import 'package:voiceplatform_app/calls/me_state.dart';
+import 'package:voiceplatform_app/engine/phone_extras.dart';
 import 'package:voiceplatform_app/features/recents/media_player.dart';
 import 'package:voiceplatform_app/net/api.dart';
 
@@ -71,13 +72,15 @@ class PresetStatus extends MyStatusNotifier {
   PresetStatus(this.initial);
   final StatusStatus initial;
   final sent = <StatusInputStatus>[];
+  final sentUntil = <DateTime?>[];
 
   @override
   StatusStatus? build() => initial;
 
   @override
-  Future<void> set(StatusInputStatus s) async {
+  Future<void> set(StatusInputStatus s, {DateTime? dndUntil}) async {
     sent.add(s);
+    sentUntil.add(dndUntil);
     state = StatusStatus.fromJson(s.json!);
   }
 }
@@ -207,3 +210,59 @@ List<SharedContact> fixtureShared() => [
 List<CallerId> fixtureCallerIds() => [
   for (final c in fx.callerIds) CallerId.fromJson(c),
 ];
+
+List<SmsLine> fixtureLines() => [
+  for (final l in fx.smsLines) SmsLine.fromJson(l),
+];
+
+ThreadPage fixtureThreads({String? lineId}) {
+  final items = [
+    for (final t in fx.threads)
+      if (lineId == null || t['lineId'] == lineId) Thread.fromJson(t),
+  ];
+  return ThreadPage(
+    items: items,
+    unreadTotal: items.fold(0, (n, t) => n + t.unread),
+  );
+}
+
+List<Message> fixtureThreadMessages(String id) => [
+  for (final m in fx.threadMessages[id] ?? const <Map<String, Object?>>[])
+    Message.fromJson(m),
+];
+
+CallSettings fixtureCallSettings() => CallSettings.fromJson(fx.callSettings);
+
+OfficeHours fixtureOfficeHours() =>
+    OfficeHours.fromJson(fx.officeHours('schedule'));
+
+List<DeviceSummary> fixtureDevices() => [
+  for (final d in fx.devices) DeviceSummary.fromJson(d),
+];
+
+List<Recording> fixtureRecordings() => [
+  for (final r in fx.recordings) Recording.fromJson(r),
+];
+
+/// Pushes and battery facts on demand.
+class FakeExtras implements PhoneExtras {
+  FakeExtras({this.batteryStatus});
+  final pushController = StreamController<VpPushMessage>.broadcast();
+  VpBatteryStatus? batteryStatus;
+  int batterySettingsOpened = 0;
+
+  void push(VpPushType type) =>
+      pushController.add(VpPushMessage(type, 'p-${type.name}'));
+
+  @override
+  Stream<VpPushMessage> get pushes => pushController.stream;
+
+  @override
+  Future<List<VpPushMessage>> takePendingPushes() async => const [];
+
+  @override
+  Future<VpBatteryStatus?> battery() async => batteryStatus;
+
+  @override
+  Future<void> openBatterySettings() async => batterySettingsOpened++;
+}

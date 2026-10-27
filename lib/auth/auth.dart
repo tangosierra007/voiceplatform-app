@@ -6,8 +6,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../calls/directory.dart';
+import '../diagnostics/scrubber.dart';
 import '../net/api.dart';
 import '../platform/device_keys.dart';
+import '../theme/theme_preference.dart';
+import 'app_lock.dart';
+import 'local_wipe.dart';
 import 'session_store.dart';
 import 'version.dart';
 
@@ -31,6 +36,14 @@ final class NotSignedIn extends AuthState {
 final class SignedIn extends AuthState {
   const SignedIn(this.deviceId);
   final String deviceId;
+}
+
+/// The platform signed this phone out (refresh answered `device_revoked`,
+/// perhaps after a `signed_out` push): AppSignedOut. Everything local is
+/// already cleared; [info] says who, when and whom to ask.
+final class SignedOutRemotely extends AuthState {
+  const SignedOutRemotely(this.info);
+  final SignedOut info;
 }
 
 /// 403 `licence_basic` at sign-in or refresh: AppBasic.
@@ -76,6 +89,27 @@ class SignInFailure implements Exception {
   @override
   String toString() => 'SignInFailure($code)';
 }
+
+/// Everything else kept on the phone that must go at sign-out.
+final localDataWipersProvider = Provider<List<Future<void> Function()>>(
+  (ref) => [
+    // Settings and remembered choices (theme, biometric unlock, contacts
+    // asked, update banner): back to a new install.
+    () async {
+      await ref.read(sharedPreferencesProvider).clear();
+      ref.invalidate(themePreferenceProvider);
+      ref.invalidate(biometricUnlockProvider);
+    },
+    // The address-book values held for the scrubber, and the contacts read:
+    // signed in again, they are read and registered afresh.
+    () async {
+      DiagnosticsScrubber.instance.forgetAddressBookValues();
+      ref.invalidate(phoneContactsProvider);
+    },
+    // Crash-report scope and the on-disk outbox.
+    clearDiagnosticsOnDevice,
+  ],
+);
 
 /// The app's clock; tests replace it.
 final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
@@ -333,9 +367,16 @@ class AuthController extends Notifier<AuthState> {
       final status = e.response?.statusCode;
       final data = e.response?.data;
       if (status == 401) {
-        // device_revoked or refresh_invalid. AppSignedOut is 4.4; until then
-        // everything local is cleared and sign-in shows.
+        // device_revoked or refresh_invalid: everything local is cleared,
+        // then AppSignedOut says who and when, as far as the body says.
+        SignedOut? info;
+        if (data is Map<String, Object?>) {
+          try {
+            info = SignedOut.fromJson(data);
+          } catch (_) {}
+        }
         await signOutLocally();
+        if (info != null) state = SignedOutRemotely(info);
       } else if (status == 403 && data is Map<String, Object?>) {
         await signOutLocally();
         state = LicenceRefused(LicenceRefusal.fromJson(data));
@@ -344,8 +385,38 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
-  /// Clears the stored session, the access token and the device key.
+  /// A `signed_out` push. It carries nothing (APP5), so ask the server: the
+  /// refresh answers `device_revoked` with who and when, and a stale push
+  /// changes nothing.
+  Future<void> onSignedOutPush() async {
+    if (state is! SignedIn) return;
+    await refresh();
+  }
+
+  /// Me, Sign out: tells the platform (best effort), then clears the phone.
+  Future<void> signOut() async {
+    try {
+      await _api.device.postDevicesMeSignOut();
+    } catch (_) {
+      // Offline: the phone is still cleared; the admin can revoke it.
+    }
+    await signOutLocally();
+  }
+
+  /// AppSignedOut: Sign in again.
+  void acknowledgeSignedOut() {
+    if (state is SignedOutRemotely) state = const NotSignedIn();
+  }
+
+  /// Clears every local store: the session, the access token, the device
+  /// key, and each store in [localDataWipersProvider] (settings, the
+  /// address-book values held for the scrubber, playback).
   Future<void> signOutLocally({String? notice}) async {
+    for (final wipe in ref.read(localDataWipersProvider)) {
+      try {
+        await wipe();
+      } catch (_) {}
+    }
     await _store.clear();
     try {
       await _keys.delete();

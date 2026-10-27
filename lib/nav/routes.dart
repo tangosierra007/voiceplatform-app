@@ -8,14 +8,18 @@ import '../screens/calls/in_call_screen.dart';
 import '../screens/calls/incoming_screen.dart';
 import '../screens/calls/transfer_screen.dart';
 import '../screens/contacts/contacts_screen.dart';
+import '../screens/me/me_pages.dart';
+import '../screens/me/me_screen.dart';
+import '../screens/messages/messages_screen.dart';
+import '../screens/messages/thread_screen.dart';
 import '../screens/keypad/keypad_screen.dart';
-import '../screens/placeholders.dart';
 import '../screens/recents/greeting_screen.dart';
 import '../screens/recents/recents_screen.dart';
 import '../screens/signin/basic_screen.dart';
 import '../screens/signin/code_screen.dart';
 import '../screens/signin/qr_screen.dart';
 import '../screens/signin/sign_in_screen.dart';
+import '../screens/signin/signed_out_screen.dart';
 import '../screens/signin/update_screen.dart';
 import '../shell/app_shell.dart';
 import '../shell/shell_status.dart';
@@ -49,6 +53,9 @@ abstract final class Routes {
   /// AppBasic.
   static const signInBasic = '/sign-in/basic';
 
+  /// AppSignedOut: signed out from elsewhere.
+  static const signedOut = '/signed-out';
+
   /// AppUpdate (blocking).
   static const update = '/update';
 
@@ -79,6 +86,9 @@ String? gateRedirect({
   required bool hasPendingEmail,
 }) {
   final inSignIn = location.startsWith(Routes.signIn);
+  if (location == Routes.signedOut && auth is! SignedOutRemotely) {
+    return auth is SignedIn ? Routes.keypad : Routes.signIn;
+  }
   // Below the minimum version nothing else opens (APP7), not even sign-in.
   if (updateRequired) return location == Routes.update ? null : Routes.update;
   if (location == Routes.update) return Routes.starting;
@@ -87,6 +97,8 @@ String? gateRedirect({
       return location == Routes.starting ? null : Routes.starting;
     case LicenceRefused():
       return location == Routes.signInBasic ? null : Routes.signInBasic;
+    case SignedOutRemotely():
+      return location == Routes.signedOut ? null : Routes.signedOut;
     case NotSignedIn():
       if (location == Routes.signInCode && !hasPendingEmail) {
         return Routes.signIn;
@@ -132,7 +144,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                       AppTab.keypad => const KeypadScreen(),
                       AppTab.recents => const RecentsScreen(),
                       AppTab.contacts => const ContactsScreen(),
-                      _ => TabPlaceholder(tab: t),
+                      AppTab.messages => const MessagesScreen(),
+                      AppTab.me => const MeScreen(),
                     },
                   ),
                   routes: [
@@ -141,6 +154,20 @@ final routerProvider = Provider<GoRouter>((ref) {
                         path: 'greeting',
                         builder: (context, state) => const GreetingScreen(),
                       ),
+                    if (t == AppTab.me) ...[
+                      GoRoute(
+                        path: 'call-settings',
+                        builder: (context, state) => const CallSettingsScreen(),
+                      ),
+                      GoRoute(
+                        path: 'recordings',
+                        builder: (context, state) => const RecordingsScreen(),
+                      ),
+                      GoRoute(
+                        path: 'devices',
+                        builder: (context, state) => const DevicesScreen(),
+                      ),
+                    ],
                   ],
                   redirect: t == AppTab.messages
                       ? (context, state) =>
@@ -176,6 +203,20 @@ final routerProvider = Provider<GoRouter>((ref) {
                 const NoTransitionPage(child: BasicScreen()),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/thread/:id',
+        builder: (context, state) =>
+            ThreadScreen(threadId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/new-message',
+        builder: (context, state) => const NewMessageScreen(),
+      ),
+      GoRoute(
+        path: Routes.signedOut,
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: SignedOutScreen()),
       ),
       GoRoute(
         path: Routes.update,

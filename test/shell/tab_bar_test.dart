@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
 import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
+import 'package:voiceplatform_app/screens/me/me_screen.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
 
 import '../support/app_harness.dart';
@@ -80,9 +81,11 @@ void main() {
     for (final label in ['Recents', 'Contacts', 'Messages', 'Me', 'Keypad']) {
       await tester.tap(_tab(label));
       await tester.pumpAndSettle();
-      // The placeholder heading names the tab; Keypad is the real screen.
+      // Each heading names the tab; Keypad has none and Me shows who.
       if (label == 'Keypad') {
         expect(find.byType(KeypadScreen), findsOneWidget);
+      } else if (label == 'Me') {
+        expect(find.byType(MeScreen), findsOneWidget);
       } else {
         expect(
           find.descendant(

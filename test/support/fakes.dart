@@ -113,6 +113,15 @@ class ScriptedAuth extends AuthController {
     return false;
   }
 
+  @override
+  Future<void> signOut() async {
+    await _run('signOut');
+    state = const NotSignedIn();
+  }
+
+  @override
+  Future<void> onSignedOutPush() => _run('onSignedOutPush');
+
   void setState(AuthState s) => state = s;
 }
 

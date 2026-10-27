@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../net/api.dart';
@@ -22,7 +23,16 @@ final voicemailPlayerProvider =
 
 class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
   @override
-  VoicemailPlayerState build() => const VoicemailPlayerState();
+  VoicemailPlayerState build() {
+    // Another screen (Recordings, Greeting) took the player: the card is no
+    // longer loaded.
+    ref.listen<String?>(mediaOwnerProvider, (_, owner) {
+      if (state.loadedId != null && owner != 'voicemail:${state.loadedId}') {
+        state = VoicemailPlayerState(speaker: state.speaker);
+      }
+    });
+    return const VoicemailPlayerState();
+  }
 
   MediaPlayer get _player => ref.read(mediaPlayerProvider);
 
@@ -30,7 +40,9 @@ class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
   /// lasts 5 minutes and the audio is streamed, never kept (APP8).
   Future<void> toggle(VoicemailMessage m) async {
     final p = _player;
-    if (state.loadedId == m.id && !p.state.failed) {
+    if (state.loadedId == m.id &&
+        ref.read(mediaOwnerProvider) == 'voicemail:${m.id}' &&
+        !p.state.failed) {
       if (p.state.playing) return p.pause();
       return p.play();
     }
@@ -44,12 +56,17 @@ class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
       ref.read(accessTokenProvider),
     );
     await p.open(url, headers);
+    ref.read(mediaOwnerProvider.notifier).set('voicemail:${m.id}');
     state = VoicemailPlayerState(loadedId: m.id, speaker: state.speaker);
     await p.setSpeaker(state.speaker);
     unawaited(p.play());
     // Heard once it plays; a failure here leaves it new for next time.
     if (!m.heard) unawaited(markHeard(m, heard: true).catchError((_) {}));
   }
+
+  @visibleForTesting
+  void debugLoad(String id) =>
+      state = VoicemailPlayerState(loadedId: id, speaker: state.speaker);
 
   Future<void> setSpeaker(bool on) async {
     state = VoicemailPlayerState(loadedId: state.loadedId, speaker: on);

@@ -102,4 +102,61 @@ void main() {
       await engine.dispose();
     },
   );
+
+  test('a cold start revoked before the engine starts still clears its '
+      'stored SIP account', () async {
+    SharedPreferences.setMockInitialValues({});
+    final sp = await SharedPreferences.getInstance();
+    final engine = _SpyEngine();
+    final store = MemorySessionStore()
+      ..session = StoredSession(
+        deviceId: uid(0x6, 1),
+        refreshToken: SignInFixtures.revokedRefreshToken,
+      );
+    final c = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(sp),
+        sessionStoreProvider.overrideWithValue(store),
+        deviceKeysProvider.overrideWithValue(FakeDeviceKeys()),
+        callEngineProvider.overrideWithValue(engine),
+        pushTokensProvider.overrideWithValue(null),
+        micPermissionProvider.overrideWithValue(FakeMic()),
+        apiConfigProvider.overrideWithValue(
+          ApiConfig(
+            baseUrl: server.baseUri.toString(),
+            platform: 'android',
+            appVersion: '1.0.0',
+          ),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    c.read(engineSessionProvider);
+    c.read(authProvider);
+    for (var i = 0; i < 40 && c.read(authProvider) is! SignedOutRemotely; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
+    await pumpEventQueue();
+    expect(c.read(authProvider), isA<SignedOutRemotely>());
+    expect(engine.starts, 0);
+    expect(engine.unregisters, greaterThanOrEqualTo(1));
+    expect(store.session, isNull);
+  });
+}
+
+class _SpyEngine extends FakeCallEngine {
+  int starts = 0;
+  int unregisters = 0;
+
+  @override
+  Future<void> start() {
+    starts++;
+    return super.start();
+  }
+
+  @override
+  Future<void> unregister() {
+    unregisters++;
+    return super.unregister();
+  }
 }

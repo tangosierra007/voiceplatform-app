@@ -56,6 +56,7 @@ class MockServer {
   final Map<String, bool> _deviceRings = {};
   final Set<String> _heardChanged = {};
   final Set<String> _deletedVoicemail = {};
+  Map<String, Object?> _callSettings = {...callSettings};
   final Set<String> _readThreads = {};
   final List<Map<String, Object?>> _sent = [];
   final Map<String, _SignInRequest> _requests = {};
@@ -130,7 +131,7 @@ class MockServer {
     ('POST', _p('/auth/licence-requests'), false, _licenceRequest),
     ('GET', _p('/me'), true, (r) => r.json(200, me(status: _status))),
     ('PUT', _p('/me/status'), true, _putStatus),
-    ('GET', _p('/me/call-settings'), true, (r) => r.json(200, callSettings)),
+    ('GET', _p('/me/call-settings'), true, (r) => r.json(200, _callSettings)),
     ('PATCH', _p('/me/call-settings'), true, _patchCallSettings),
     ('GET', _p('/me/caller-ids'), true, (r) => r.json(200, callerIds)),
     (
@@ -586,7 +587,8 @@ class MockServer {
 
   Future<void> _putPushToken(_Req r) async {
     final body = await r.body();
-    if (body['provider'] != 'fcm' && body['provider'] != 'apns' || body['token'] is! String) {
+    if (body['provider'] != 'fcm' && body['provider'] != 'apns' ||
+        body['token'] is! String) {
       return r.error(400, 'validation', 'provider and token are required');
     }
     lastPushToken = body['token'] as String;
@@ -614,10 +616,18 @@ class MockServer {
     });
   }
 
+  /// The contract's CallSettingsPatch: an absent field is unchanged, `null`
+  /// clears a number, and an empty string is refused (send null instead).
   Future<void> _patchCallSettings(_Req r) async {
     final body = await r.body();
-    final next = {...callSettings, ...body}..removeWhere((k, v) => v == null);
-    return r.json(200, next);
+    for (final k in const ['followMeTo', 'forwardAlwaysTo']) {
+      if (body[k] == '') {
+        return r.error(400, 'validation', '$k: send null to clear');
+      }
+    }
+    _callSettings = {..._callSettings, ...body}
+      ..removeWhere((k, v) => v == null);
+    return r.json(200, _callSettings);
   }
 
   Future<void> _override(_Req r) async {
