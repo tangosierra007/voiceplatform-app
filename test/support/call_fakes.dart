@@ -24,6 +24,15 @@ class FakeMic implements MicPermission {
 
   @override
   Future<void> openSettings() async => settingsOpened++;
+
+  int notificationAsks = 0;
+  int bluetoothAsks = 0;
+
+  @override
+  Future<void> requestNotifications() async => notificationAsks++;
+
+  @override
+  Future<void> requestBluetooth() async => bluetoothAsks++;
 }
 
 class FixedPhoneContacts implements PhoneContactsSource {

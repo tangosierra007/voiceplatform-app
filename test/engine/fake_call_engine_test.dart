@@ -325,6 +325,21 @@ void main() {
       expect(() => e.sendDtmf(id, 'x'), throwsA(isA<InvalidState>()));
     });
 
+    test(
+      'blind transfer to an emergency number is refused, never sent on',
+      () async {
+        final (e, id) = await connected();
+        for (final n in ['000', '112', '0106']) {
+          await expectLater(
+            e.transferBlind(id, n),
+            throwsA(isA<EmergencyNumberUseDialler>()),
+          );
+        }
+        expect(e.activeCalls.single.state, CallState.connected);
+        expect(e.transferredTo, isEmpty);
+      },
+    );
+
     test('blind transfer ends the call', () async {
       final (e, id) = await connected();
       await e.transferBlind(id, '206');

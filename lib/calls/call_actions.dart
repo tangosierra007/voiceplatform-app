@@ -19,6 +19,14 @@ abstract interface class MicPermission {
 
   /// The app's page in Android Settings.
   Future<void> openSettings();
+
+  /// POST_NOTIFICATIONS (Android 13+), asked once after sign-in: without it
+  /// Telecom still rings, but no incoming-call notification shows (WS3).
+  Future<void> requestNotifications();
+
+  /// BLUETOOTH_CONNECT (Android 12+), asked when a call starts, so headsets
+  /// and car kits can carry it. Refusing leaves the earpiece and speaker.
+  Future<void> requestBluetooth();
 }
 
 class DeviceMicPermission implements MicPermission {
@@ -33,6 +41,24 @@ class DeviceMicPermission implements MicPermission {
 
   @override
   Future<void> openSettings() => openAppSettings();
+
+  @override
+  Future<void> requestNotifications() async {
+    try {
+      if (!await Permission.notification.isGranted) {
+        await Permission.notification.request();
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> requestBluetooth() async {
+    try {
+      if (!await Permission.bluetoothConnect.isGranted) {
+        await Permission.bluetoothConnect.request();
+      }
+    } catch (_) {}
+  }
 }
 
 final micPermissionProvider = Provider<MicPermission>(
@@ -122,10 +148,27 @@ Future<String?> startCallWith(
     }
     return null;
   }
+  // Headsets and car kits: asked as the call starts, not needed to go on.
+  await mic.requestBluetooth();
   final engine = read(callEngineProvider);
+  final held = <String>[];
   for (final c in engine.activeCalls) {
-    if (c.state == CallState.connected) await engine.hold(c.id);
+    if (c.state == CallState.connected) {
+      await engine.hold(c.id);
+      held.add(c.id);
+    }
   }
+  // The new call didn't start: the call put on hold for it comes back.
+  Future<void> resumeHeld() async {
+    for (final id in held) {
+      try {
+        await engine.resume(id);
+      } on CallEngineError {
+        // Ended meanwhile.
+      }
+    }
+  }
+
   final id = callerId ?? read(selectedCallerIdProvider);
   try {
     final callId = await engine.call(
@@ -134,20 +177,28 @@ Future<String?> startCallWith(
     );
     read(callBookProvider.notifier).usedCallerId(callId, id);
     return callId;
-  } on EmergencyNumberUseDialler {
-    if (context.mounted) await showEmergencySheet(context, number);
-  } on MicrophoneDenied {
-    if (context.mounted) {
-      await showMicrophoneSheet(context, number: number, callerId: callerId);
+  } on CallEngineError catch (e) {
+    await resumeHeld();
+    if (!context.mounted) return null;
+    switch (e) {
+      case EmergencyNumberUseDialler():
+        await showEmergencySheet(context, number);
+      case MicrophoneDenied():
+        await showMicrophoneSheet(context, number: number, callerId: callerId);
+      default:
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(
+              e is NotRegistered
+                  ? 'Not connected yet. Try again in a moment.'
+                  : "The call didn't start. Try again.",
+            ),
+          ),
+        );
     }
-  } on NotRegistered {
-    if (context.mounted) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text("Not connected yet. Try again in a moment."),
-        ),
-      );
-    }
+  } catch (_) {
+    await resumeHeld();
+    rethrow;
   }
   return null;
 }

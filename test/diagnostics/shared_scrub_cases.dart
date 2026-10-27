@@ -19,7 +19,10 @@ const sharedScrubCases = <(String, String)>[
   ('passwd: "q w e"', 'passwd: [scrubbed]'),
   ('ha1 = 5ebe2294ecd0e0f08eab7690d2a6ee69;', 'ha1 = [scrubbed];'),
   ('pass=hunter2hunter&u=1', 'pass=[scrubbed]&u=1'),
-  ('{"password":"hunter2hunter","user":"ava"}', '{"password":[scrubbed],"user":"ava"}'),
+  (
+    '{"password":"hunter2hunter","user":"ava"}',
+    '{"password":[scrubbed],"user":"ava"}',
+  ),
   ('{"token": "abc.def"}', '{"token": [scrubbed]}'),
   ('{password: hunter2hunter}', '{password: [scrubbed]}'),
   ('{"access_token":abcdef}', '{"access_token":[scrubbed]}'),
@@ -27,7 +30,10 @@ const sharedScrubCases = <(String, String)>[
     'Contact: <sip:app-x@192.0.2.10;transport=tls;pn-provider=fcm;pn-prid=dXk3:APA91bH-x_y;pn-param=voiceplatform-app>',
     'Contact: <sip:app-x@192.0.2.10;transport=tls;pn-provider=fcm;pn-prid=[scrubbed];pn-param=voiceplatform-app>',
   ),
-  ('Authorisation Bearer abc.def-ghi_jkl ok', 'Authorisation Bearer [scrubbed] ok'),
+  (
+    'Authorisation Bearer abc.def-ghi_jkl ok',
+    'Authorisation Bearer [scrubbed] ok',
+  ),
   (
     'From: <sip:+61491570737@democo.sip.voiceplatform.com.au>',
     'From: <sip:[n]@democo.sip.voiceplatform.com.au>',
@@ -38,9 +44,18 @@ const sharedScrubCases = <(String, String)>[
   ('dial 0491.570.737 now', 'dial [n] now'),
   ('dial 03/5550/1201 now', 'dial [n] now'),
   ('dial +61.3.5550.1201 now', 'dial [n] now'),
-  ('ext 204 port 5061 ip 192.0.2.20 code 486', 'ext 204 port 5061 ip 192.0.2.20 code 486'),
+  (
+    'ext 204 port 5061 ip 192.0.2.20 code 486',
+    'ext 204 port 5061 ip 192.0.2.20 code 486',
+  ),
   ('via 192.0.2.20:5061', 'via 192.0.2.20:5061'),
   ('user ava.nguyen@example.com signed in', 'user [email] signed in'),
-  ('<sip:app-abc@democo.sip.voiceplatform.com.au>', '<sip:app-abc@democo.sip.voiceplatform.com.au>'),
-  ('2026 Oct 27 03:15:00.123Z ENGINE call call-1 CONNECTED', '2026 Oct 27 03:15:00.123Z ENGINE call call-1 CONNECTED'),
+  (
+    '<sip:app-abc@democo.sip.voiceplatform.com.au>',
+    '<sip:app-abc@democo.sip.voiceplatform.com.au>',
+  ),
+  (
+    '2026 Oct 27 03:15:00.123Z ENGINE call call-1 CONNECTED',
+    '2026 Oct 27 03:15:00.123Z ENGINE call call-1 CONNECTED',
+  ),
 ];

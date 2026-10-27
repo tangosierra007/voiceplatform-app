@@ -17,8 +17,8 @@ String nationalDigits(String s) {
   return d.replaceAll('+', '');
 }
 
-/// `03 5550 1987`, `0491 570 737`, `1300 975 707`, `13 1234`; extensions and
-/// partial numbers as they come (spaced as far as they go while typing).
+/// `03 5550 1987`, `0491 570 737`, `1300 975 707`, `13 1234`; extensions,
+/// short numbers (000) and part-typed numbers as their digits.
 String formatAuNumber(String raw) {
   if (raw == 'anonymous') return 'Private';
   final d = nationalDigits(raw);
@@ -36,11 +36,14 @@ String formatAuNumber(String raw) {
     return out.join(' ');
   }
 
-  if (d.startsWith('04') || d.startsWith('1300') || d.startsWith('1800')) {
+  // Only a complete number is spaced: 000, 112 and part-typed numbers show
+  // their digits as they are.
+  if (d.length == 10 &&
+      (d.startsWith('04') || d.startsWith('1300') || d.startsWith('1800'))) {
     return group(d, [4, 3, 3]);
   }
-  if (d.startsWith('13') && d.length == 6) return group(d, [2, 4]);
-  if (d.startsWith('0')) return group(d, [2, 4, 4]);
+  if (d.length == 6 && d.startsWith('13')) return group(d, [2, 4]);
+  if (d.length == 10 && d.startsWith('0')) return group(d, [2, 4, 4]);
   return d;
 }
 

@@ -27,7 +27,11 @@ class RecordingTransport implements Transport {
 void main() {
   const password = 'fakeSipPassw0rd-xyz';
   // Built at run time so the secret scan doesn't take the fake for a real one.
-  final token = ['vp', 'rt', List.generate(32, (i) => '9b8c7d6e5f4a'[i % 12]).join()].join('_');
+  final token = [
+    'vp',
+    'rt',
+    List.generate(32, (i) => '9b8c7d6e5f4a'[i % 12]).join(),
+  ].join('_');
   const code = '482913';
   const email = 'ava.nguyen@example.com';
   const phone = '0491 570 737';
@@ -57,23 +61,43 @@ void main() {
   });
 
   test('a crash reaches the transport scrubbed', () async {
-    Sentry.addBreadcrumb(Breadcrumb(category: 'auth', message: 'refresh with refresh_token=$token for $email'));
-    Sentry.addBreadcrumb(Breadcrumb(category: 'contacts', message: 'loaded $contactName $phone'));
+    Sentry.addBreadcrumb(
+      Breadcrumb(
+        category: 'auth',
+        message: 'refresh with refresh_token=$token for $email',
+      ),
+    );
+    Sentry.addBreadcrumb(
+      Breadcrumb(category: 'contacts', message: 'loaded $contactName $phone'),
+    );
     await Sentry.configureScope((scope) async {
-      await scope.setContexts('call', {'remote': phone, 'contacts': [contactName]});
+      await scope.setContexts('call', {
+        'remote': phone,
+        'contacts': [contactName],
+      });
       await scope.setTag('code', code);
       scope.addAttachment(
         SentryAttachment.fromIntList(
-          utf8.encode('Authorization: Digest response="ab12"\npassword=$password\ncode $code'),
+          utf8.encode(
+            'Authorization: Digest response="ab12"\npassword=$password\ncode $code',
+          ),
           'engine.log',
           contentType: 'text/plain',
         ),
       );
-      scope.addAttachment(SentryAttachment.fromIntList([0, 1, 2], 'screen.png', contentType: 'image/png'));
+      scope.addAttachment(
+        SentryAttachment.fromIntList(
+          [0, 1, 2],
+          'screen.png',
+          contentType: 'image/png',
+        ),
+      );
     });
 
     try {
-      throw StateError('sign-in failed: password=$password token=$token code $code for $email at $phone ($contactName)');
+      throw StateError(
+        'sign-in failed: password=$password token=$token code $code for $email at $phone ($contactName)',
+      );
     } catch (e, st) {
       await Sentry.captureException(e, stackTrace: st);
     }
@@ -83,20 +107,41 @@ void main() {
     expect(wire, contains('"type":"event"'));
     expect(wire, contains('StateError'));
     expect(wire, contains('voiceplatform-app@1.0.0+42'));
-    for (final secret in [password, token, code, email, contactName, 'ab12', '0491', '570 737']) {
+    for (final secret in [
+      password,
+      token,
+      code,
+      email,
+      contactName,
+      'ab12',
+      '0491',
+      '570 737',
+    ]) {
       expect(wire, isNot(contains(secret)), reason: secret);
     }
     // No 6-digit run in any text: SDK numbers (memory sizes), hex ids,
     // timestamps and the SDK's device and OS contexts (kernel versions such
     // as 6.8.0-1017) aside.
-    const sdkContexts = {'os', 'device', 'app', 'runtime', 'runtimes', 'culture', 'trace', 'flutter_context', 'dart_context'};
+    const sdkContexts = {
+      'os',
+      'device',
+      'app',
+      'runtime',
+      'runtimes',
+      'culture',
+      'trace',
+      'flutter_context',
+      'dart_context',
+    };
     final withoutSdkContexts = wire
         .split('\n')
         .map((line) {
           try {
             final json = jsonDecode(line);
             if (json is Map && json['contexts'] is Map) {
-              (json['contexts'] as Map).removeWhere((k, _) => sdkContexts.contains(k));
+              (json['contexts'] as Map).removeWhere(
+                (k, _) => sdkContexts.contains(k),
+              );
               return jsonEncode(json);
             }
           } catch (_) {}

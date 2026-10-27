@@ -59,11 +59,19 @@ class VpButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.vp;
     final enabled = onPressed != null && !busy;
+    // .vp-btn[disabled]: dimmed until it can be used (busy keeps its look).
+    final off = onPressed == null;
     final (bg, fg, border) = switch (kind) {
-      _ when !enabled && kind == VpButtonKind.primary => (
+      VpButtonKind.primary when off => (
         c.surfaceRaised,
         c.textDisabled,
         c.border,
+      ),
+      VpButtonKind.outline when off => (c.surface, c.textDisabled, c.border),
+      VpButtonKind.ghost when off => (
+        Colors.transparent,
+        c.textDisabled,
+        Colors.transparent,
       ),
       VpButtonKind.primary => (c.brand, c.onBrand, c.brand),
       VpButtonKind.outline => (c.surface, c.text, c.borderStrong),
@@ -84,50 +92,55 @@ class VpButton extends StatelessWidget {
       label: label,
       excludeSemantics: true,
       onTap: enabled ? onPressed : null,
-      child: Material(
-        color: bg,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(VpRadius.md),
-          side: BorderSide(color: border, width: 2),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          overlayColor: WidgetStatePropertyAll(
-            kind == VpButtonKind.primary
-                ? c.brandHover.withValues(alpha: 0.4)
-                : c.surfaceRaised,
+      // Shorter than 48 px to see (the artboards' 40 px), 48 px to touch.
+      child: _TapPad(
+        height: height,
+        onTap: enabled ? onPressed : null,
+        child: Material(
+          color: bg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(VpRadius.md),
+            side: BorderSide(color: border, width: 2),
           ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: height),
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: large ? VpSpace.s5 : VpSpace.s4,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (busy)
-                    SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: fg,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: enabled ? onPressed : null,
+            overlayColor: WidgetStatePropertyAll(
+              kind == VpButtonKind.primary
+                  ? c.brandHover.withValues(alpha: 0.4)
+                  : c.surfaceRaised,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: height),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: large ? VpSpace.s5 : VpSpace.s4,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (busy)
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: fg,
+                        ),
+                      )
+                    else if (icon != null)
+                      VpSvgIcon(icon!, size: 20, colour: fg),
+                    if (busy || icon != null) const SizedBox(width: VpSpace.s2),
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: text,
+                        textAlign: TextAlign.center,
+                        softWrap: true,
                       ),
-                    )
-                  else if (icon != null)
-                    VpSvgIcon(icon!, size: 20, colour: fg),
-                  if (busy || icon != null) const SizedBox(width: VpSpace.s2),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: text,
-                      textAlign: TextAlign.center,
-                      softWrap: true,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -137,7 +150,31 @@ class VpButton extends StatelessWidget {
   }
 }
 
-/// A rounded tile holding an icon (AppCode, AppBasic, AppUpdate, AppEmergency).
+/// Pads a short control to a 48 px tap target without changing how it looks.
+class _TapPad extends StatelessWidget {
+  const _TapPad({
+    required this.height,
+    required this.onTap,
+    required this.child,
+  });
+  final double height;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (height >= 48) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: (48 - height) / 2),
+        child: child,
+      ),
+    );
+  }
+}
+
 class VpIconTile extends StatelessWidget {
   const VpIconTile({
     super.key,

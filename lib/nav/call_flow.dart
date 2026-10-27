@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:call_engine/call_engine.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vp_linphone/vp_linphone.dart' show VpUiRequest, VpUiRequestKind;
 
 import '../engine/engine_provider.dart';
 import 'routes.dart';
@@ -21,18 +22,38 @@ class CallFlow extends ConsumerStatefulWidget {
 
 class _CallFlowState extends ConsumerState<CallFlow> {
   StreamSubscription<CallSnapshot>? _sub;
+  StreamSubscription<VpUiRequest>? _ui;
   String? _returnTo;
 
   @override
   void initState() {
     super.initState();
     _sub = ref.read(callEngineProvider).calls.listen(_onCall);
+    // The incoming-call notification and full-screen intent (WS3 3.2): a
+    // cold start brings one request; a running app gets them as a stream.
+    final ui = ref.read(engineUiProvider);
+    _ui = ui.requests.listen(_onUiRequest);
+    ui.take().then((r) {
+      if (r != null && mounted) _onUiRequest(r);
+    });
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _ui?.cancel();
     super.dispose();
+  }
+
+  void _onUiRequest(VpUiRequest r) {
+    final router = ref.read(routerProvider);
+    final here = router.routerDelegate.currentConfiguration.uri.path;
+    _returnTo ??= isCallRoute(here) ? null : here;
+    router.go(
+      r.kind == VpUiRequestKind.showIncoming
+          ? Routes.incoming(r.callId)
+          : Routes.inCall(r.callId),
+    );
   }
 
   final Map<String, CallState> _last = {};

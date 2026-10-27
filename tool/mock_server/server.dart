@@ -144,7 +144,7 @@ class MockServer {
     ('PATCH', _p('/me/devices/{id}'), true, _patchDevice),
     ('POST', _p('/me/devices/{id}/sign-out'), true, _signOutDevice),
     ('POST', _p('/devices/me/sip-credentials'), true, _sipCredentials),
-    ('PUT', _p('/devices/me/push-token'), true, (r) => r.empty(204)),
+    ('PUT', _p('/devices/me/push-token'), true, _putPushToken),
     ('POST', _p('/devices/me/sign-out'), true, (r) => r.empty(204)),
     (
       'POST',
@@ -579,6 +579,18 @@ class MockServer {
       return r.error(410, 'refusal_expired', 'Start again to ask your admin.');
     }
     return r.empty(202);
+  }
+
+  /// The last FCM token the app stored (for tests).
+  String? lastPushToken;
+
+  Future<void> _putPushToken(_Req r) async {
+    final body = await r.body();
+    if (body['provider'] != 'fcm' && body['provider'] != 'apns' || body['token'] is! String) {
+      return r.error(400, 'validation', 'provider and token are required');
+    }
+    lastPushToken = body['token'] as String;
+    return r.empty(204);
   }
 
   // ----------------------------------------------------------------- me

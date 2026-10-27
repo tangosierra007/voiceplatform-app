@@ -304,6 +304,8 @@ class FakeCallEngine implements CallEngine {
 
   @override
   Future<void> transferBlind(String callId, String target) async {
+    // As the real engine: an emergency number is never sent on, by any path.
+    if (isEmergencyNumber(target)) throw const EmergencyNumberUseDialler();
     final c = _call(callId);
     _requireState(c, {CallState.connected, CallState.heldByMe}, 'transfer');
     transferredTo[callId] = target;

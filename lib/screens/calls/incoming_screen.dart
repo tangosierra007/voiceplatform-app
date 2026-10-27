@@ -12,6 +12,7 @@ import '../../engine/engine_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_icons.dart';
 import 'call_widgets.dart';
+import 'microphone_sheet.dart';
 
 /// AppIncoming: which number or group was called, who else is ringing, the
 /// repeat-caller pill and "Last answered by", then Decline, To voicemail and
@@ -175,13 +176,34 @@ class IncomingScreen extends ConsumerWidget {
   }
 
   /// The microphone is asked for when a call starts: answering is one.
+  /// Refused: AppMicrophone with the steps to Settings (no desk phone option
+  /// for an incoming call); back with it on, the call is answered.
   Future<void> _answer(BuildContext context, WidgetRef ref) async {
     final mic = ref.read(micPermissionProvider);
-    if (!await mic.isGranted() && !await mic.request()) return;
+    final number =
+        ref
+            .read(callEngineProvider)
+            .activeCalls
+            .where((c) => c.id == callId)
+            .firstOrNull
+            ?.remoteNumber ??
+        '';
+    Future<void> refused() async {
+      if (context.mounted) {
+        await showMicrophoneSheet(
+          context,
+          number: number,
+          answerCallId: callId,
+        );
+      }
+    }
+
+    if (!await mic.isGranted() && !await mic.request()) return refused();
+    await mic.requestBluetooth();
     try {
       await ref.read(callEngineProvider).answer(callId);
     } on MicrophoneDenied {
-      // The engine checks too; the call keeps ringing.
+      await refused();
     }
   }
 

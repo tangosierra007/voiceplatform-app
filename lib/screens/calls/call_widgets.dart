@@ -279,9 +279,8 @@ class _CallTimerState extends State<CallTimer> {
   DateTime _now() {
     final own = widget.clock;
     if (own != null) return own();
-    final DateTime Function() app = ProviderScope.containerOf(
-      context,
-    ).read(clockProvider);
+    final DateTime Function() app = ProviderScope.containerOf(context)
+        .read(clockProvider);
     return app();
   }
 

@@ -108,9 +108,7 @@ void main() {
       final h = tester.ensureSemantics();
       final e = await _open(tester, screen);
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      if (screen != 'transfer' && screen != 'microphone') {
-        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      }
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       h.dispose();
       await tester.pumpWidget(const SizedBox());
       await e.dispose();

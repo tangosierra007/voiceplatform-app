@@ -8,7 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 // checks the merged release manifest.
 void main() {
   test('the app manifest turns off Sentry NDK crash capture', () {
-    final manifest = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    final manifest = File('android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
     final meta = RegExp(
       r'<meta-data\s+android:name="io\.sentry\.ndk\.enable"\s+android:value="false"\s*/>',
     );

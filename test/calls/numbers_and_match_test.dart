@@ -15,10 +15,13 @@ void main() {
       expect(formatAuNumber('131234'), '13 1234');
       expect(formatAuNumber('206'), '206');
       expect(formatAuNumber('anonymous'), 'Private');
-      // While typing, as far as it goes.
+      // Short and part-typed numbers are left as digits (000 is not 00 0).
+      expect(formatAuNumber('000'), '000');
+      expect(formatAuNumber('0000'), '0000');
+      expect(formatAuNumber('112'), '112');
       expect(formatAuNumber('0491'), '0491');
-      expect(formatAuNumber('049157'), '0491 57');
-      expect(formatAuNumber('035550'), '03 5550');
+      expect(formatAuNumber('049157'), '049157');
+      expect(formatAuNumber('04915707371'), '04915707371');
     });
 
     test('ordinals, times, timer, initials', () {

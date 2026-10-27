@@ -3,7 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:call_engine/call_engine.dart';
+
 import '../../calls/call_actions.dart';
+import '../../engine/engine_provider.dart';
 import '../../calls/numbers.dart';
 import '../../net/api.dart';
 import '../../theme/app_theme.dart';
@@ -13,10 +16,14 @@ import '../../widgets/vp_icons.dart';
 /// AppMicrophone, over the keypad: the microphone was refused when a call
 /// started. Steps to Settings (the call starts when you come back with it
 /// on), or "Call from my desk phone instead" (A1).
+///
+/// For an incoming call ([answerCallId]) there is no desk phone option: back
+/// from Settings with the microphone on, the call is answered.
 Future<void> showMicrophoneSheet(
   BuildContext context, {
   required String number,
   CallerId? callerId,
+  String? answerCallId,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -25,13 +32,25 @@ Future<void> showMicrophoneSheet(
   barrierColor: VpPalette.ink900.withValues(alpha: 0.45),
   backgroundColor: Colors.transparent,
   elevation: 0,
-  builder: (_) => MicrophoneSheet(number: number, callerId: callerId),
+  builder: (_) => MicrophoneSheet(
+    number: number,
+    callerId: callerId,
+    answerCallId: answerCallId,
+  ),
 );
 
 class MicrophoneSheet extends ConsumerStatefulWidget {
-  const MicrophoneSheet({super.key, required this.number, this.callerId});
+  const MicrophoneSheet({
+    super.key,
+    required this.number,
+    this.callerId,
+    this.answerCallId,
+  });
   final String number;
   final CallerId? callerId;
+
+  /// Set for an incoming call: answer it instead of placing a call.
+  final String? answerCallId;
 
   @override
   ConsumerState<MicrophoneSheet> createState() => _MicrophoneSheetState();
@@ -57,6 +76,16 @@ class _MicrophoneSheetState extends ConsumerState<MicrophoneSheet> {
 
   Future<void> _retry() async {
     if (!await ref.read(micPermissionProvider).isGranted() || !mounted) return;
+    final answer = widget.answerCallId;
+    if (answer != null) {
+      final engine = ref.read(callEngineProvider);
+      Navigator.of(context).pop();
+      final ringing = engine.activeCalls.any(
+        (c) => c.id == answer && c.state == CallState.incoming,
+      );
+      if (ringing) await engine.answer(answer);
+      return;
+    }
     final read = ProviderScope.containerOf(context).read;
     final root = Navigator.of(context, rootNavigator: true).context;
     Navigator.of(context).pop();
@@ -190,14 +219,15 @@ class _MicrophoneSheetState extends ConsumerState<MicrophoneSheet> {
               onPressed: () => ref.read(micPermissionProvider).openSettings(),
             ),
             const SizedBox(height: 14),
-            VpButton(
-              label: 'Call from my desk phone instead',
-              kind: VpButtonKind.ghost,
-              large: false,
-              height: VpSize.controlHeight,
-              busy: _busy,
-              onPressed: _deskPhone,
-            ),
+            if (widget.answerCallId == null)
+              VpButton(
+                label: 'Call from my desk phone instead',
+                kind: VpButtonKind.ghost,
+                large: false,
+                height: VpSize.controlHeight,
+                busy: _busy,
+                onPressed: _deskPhone,
+              ),
             const SizedBox(height: 24),
           ],
         ),

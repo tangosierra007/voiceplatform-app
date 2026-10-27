@@ -251,10 +251,28 @@ The manifest gains READ_CONTACTS (in spec 22's list; the Contacts tab asks for i
   - "Not connected yet. Try again in a moment."
   - The desk phone confirmation ("Desk phone 202 is ringing. Pick it up to call …") and its failure message.
   - The outgoing line label (for example "SALES MOBILE · 0491 571 266").
-- **Answering with the microphone refused** keeps the call ringing. AppMicrophone is only for outgoing calls, because "Call from my desk phone instead" makes no sense for an incoming one.
 - **Transfer list order** follows the directory; the artboard lists Mia, Ava, Priya, Liam and Tom.
 
 ### Not done or open
 
-- **WS3 3.2 (Telecom and full-screen intent)** isn't on `main`, so there is no hook to consume yet. `/incoming/:callId` is the route it should open.
 - **TJ's A53 (R5CTC0BDW6V)** is locked with a secure lock screen, so I couldn't drive it. The debug APK (fake engine, API through `adb reverse tcp:3000` to the mock server) is installed and waiting.
+
+### WS6 review fixes (PR #16)
+
+- **Rebased on `main` (`dedc9f8`).** `pubspec.yaml` keeps sentry_flutter; the stray `meta: any` is gone.
+- **WS3 3.2 wired.**
+  - `CallFlow` takes the engine's `uiRequests`, plus `takeUiRequest()` once at a cold start. `showIncoming` opens `/incoming/:callId`; `showCall` opens the in-call screen.
+  - `register()` carries `PushParams` from FCM (`VpPushTokens`: `pn-provider` fcm, `pn-param` voiceplatform-app).
+  - The token goes to `PUT /devices/me/push-token` after registering and again on every refresh. VpPushTokens has already sent the refresh to the engine with `updatePush`.
+  - Permissions are asked at these moments: POST_NOTIFICATIONS once after sign-in, when the engine starts; BLUETOOTH_CONNECT when a call starts or is answered. Refusing either leaves calls working.
+- **Answer with the microphone refused** now shows AppMicrophone with the steps to Settings and no desk-phone option. Back with the microphone on, the call is answered. The earlier deviation is withdrawn.
+- **Golden failures.** `test/goldens/failures/` is removed and gitignored.
+- **Number display.** Only complete numbers are spaced: 000, 112 and part-typed numbers show as typed digits.
+- **"Send now"** checks `isEmergencyNumber` first and catches engine errors. `FakeCallEngine.transferBlind` throws `EmergencyNumberUseDialler` as the real engine does.
+- **48 px tap targets on Transfer and Microphone, and every `VpButton`.**
+  - Buttons drawn shorter than 48 px get invisible padding. The 40 px buttons keep their look but take 4 px more space above and below, so getting-in screens move by that much.
+  - The transfer search field is 48 px tall (the artboard has 36).
+  - The skip in `call_a11y_test.dart` is gone.
+- **A new call that fails** brings the held call back.
+- **Disabled buttons are dimmed.** "Talk first" and "Send now" stay dimmed until a colleague is picked, and outline and ghost buttons now dim when disabled.
+- **Mock server.** It records the last push token, for the new `test/engine/engine_session_test.dart`.

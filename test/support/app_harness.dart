@@ -62,6 +62,7 @@ Future<Widget> appUnderTest({
   List<PhoneContact> phoneContacts = const [],
   bool offline = false,
   DeskPhoneCall? deskPhone,
+  EngineUi? ui,
   StatusStatus myStatus = StatusStatus.available,
 }) async {
   SharedPreferences.setMockInitialValues({
@@ -100,6 +101,7 @@ Future<Widget> appUnderTest({
       ),
       if (clock != null) clockProvider.overrideWithValue(clock),
       micPermissionProvider.overrideWithValue(mic ?? FakeMic()),
+      if (ui != null) engineUiProvider.overrideWithValue(ui),
       deskPhoneCallProvider.overrideWithValue(
         deskPhone ?? (n, id) async => 'Desk phone 202',
       ),

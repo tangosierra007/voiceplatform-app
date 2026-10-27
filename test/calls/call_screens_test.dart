@@ -17,6 +17,9 @@ import 'package:voiceplatform_app/screens/calls/incoming_screen.dart';
 import 'package:voiceplatform_app/screens/calls/transfer_screen.dart';
 import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
+import 'package:voiceplatform_app/widgets/vp_controls.dart';
+import 'package:voiceplatform_app/engine/engine_provider.dart';
+import 'package:vp_linphone/vp_linphone.dart' show VpUiRequest, VpUiRequestKind;
 
 import '../support/app_harness.dart';
 import '../support/phone.dart';
@@ -117,10 +120,10 @@ void main() {
         expect(find.text('Jordan Price, Harbour Cafe'), findsOneWidget);
         await tester.tap(find.bySemanticsLabel('Delete'));
         await tester.pump();
-        expect(find.text('0491 570 73'), findsOneWidget);
+        expect(find.text('049157073'), findsOneWidget);
         await tester.longPress(find.bySemanticsLabel('Delete'));
         await tester.pump();
-        expect(find.text('0491 570 73'), findsNothing);
+        expect(find.text('049157073'), findsNothing);
         await tester.longPress(find.bySemanticsLabel(RegExp('^0, hold')));
         await tester.pump();
         expect(find.text('+'), findsWidgets);
@@ -683,4 +686,183 @@ void main() {
     await _settle(tester);
     expect(_router(tester), isNotNull);
   });
+
+  group('WS6 review', () {
+    testWidgets('000 shows as 000 on the keypad, not 00 0', (tester) async {
+      usePhone(tester);
+      await tester.pumpWidget(await appUnderTest(engine: await _engine()));
+      await _settle(tester);
+      await _type(tester, '000');
+      expect(find.text('000'), findsOneWidget);
+      expect(find.text('00 0'), findsNothing);
+      await _end(tester);
+    });
+
+    testWidgets(
+      'Answer with the microphone refused: AppMicrophone, no desk phone; back with it on answers',
+      (tester) async {
+        usePhone(tester);
+        final e = await _engine();
+        final mic = FakeMic(granted: false, grantOnRequest: false);
+        await tester.pumpWidget(await appUnderTest(engine: e, mic: mic));
+        await _settle(tester);
+        late String id;
+        await tester.runAsync(
+          () async => id = e.simulateIncoming(
+            remoteNumber: '+61491570737',
+            info: _westgate,
+          ),
+        );
+        await _settle(tester);
+        await tester.tap(find.bySemanticsLabel('Answer'));
+        await _settle(tester);
+        expect(find.text('Let the app use the microphone'), findsOneWidget);
+        expect(find.text('Call from my desk phone instead'), findsNothing);
+        expect(e.activeCalls.single.state, CallState.incoming);
+
+        mic.granted = true;
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await _settle(tester);
+        await _settle(tester);
+        expect(e.activeCalls.single.id, id);
+        expect(e.activeCalls.single.state, CallState.connected);
+        expect(find.byType(InCallScreen), findsOneWidget);
+        await _end(tester);
+      },
+    );
+
+    testWidgets('Add call that fails: the held call comes back', (
+      tester,
+    ) async {
+      usePhone(tester);
+      final e = _FailingCallEngine();
+      _engines.add(e);
+      await e.start();
+      await e.register(_account);
+      await tester.pumpWidget(await appUnderTest(engine: e));
+      await _settle(tester);
+      await tester.runAsync(
+        () async =>
+            e.simulateIncoming(remoteNumber: '+61491570737', info: _westgate),
+      );
+      await _settle(tester);
+      await tester.tap(find.bySemanticsLabel('Answer'));
+      await _settle(tester);
+      final first = e.activeCalls.single.id;
+      await tester.tap(find.bySemanticsLabel('Add call'));
+      await _settle(tester);
+      e.failNext = true;
+      await _type(tester, '206');
+      await tester.tap(find.bySemanticsLabel('Call'));
+      await _settle(tester);
+      expect(e.activeCalls.single.id, first);
+      expect(e.activeCalls.single.state, CallState.connected);
+      expect(find.text("The call didn't start. Try again."), findsOneWidget);
+      await _end(tester);
+    });
+
+    testWidgets(
+      'Talk first and Send now are dimmed until a colleague is picked',
+      (tester) async {
+        usePhone(tester);
+        final e = await _engine();
+        await tester.pumpWidget(await appUnderTest(engine: e));
+        await _settle(tester);
+        await tester.runAsync(
+          () async =>
+              e.simulateIncoming(remoteNumber: '+61491570737', info: _westgate),
+        );
+        await _settle(tester);
+        await tester.tap(find.bySemanticsLabel('Answer'));
+        await _settle(tester);
+        await tester.tap(find.bySemanticsLabel('Transfer'));
+        await _settle(tester);
+        VpButton button(String label) =>
+            tester.widget<VpButton>(find.widgetWithText(VpButton, label));
+        expect(button('Talk first').onPressed, isNull);
+        expect(button('Send now').onPressed, isNull);
+        await tester.tap(find.bySemanticsLabel(RegExp('^Mia Rossi')));
+        await tester.pump();
+        expect(button('Talk to Mia first').onPressed, isNotNull);
+        expect(button('Send now').onPressed, isNotNull);
+        await _end(tester);
+      },
+    );
+
+    testWidgets("the engine's screen requests open Incoming and In call", (
+      tester,
+    ) async {
+      usePhone(tester);
+      final e = await _engine();
+      final ui = _Ui();
+      await tester.pumpWidget(await appUnderTest(engine: e, ui: ui));
+      await _settle(tester);
+      late String id;
+      await tester.runAsync(
+        () async => id = e.simulateIncoming(remoteNumber: '+61491570737'),
+      );
+      await _settle(tester);
+      // The user had left the screen; the notification brings it back.
+      _router(tester).go(Routes.contacts);
+      await _settle(tester);
+      ui.add(VpUiRequest(VpUiRequestKind.showIncoming, id));
+      await _settle(tester);
+      expect(find.byType(IncomingScreen), findsOneWidget);
+      await tester.runAsync(() async => e.answer(id));
+      _router(tester).go(Routes.contacts);
+      await _settle(tester);
+      ui.add(VpUiRequest(VpUiRequestKind.showCall, id));
+      await _settle(tester);
+      expect(find.byType(InCallScreen), findsOneWidget);
+      await _end(tester);
+    });
+
+    testWidgets('a cold start from the notification opens Incoming', (
+      tester,
+    ) async {
+      usePhone(tester);
+      final e = await _engine();
+      final id = e.simulateIncoming(remoteNumber: '+61491570737');
+      final ui = _Ui()..first = VpUiRequest(VpUiRequestKind.showIncoming, id);
+      await tester.pumpWidget(await appUnderTest(engine: e, ui: ui));
+      await _settle(tester);
+      expect(find.byType(IncomingScreen), findsOneWidget);
+      await _end(tester);
+    });
+  });
+}
+
+class _FailingCallEngine extends SpyEngine {
+  bool failNext = false;
+
+  @override
+  Future<String> call(String number, {String? callerId}) {
+    if (failNext) {
+      failNext = false;
+      called.add((number, callerId));
+      throw const InvalidState('SIP 503');
+    }
+    return super.call(number, callerId: callerId);
+  }
+}
+
+class _Ui implements EngineUi {
+  final _requests = StreamController<VpUiRequest>.broadcast();
+  void add(VpUiRequest r) => _requests.add(r);
+  VpUiRequest? first;
+
+  @override
+  Stream<VpUiRequest> get requests => _requests.stream;
+
+  @override
+  Future<VpUiRequest?> take() async {
+    final r = first;
+    first = null;
+    return r;
+  }
 }

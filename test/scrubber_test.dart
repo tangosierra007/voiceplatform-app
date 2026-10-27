@@ -27,28 +27,42 @@ void main() {
     test('a SIP password registered at run time, anywhere', () {
       const password = 'testpasswordtestpassword';
       s.addSecret(password);
-      final out = s.scrub('register app-abcde12345 pw $password, again:$password');
+      final out = s.scrub(
+        'register app-abcde12345 pw $password, again:$password',
+      );
       expect(out, isNot(contains(password)));
       expect(out, contains(DiagnosticsScrubber.redacted));
     });
 
-    test('digest Authorization and Proxy-Authorization, nonces and responses', () {
-      final out = s.scrub(
-        'SIP/2.0 401\r\nWWW-Authenticate: Digest realm="r", nonce="abc123", opaque="op1"\r\n'
-        'Authorization: Digest username="u", response="ffee"\r\n'
-        'Proxy-Authorization: Digest username="u", nc=00000001, cnonce="c1"\r\n',
-      );
-      for (final v in ['abc123', 'op1', 'ffee', 'c1', '00000001']) {
-        expect(out, isNot(contains(v)), reason: v);
-      }
-      expect(out, contains('Authorization: [scrubbed]\r\n'));
-      expect(out, contains('Proxy-Authorization: [scrubbed]\r\n'));
-    });
+    test(
+      'digest Authorization and Proxy-Authorization, nonces and responses',
+      () {
+        final out = s.scrub(
+          'SIP/2.0 401\r\nWWW-Authenticate: Digest realm="r", nonce="abc123", opaque="op1"\r\n'
+          'Authorization: Digest username="u", response="ffee"\r\n'
+          'Proxy-Authorization: Digest username="u", nc=00000001, cnonce="c1"\r\n',
+        );
+        for (final v in ['abc123', 'op1', 'ffee', 'c1', '00000001']) {
+          expect(out, isNot(contains(v)), reason: v);
+        }
+        expect(out, contains('Authorization: [scrubbed]\r\n'));
+        expect(out, contains('Proxy-Authorization: [scrubbed]\r\n'));
+      },
+    );
 
     test('bearer, access and refresh tokens', () {
-      expect(s.scrub('Authorization: Bearer vp_at_1a2b3c'), 'Authorization: [scrubbed]');
-      expect(s.scrub('header Bearer vp_at_1a2b3c sent'), 'header Bearer [scrubbed] sent');
-      expect(s.scrub('{"accessToken":"at-1","refreshToken":"rt-2"}'), '{"accessToken":[scrubbed],"refreshToken":[scrubbed]}');
+      expect(
+        s.scrub('Authorization: Bearer vp_at_1a2b3c'),
+        'Authorization: [scrubbed]',
+      );
+      expect(
+        s.scrub('header Bearer vp_at_1a2b3c sent'),
+        'header Bearer [scrubbed] sent',
+      );
+      expect(
+        s.scrub('{"accessToken":"at-1","refreshToken":"rt-2"}'),
+        '{"accessToken":[scrubbed],"refreshToken":[scrubbed]}',
+      );
       expect(s.scrub('refresh_token=rt-2&x=1'), 'refresh_token=[scrubbed]&x=1');
       expect(s.scrub('refusalToken: rf-3'), 'refusalToken: [scrubbed]');
     });
@@ -56,9 +70,15 @@ void main() {
     test('request secrets, keyed or bare', () {
       // A fake 32-byte base64url value, built at run time for the secret scan.
       final secret = List.generate(43, (i) => 'q0wE-rT_y9'[i % 10]).join();
-      expect(s.scrub('{"requestSecret":"$secret"}'), '{"requestSecret":[scrubbed]}');
+      expect(
+        s.scrub('{"requestSecret":"$secret"}'),
+        '{"requestSecret":[scrubbed]}',
+      );
       expect(s.scrub('request_secret=$secret'), 'request_secret=[scrubbed]');
-      expect(s.scrub('complete with $secret failed'), 'complete with [scrubbed] failed');
+      expect(
+        s.scrub('complete with $secret failed'),
+        'complete with [scrubbed] failed',
+      );
     });
 
     test('6-digit sign-in codes', () {
@@ -69,23 +89,48 @@ void main() {
 
     test('App Link, QR and media tokens', () {
       expect(
-        s.scrub('open https://portal.example.com/app/signin/req_8f2/Lk-9aZ_tok?x=1'),
+        s.scrub(
+          'open https://portal.example.com/app/signin/req_8f2/Lk-9aZ_tok?x=1',
+        ),
         'open https://portal.example.com/app/signin/[scrubbed]?x=1',
       );
-      expect(s.scrub('scanned vpapp://signin/QrT0k3n_abc'), 'scanned vpapp://signin/[scrubbed]');
-      expect(s.scrub('GET /app/v1/media/mt_77aa?code=9f'), 'GET /app/v1/media/[scrubbed]?code=[scrubbed]');
-      expect(s.scrub('https://bucket.example.com/vm.ogg?X-Amz-Signature=abcd&ok=1'), 'https://bucket.example.com/vm.ogg?X-Amz-Signature=[scrubbed]&ok=1');
+      expect(
+        s.scrub('scanned vpapp://signin/QrT0k3n_abc'),
+        'scanned vpapp://signin/[scrubbed]',
+      );
+      expect(
+        s.scrub('GET /app/v1/media/mt_77aa?code=9f'),
+        'GET /app/v1/media/[scrubbed]?code=[scrubbed]',
+      );
+      expect(
+        s.scrub('https://bucket.example.com/vm.ogg?X-Amz-Signature=abcd&ok=1'),
+        'https://bucket.example.com/vm.ogg?X-Amz-Signature=[scrubbed]&ok=1',
+      );
     });
 
     test('email addresses go, SIP URIs stay', () {
       expect(s.scrub('Ava <ava.nguyen+app@example.com>'), 'Ava <[email]>');
-      expect(s.scrub('sip:204@democo.sip.voiceplatform.com.au'), 'sip:204@democo.sip.voiceplatform.com.au');
+      expect(
+        s.scrub('sip:204@democo.sip.voiceplatform.com.au'),
+        'sip:204@democo.sip.voiceplatform.com.au',
+      );
     });
 
     test('phone numbers: any 6+ digit run, with separators', () {
-      for (final n in ['0491570737', '+61 491 570 737', '(03) 9555 0123', '1800 160 401', '+61-3-9555-0123', '491570']) {
+      for (final n in [
+        '0491570737',
+        '+61 491 570 737',
+        '(03) 9555 0123',
+        '1800 160 401',
+        '+61-3-9555-0123',
+        '491570',
+      ]) {
         final out = s.scrub('call $n now');
-        expect(sixDigits.hasMatch(out.replaceAll(RegExp(r'\D'), '')), isFalse, reason: n);
+        expect(
+          sixDigits.hasMatch(out.replaceAll(RegExp(r'\D'), '')),
+          isFalse,
+          reason: n,
+        );
       }
       expect(s.scrub('ext 204, 12345 left'), 'ext 204, 12345 left');
     });
@@ -93,12 +138,18 @@ void main() {
     test('JSON-style password and token keys', () {
       expect(s.scrub('{"password": "p w"}'), '{"password": [scrubbed]}');
       expect(s.scrub('{"sipPassword":"x1"}'), '{"sipPassword":[scrubbed]}');
-      expect(s.scrub('{"token":"t1","linkToken":"t2"}'), '{"token":[scrubbed],"linkToken":[scrubbed]}');
+      expect(
+        s.scrub('{"token":"t1","linkToken":"t2"}'),
+        '{"token":[scrubbed],"linkToken":[scrubbed]}',
+      );
     });
 
     test('address-book values registered in memory become [contact]', () {
       s.rememberAddressBookValues(['Mia Thompson', 'Plumber Joe']);
-      expect(s.scrub('ringing from mia thompson (Plumber Joe)'), 'ringing from [contact] ([contact])');
+      expect(
+        s.scrub('ringing from mia thompson (Plumber Joe)'),
+        'ringing from [contact] ([contact])',
+      );
       s.forgetAddressBookValues();
       expect(s.scrub('Mia Thompson'), 'Mia Thompson');
     });
@@ -109,22 +160,40 @@ void main() {
     setUp(() => s = DiagnosticsScrubber());
 
     test('compound password, secret and token keys, in text and as keys', () {
-      for (final key in ['newPassword', 'confirm_password', 'userPassword', 'client_secret', 'clientSecret', 'idToken']) {
+      for (final key in [
+        'newPassword',
+        'confirm_password',
+        'userPassword',
+        'client_secret',
+        'clientSecret',
+        'idToken',
+      ]) {
         expect(s.scrub('$key=abc def'), '$key=[scrubbed] def', reason: key);
         expect(s.scrub('{"$key":"abc"}'), '{"$key":[scrubbed]}', reason: key);
         expect(s.scrubJson({key: 'abc'}), {key: '[scrubbed]'}, reason: key);
       }
-      expect(s.scrubJson({'x-client-secret': 'abc'}), {'x-client-secret': '[scrubbed]'});
+      expect(s.scrubJson({'x-client-secret': 'abc'}), {
+        'x-client-secret': '[scrubbed]',
+      });
     });
 
     test('Cookie, Set-Cookie and X-Api-Key headers', () {
-      expect(s.scrub('Cookie: sid=abc; theme=dark\r\nAccept: */*'), 'Cookie: [scrubbed]\r\nAccept: */*');
-      expect(s.scrub('Set-Cookie: sid=abc; HttpOnly'), 'Set-Cookie: [scrubbed]');
+      expect(
+        s.scrub('Cookie: sid=abc; theme=dark\r\nAccept: */*'),
+        'Cookie: [scrubbed]\r\nAccept: */*',
+      );
+      expect(
+        s.scrub('Set-Cookie: sid=abc; HttpOnly'),
+        'Set-Cookie: [scrubbed]',
+      );
       expect(s.scrub('X-Api-Key: k-123'), 'X-Api-Key: [scrubbed]');
     });
 
     test('single-quoted keys and values', () {
-      expect(s.scrub("{'password': 'hunter2 hunter'}"), "{'password': [scrubbed]}");
+      expect(
+        s.scrub("{'password': 'hunter2 hunter'}"),
+        "{'password': [scrubbed]}",
+      );
       expect(s.scrub("{'token':'abc def'}"), "{'token':[scrubbed]}");
       expect(s.scrub("password='p w' next"), 'password=[scrubbed] next');
       expect(s.scrub("nonce='n 1', qop=auth"), 'nonce=[scrubbed], qop=auth');
@@ -182,7 +251,10 @@ void main() {
     test('address book: whole words, any case and spacing, name parts', () {
       s.rememberAddressBookValues(['Mia  Thompson', 'Al Li', 'Plumber Joe']);
       expect(s.scrub('ringing from MIA\tthompson'), 'ringing from [contact]');
-      expect(s.scrub('Thompson called; mia too'), '[contact] called; [contact] too');
+      expect(
+        s.scrub('Thompson called; mia too'),
+        '[contact] called; [contact] too',
+      );
       expect(s.scrub('Miami and Thompsonville'), 'Miami and Thompsonville');
       expect(s.scrub('Al went to Li'), 'Al went to Li');
       expect(s.scrub('Al Li rang'), '[contact] rang');
@@ -201,7 +273,11 @@ void main() {
 
     test('secret-named keys lose their values', () {
       final out = s.scrubJson({
-        'headers': {'Authorization': 'Digest x', 'Cookie': 'a=b', 'Accept': 'json'},
+        'headers': {
+          'Authorization': 'Digest x',
+          'Cookie': 'a=b',
+          'Accept': 'json',
+        },
         'otp': '123456',
         'code': 'update_required',
         'pin': 4321,
@@ -210,7 +286,11 @@ void main() {
         ],
       });
       expect(out, {
-        'headers': {'Authorization': '[scrubbed]', 'Cookie': '[scrubbed]', 'Accept': 'json'},
+        'headers': {
+          'Authorization': '[scrubbed]',
+          'Cookie': '[scrubbed]',
+          'Accept': 'json',
+        },
         'otp': '[scrubbed]',
         'code': 'update_required',
         'pin': '[scrubbed]',
@@ -287,7 +367,11 @@ void main() {
         'breadcrumbs': [
           {'category': 'contacts', 'message': 'loaded Mia Thompson'},
           {'category': 'ui', 'type': 'address_book', 'message': 'opened'},
-          {'category': 'nav', 'message': 'to keypad', 'data': {'contact': 'Mia Thompson', 'tab': 'keypad'}},
+          {
+            'category': 'nav',
+            'message': 'to keypad',
+            'data': {'contact': 'Mia Thompson', 'tab': 'keypad'},
+          },
         ],
       });
       final text = jsonEncode(out);
@@ -306,23 +390,56 @@ void main() {
     });
 
     test('APP12: an address-book breadcrumb is dropped', () {
-      expect(s.scrubBreadcrumbJson({'category': 'contacts.load', 'message': 'ok'}), isNull);
-      expect(s.scrubBreadcrumbJson({'category': 'http', 'data': {'url': 'https://x.example.com/?code=1'}}), {
-        'category': 'http',
-        'data': {'url': 'https://x.example.com/?code=[scrubbed]'},
-      });
+      expect(
+        s.scrubBreadcrumbJson({'category': 'contacts.load', 'message': 'ok'}),
+        isNull,
+      );
+      expect(
+        s.scrubBreadcrumbJson({
+          'category': 'http',
+          'data': {'url': 'https://x.example.com/?code=1'},
+        }),
+        {
+          'category': 'http',
+          'data': {'url': 'https://x.example.com/?code=[scrubbed]'},
+        },
+      );
     });
 
-    test('attachments: text scrubbed, binary and address-book files dropped', () {
-      final out = s.scrubAttachment(
-        filename: 'call.log',
-        contentType: 'text/plain',
-        bytes: utf8.encode('password=hunter2hunter to 0491 570 737'),
-      );
-      expect(utf8.decode(out!), 'password=[scrubbed] to [n]');
-      expect(s.scrubAttachment(filename: 'screen.png', contentType: 'image/png', bytes: [1, 2, 3]), isNull);
-      expect(s.scrubAttachment(filename: 'logs.gz', contentType: 'application/gzip', bytes: [1]), isNull);
-      expect(s.scrubAttachment(filename: 'contacts.json', contentType: 'application/json', bytes: utf8.encode('{}')), isNull);
-    });
+    test(
+      'attachments: text scrubbed, binary and address-book files dropped',
+      () {
+        final out = s.scrubAttachment(
+          filename: 'call.log',
+          contentType: 'text/plain',
+          bytes: utf8.encode('password=hunter2hunter to 0491 570 737'),
+        );
+        expect(utf8.decode(out!), 'password=[scrubbed] to [n]');
+        expect(
+          s.scrubAttachment(
+            filename: 'screen.png',
+            contentType: 'image/png',
+            bytes: [1, 2, 3],
+          ),
+          isNull,
+        );
+        expect(
+          s.scrubAttachment(
+            filename: 'logs.gz',
+            contentType: 'application/gzip',
+            bytes: [1],
+          ),
+          isNull,
+        );
+        expect(
+          s.scrubAttachment(
+            filename: 'contacts.json',
+            contentType: 'application/json',
+            bytes: utf8.encode('{}'),
+          ),
+          isNull,
+        );
+      },
+    );
   });
 }

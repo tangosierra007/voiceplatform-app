@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../calls/call_actions.dart';
 import '../../calls/directory.dart';
 import '../../calls/numbers.dart';
+import '../../emergency/emergency.dart';
 import '../../engine/engine_provider.dart';
 import '../../net/api.dart';
 import '../../net/live_events.dart';
@@ -67,9 +68,27 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   Future<void> _sendNow() async {
     final p = _picked;
     if (p == null) return;
-    await ref
-        .read(callEngineProvider)
-        .transferBlind(widget.callId, p.extensionValue);
+    final target = p.extensionValue;
+    // Emergency numbers go to the phone's dialler, never through a transfer.
+    if (isEmergencyNumber(target)) {
+      await showEmergencySheet(context, target);
+      return;
+    }
+    try {
+      await ref.read(callEngineProvider).transferBlind(widget.callId, target);
+    } on EmergencyNumberUseDialler {
+      if (mounted) await showEmergencySheet(context, target);
+    } on CallEngineError {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(
+            content: Text(
+              "The transfer didn't go through. The caller is still on hold.",
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _talkFirst() async {
@@ -203,9 +222,10 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                 child: InkWell(
                   onTap: _cancel,
                   child: Padding(
+                    // A 48 px tap target around the link.
                     padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 4,
+                      vertical: 14,
+                      horizontal: 6,
                     ),
                     child: Text(
                       'Cancel',
@@ -244,7 +264,9 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
               ),
               filled: true,
               fillColor: c.surface,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              // 48 px to touch (the artboard's field is 36).
+              constraints: const BoxConstraints(minHeight: 48),
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(VpRadius.md),
                 borderSide: BorderSide(color: c.borderStrong),
