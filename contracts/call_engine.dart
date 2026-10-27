@@ -292,5 +292,6 @@ abstract interface class CallEngine {
 
   /// The rotating log for the most recent call, already scrubbed of passwords,
   /// tokens and full numbers (APP9), for "Send call logs to support".
+  /// Returned gzip-compressed.
   Future<Uint8List> exportLastCallLog();
 }

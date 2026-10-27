@@ -977,7 +977,7 @@ components:
         signature:
           {
             type: string,
-            description: "ECDSA P-256 SHA-256 over `deviceId.refreshToken.timestamp`, base64url",
+            description: "ECDSA P-256 SHA-256 over `deviceId.refreshToken.timestamp`, DER (X9.62) encoded, base64url",
           }
 
     Tokens:
@@ -1098,19 +1098,19 @@ components:
           items: { type: string, enum: [desk_phone, apps, mobile_number] }
         ringSeconds: { type: integer, minimum: 5, maximum: 120 }
         followMeTo: { type: string, description: "E.164, rung after ringSeconds when set" }
-        followMeSeconds: { type: integer, minimum: 5, maximum: 120 }
+        followMeSeconds: { type: integer, minimum: 5, maximum: 60 }
         followMeConfirm: { type: boolean }
         thenTo: { type: string, enum: [voicemail, hangup] }
-        forwardAlwaysTo: { type: string, description: "E.164 or extension; null when off" }
+        forwardAlwaysTo: { type: string, description: "E.164; absent when off" }
 
     CallSettingsPatch:
       type: object
       properties:
         ringSeconds: { type: integer, minimum: 5, maximum: 120 }
         followMeTo: { type: [string, "null"] }
-        followMeSeconds: { type: integer, minimum: 5, maximum: 120 }
+        followMeSeconds: { type: integer, minimum: 5, maximum: 60 }
         followMeConfirm: { type: boolean }
-        forwardAlwaysTo: { type: [string, "null"] }
+        forwardAlwaysTo: { type: [string, "null"], description: "E.164; null turns it off" }
 
     CallerId:
       type: object
