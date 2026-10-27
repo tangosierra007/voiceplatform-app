@@ -38,3 +38,9 @@ firebase-push-*.json
 play-upload-*.json
 
 .DS_Store
+# Flutter build outputs
+/android/app/debug
+/android/app/profile
+/android/app/release
+*.class
+*.log
