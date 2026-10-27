@@ -1,0 +1,20 @@
+{
+  "note": "Colours the phone artboards set directly that design/tokens.json does not carry. The artboard wins, so the theme uses them; each is proposed to mobile-lead for tokens.json. Generated into lib/theme/tokens.g.dart as VpArtboardColours.",
+  "tokens": [
+    {
+      "name": "badge",
+      "value": { "light": "#b42318", "dark": "#b42318" },
+      "source": "AppKeypad.dc.html and AppKeypadDark.dc.html .badge background (tab bar counts). Not danger-600 (#c62828)."
+    },
+    {
+      "name": "on-badge",
+      "value": { "light": "#ffffff", "dark": "#ffffff" },
+      "source": "AppKeypad.dc.html .badge color #fff (6.6:1 on #b42318)."
+    },
+    {
+      "name": "tab-bar",
+      "value": { "light": "{surface}", "dark": "#1a1613" },
+      "source": "AppKeypad.dc.html .tabs background var(--surface); AppKeypadDark.dc.html overrides it to #1a1613 (not surface ink-900)."
+    }
+  ]
+}

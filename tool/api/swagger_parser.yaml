@@ -1,0 +1,14 @@
+# swagger_parser options for `dart run tool/gen_api.dart`. The schema is the
+# contract after gen_api.dart names its inline enum parameters.
+swagger_parser:
+  schema_path: .dart_tool/vp_api/app-api.openapi.json
+  output_directory: lib/api
+  json_serializer: json_serializable
+  root_client: true
+  root_client_name: AppApi
+  export_file: true
+  put_clients_in_folder: true
+  include_if_null: false
+  enums_to_json: true
+  unknown_enum_value: true
+  mark_files_as_generated: true

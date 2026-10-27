@@ -9,3 +9,35 @@ Third-party components are listed below with their licences as they are added.
 
 - liblinphone (linphone-sdk-android 5.5.39), Belledonne Communications.
   Licence as stated in the release's own files; recorded when it is added.
+
+Fonts (bundled in assets/fonts/, from github.com/google/fonts at commit
+e7db6ca603fd4862010383ff17ffd6cc4ffac1c0; each folder holds its OFL.txt):
+
+- Unbounded (variable, wght 200 to 900), Copyright 2022 The Unbounded Project
+  Authors (https://github.com/googlefonts/unbounded). SIL Open Font License 1.1.
+- Manrope (variable, wght 200 to 800), Copyright 2018 The Manrope Project
+  Authors (https://github.com/googlefonts/manrope). SIL Open Font License 1.1.
+
+Dart and Flutter packages in the app (pub.dev):
+
+- dio 5.11, MIT (Wen Du)
+- flutter_riverpod 3.4 and riverpod 3.4, MIT (Remi Rousselet)
+- flutter_svg 2.3, MIT (Dan Field); with vector_graphics, BSD-3-Clause (The
+  Flutter Authors)
+- go_router 18.1, BSD-3-Clause (The Flutter Authors)
+- json_annotation 4.12, BSD-3-Clause (the Dart project authors)
+- package_info_plus 10.2, BSD-3-Clause (The Chromium Authors)
+- retrofit 4.10, MIT (Trevor Wang)
+- shared_preferences 2.5, BSD-3-Clause (The Flutter Authors)
+
+Development only (code generation and tests; not in the app):
+
+- swagger_parser 1.45, MIT (Roman Laptev)
+- build_runner 2.17, BSD-3-Clause (the Dart project authors)
+- json_serializable 6.15, BSD-3-Clause (the Dart project authors)
+- retrofit_generator 10.3, MIT (Trevor Wang)
+- fake_async 1.3, Apache-2.0 (the Dart project authors)
+- yaml 3.1, MIT (the Dart project authors)
+
+Each package's transitive dependencies keep their own licences, listed in
+pubspec.lock and shown in the app under Me, Open source licences.
