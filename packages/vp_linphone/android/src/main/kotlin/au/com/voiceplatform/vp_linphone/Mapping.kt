@@ -185,6 +185,19 @@ object Rules {
     fun isDialable(dial: String): Boolean = dial.isNotEmpty() && dial.length <= 32 &&
         dial.trimStart('+').isNotEmpty() && dial.trimStart('+').all { it.isDigit() || it == '*' || it == '#' }
 
+    private val UUID_RE = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+    /**
+     * `urn:uuid:<uuid>` (the contract's instanceId) to the bare lower-case UUID
+     * liblinphone keeps in `[misc] uuid`; null if it isn't one.
+     */
+    fun instanceUuid(instanceId: String): String? {
+        val v = instanceId.trim().lowercase()
+        if (!v.startsWith("urn:uuid:")) return null
+        val bare = v.removePrefix("urn:uuid:")
+        return if (UUID_RE.matches(bare)) bare else null
+    }
+
     fun isValidDtmf(digits: String): Boolean =
         digits.isNotEmpty() && digits.length <= 64 && digits.all { it in "0123456789*#ABCDabcd" }
 }

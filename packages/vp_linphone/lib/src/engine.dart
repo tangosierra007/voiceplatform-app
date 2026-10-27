@@ -22,13 +22,19 @@ double levelFromDbm0(double dbm0) {
 /// Credentials are write-only: [register] passes the password to the
 /// platform side once and keeps no reference to it.
 final class VpLinphoneEngine implements CallEngine {
-  VpLinphoneEngine({VpLinphoneHostApi? hostApi, BinaryMessenger? binaryMessenger})
+  /// [voicemailUser] is the user part "To voicemail" redirects to (302 to
+  /// `sip:<voicemailUser>@<domain>`); `*97` until the platform supplies the
+  /// target.
+  VpLinphoneEngine({VpLinphoneHostApi? hostApi, BinaryMessenger? binaryMessenger, this.voicemailUser = '*97'})
     : _host = hostApi ?? VpLinphoneHostApi(binaryMessenger: binaryMessenger) {
     _events = _Events(this);
     VpLinphoneEventsApi.setUp(_events, binaryMessenger: binaryMessenger);
   }
 
   final VpLinphoneHostApi _host;
+
+  /// The voicemail target's user part, for example `*97`.
+  final String voicemailUser;
   late final _Events _events;
 
   final _registration = StreamController<RegistrationEvent>.broadcast();
@@ -60,6 +66,7 @@ final class VpLinphoneEngine implements CallEngine {
       account.outboundProxy,
       account.displayName,
       account.expiresSeconds,
+      account.instanceId,
       account.push?.provider,
       account.push?.prid,
       account.push?.param,
@@ -90,7 +97,7 @@ final class VpLinphoneEngine implements CallEngine {
   Future<void> decline(String callId) => _guard(() => _host.decline(callId), callId: callId);
 
   @override
-  Future<void> toVoicemail(String callId) => _guard(() => _host.toVoicemail(callId), callId: callId);
+  Future<void> toVoicemail(String callId) => _guard(() => _host.toVoicemail(callId, voicemailUser), callId: callId);
 
   @override
   Future<void> hangup(String callId) => _guard(() => _host.hangup(callId), callId: callId);

@@ -88,6 +88,7 @@ abstract class VpLinphoneHostApi {
     String outboundProxy,
     String displayName,
     int expiresSeconds,
+    String instanceId,
     String? pushProvider,
     String? pushPrid,
     String? pushParam,
@@ -101,7 +102,9 @@ abstract class VpLinphoneHostApi {
   String call(String number, String? callerId);
   void answer(String callId);
   void decline(String callId);
-  void toVoicemail(String callId);
+
+  /// 302 to `sip:<voicemailUser>@<domain>`.
+  void toVoicemail(String callId, String voicemailUser);
   void hangup(String callId);
   void hold(String callId);
   void resume(String callId);

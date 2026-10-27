@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import java.io.File
-import java.util.UUID
 import java.util.concurrent.CopyOnWriteArraySet
 import org.linphone.core.Account
 import org.linphone.core.AudioDevice
@@ -46,7 +45,6 @@ object LinphoneEngine {
 
     const val USER_AGENT = "VoicePlatform-app"
     const val VERSION = "0.1.0"
-    const val VOICEMAIL_USER = "*97"
     private const val LEVEL_INTERVAL_MS = 50L
     private const val SILENCE_DBM0 = -130.0
     private const val UNREGISTER_TIMEOUT_MS = 5000L
@@ -178,14 +176,23 @@ object LinphoneEngine {
         waiters.forEach { it(error) }
     }
 
+    /**
+     * The bare UUID the current Core puts in `+sip.instance` (liblinphone reads
+     * it from the config's `[misc] uuid` once, when the Core is created, and
+     * sends `+sip.instance="<urn:uuid:...>"`). Null until register() names one.
+     */
+    private var coreInstance: String? = null
+    private var lastInstance: String? = null
+
     private fun startCore(context: Context) {
         if (core != null) return
         initLogging(context)
         val factory = Factory.instance()
         // A config with no file: nothing (auth info included) is written to disk.
         val config = factory.createConfigFromString("")
-        config.setString("misc", "uuid", instanceUuid(context))
+        lastInstance?.let { config.setString("misc", "uuid", it) }
         val c = factory.createCoreWithConfig(config, context)
+        coreInstance = lastInstance
         configure(c)
         c.addListener(coreListener)
         check(c.start() == 0) { "Core.start failed" }
@@ -210,17 +217,6 @@ object LinphoneEngine {
         log("core stopped")
     }
 
-    /**
-     * A stable `+sip.instance` for this install. Not personal; regenerated on a
-     * reinstall. See the handback: the platform may want the device id here.
-     */
-    private fun instanceUuid(context: Context): String {
-        val prefs = context.getSharedPreferences("vp_linphone", Context.MODE_PRIVATE)
-        prefs.getString("instance_uuid", null)?.let { return it }
-        val id = UUID.randomUUID().toString()
-        prefs.edit().putString("instance_uuid", id).apply()
-        return id
-    }
 
     private fun configure(c: Core) {
         c.setUserAgent(USER_AGENT, VERSION)
@@ -268,10 +264,26 @@ object LinphoneEngine {
         outboundProxy: String,
         displayName: String,
         expiresSeconds: Int,
+        instanceId: String,
         pushProvider: String?,
         pushPrid: String?,
         pushParam: String?,
     ) {
+        requireCore()
+        val uuid = Rules.instanceUuid(instanceId)
+            ?: throw VpFlutterError("invalid_state", "instanceId must be urn:uuid:<uuid>")
+        lastInstance = uuid
+        if (uuid != coreInstance) {
+            // liblinphone takes the instance only when a Core is created, so a
+            // new device id means a new Core (no call can be in progress).
+            if (calls.values.any { it.state != CallStateMsg.ENDED }) {
+                throw VpFlutterError("invalid_state", "Calls in progress")
+            }
+            val svc = service ?: throw VpFlutterError("invalid_state", "Engine not started")
+            stopCore()
+            startCore(svc.applicationContext)
+            log("core restarted for a new instance id")
+        }
         val c = requireCore()
         dropAccount(c)
         scrubber.clearSecrets()
@@ -465,11 +477,13 @@ object LinphoneEngine {
     }
 
     /** 302 to the extension's voicemail; the platform treats it as "voicemail now" (A5). */
-    fun toVoicemail(callId: String) {
+    fun toVoicemail(callId: String, voicemailUser: String) {
         val t = tracked(callId)
         if (t.state != CallStateMsg.INCOMING) throw VpFlutterError("invalid_state", "Call is not ringing")
         val d = domain ?: throw VpFlutterError("not_registered", "No account")
-        val vm = Factory.instance().createAddress("sip:$VOICEMAIL_USER@$d")
+        val user = Rules.dialString(voicemailUser)
+        if (!Rules.isDialable(user)) throw VpFlutterError("invalid_state", "Bad voicemail target")
+        val vm = Factory.instance().createAddress("sip:$user@$d")
             ?: throw VpFlutterError("invalid_state", "Bad voicemail address")
         t.intent = Mapping.LocalIntent.TO_VOICEMAIL
         if (t.call.redirectTo(vm) != 0) throw VpFlutterError("invalid_state", "Redirect failed")

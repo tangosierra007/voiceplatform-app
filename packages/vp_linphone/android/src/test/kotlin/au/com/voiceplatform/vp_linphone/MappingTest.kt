@@ -131,6 +131,17 @@ class RulesTest {
     }
 
     @Test
+    fun instanceIds() {
+        assertEquals(
+            "0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6",
+            Rules.instanceUuid("urn:uuid:0E2F3C4A-5B6C-4D7E-8F90-A1B2C3D4E5F6"),
+        )
+        assertNull(Rules.instanceUuid("0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6"))
+        assertNull(Rules.instanceUuid("urn:uuid:not-a-uuid"))
+        assertNull(Rules.instanceUuid("<urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6>"))
+    }
+
+    @Test
     fun dtmf() {
         assertTrue(Rules.isValidDtmf("123*#A"))
         assertFalse(Rules.isValidDtmf("12x"))

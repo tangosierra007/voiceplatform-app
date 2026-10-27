@@ -28,10 +28,11 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
   - One route: the account's `outboundProxy` with `;lr`, forced to TLS. Plain `sip:` URIs throughout.
   - The RFC 8599 params (`pn-provider`, `pn-prid`, `pn-param`) go on the Contact as URI parameters.
   - `updatePush` swaps those params on the live account and refreshes the REGISTER; calls are untouched.
+  - `+sip.instance` is the account's `instanceId` (`urn:uuid:<device id>`, from `sip-credentials`). liblinphone takes the instance from the config's `[misc] uuid` only when a Core is created, so `register()` with a new id rebuilds the Core (refused with `InvalidState` while a call is up). A malformed id is refused. To check in the live SIP tests: the Contact carries exactly `+sip.instance="<urn:uuid:...>"`.
   - `unregister` sends REGISTER expires 0 (it waits up to 5 s), then removes the account and every AuthInfo.
 - **Calls:**
   - `call()` sends `X-VP-Caller-Id` when a caller ID is given.
-  - `decline` = 486 Busy Here. `toVoicemail` = 302 to `sip:*97@<domain>`.
+  - `decline` = 486 Busy Here. `toVoicemail` = 302 to `sip:<voicemailUser>@<domain>`; `voicemailUser` is a `VpLinphoneEngine` constructor option, default `*97`. The platform should supply the target later (for example in `sip-credentials`).
   - `hold` and `resume` pause and resume the call. `setMuted` disables the mic engine-wide.
   - `sendDtmf` sends RFC 4733 digits.
   - `transferBlind` = REFER (`transferTo`). `transferAttended` = REFER with Replaces (`transferToAnother`); the held call shows `transferring` until it ends.
@@ -50,23 +51,24 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
 - **Manifest (merged from the plugin):**
   - Declared: INTERNET, ACCESS_NETWORK_STATE, RECORD_AUDIO, MANAGE_OWN_CALLS, POST_NOTIFICATIONS, FOREGROUND_SERVICE, FOREGROUND_SERVICE_PHONE_CALL, FOREGROUND_SERVICE_MICROPHONE, BLUETOOTH_CONNECT, WAKE_LOCK, VIBRATE, and the service.
   - MANAGE_OWN_CALLS is needed for a `phoneCall` foreground service on Android 14 and later.
-  - Removed from liblinphone's AAR: FOREGROUND_SERVICE_CAMERA and FOREGROUND_SERVICE_DATA_SYNC.
+  - Removed from liblinphone's AAR: FOREGROUND_SERVICE_CAMERA, FOREGROUND_SERVICE_DATA_SYNC, ACCESS_NOTIFICATION_POLICY, CHANGE_WIFI_MULTICAST_STATE and CAMERA (the app declares CAMERA itself for QR; checked: an app-level CAMERA survives the plugin's remove marker). BLUETOOTH is limited to `maxSdkVersion=30`.
+  - Final merged permissions of the example APK (`aapt2 dump permissions`): INTERNET, ACCESS_NETWORK_STATE, RECORD_AUDIO, MANAGE_OWN_CALLS, POST_NOTIFICATIONS, FOREGROUND_SERVICE, FOREGROUND_SERVICE_PHONE_CALL, FOREGROUND_SERVICE_MICROPHONE, BLUETOOTH_CONNECT, WAKE_LOCK, VIBRATE, BLUETOOTH (maxSdkVersion 30), MODIFY_AUDIO_SETTINGS, ACCESS_WIFI_STATE, and AndroidX's own `<package>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`.
 - **Example:** `packages/vp_linphone/example` is a bench app (Start, Stop, Export log, event list) with minSdk 29 and target 36. It never registers.
 
 ### Tests
 
 - `flutter analyze` (package and example): no issues.
-- `flutter test` (package): 47 tests pass.
+- `flutter test` (package): 49 tests pass.
   - `incoming_headers_test.dart`: the parser.
   - `log_scrubber_test.dart`: the same sample lines as Kotlin, including an Authorization header, the password and full numbers.
   - `engine_test.dart`: the Dart side against a fake host API.
   - `channel_test.dart`: real Pigeon messages on a mock platform channel, including the error envelope.
 - `flutter test` (example): 1 test passes.
-- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 27 tests pass.
+- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 28 tests pass.
   - `LogScrubberTest`: the log sink's scrubber on lines with an Authorization header, a password and full phone numbers.
   - `CallLogFileTest`
   - `MappingTest`: call states, end reasons (answered elsewhere), registration failures, codec order, HD, routes.
-  - `RulesTest`: emergency, dial strings, DTMF.
+  - `RulesTest`: emergency, dial strings, DTMF, instance ids.
 - `flutter build apk --debug` (example): builds (277 MB debug APK: four ABIs, unstripped liblinphone).
 - **Not done (not allowed in 3.1):** any live registration or call. Everything that talks to liblinphone at runtime is unproven until the live SIP tests.
 
@@ -104,8 +106,7 @@ X-VP-Last-Answered: "Mia Chen";at=2026-10-27T03:15:00Z
 1. liblinphone's licence is recorded as found: the POM says GPL-3.0; the source headers say AGPL-3.0-or-later and GPL-2.0-or-later. This is compatible with the AGPL-3.0 app.
 2. Engine logging: liblinphone at Warning level, no logcat, no liblinphone log files. One scrubbed sink feeds the call log, scrubbed again on export (Kotlin, then Dart).
 3. The REGISTER Request-URI is the tenant domain. The outbound proxy is a loose route over TLS. RFC 8599 params go as Contact URI parameters.
-4. `+sip.instance` comes from a random per-install UUID kept in the plugin's SharedPreferences (not personal; a reinstall gives a new one).
-5. Decline is `486 Busy Here`. To voicemail is a 302 to `sip:*97@<domain>` for now.
+4. Decline is `486 Busy Here`. To voicemail is a 302 to a configurable target, `*97` until the platform supplies one.
 
 ### Deviations
 
@@ -116,10 +117,9 @@ X-VP-Last-Answered: "Mia Chen";at=2026-10-27T03:15:00Z
 
 ### Open questions
 
-1. **Device id in the Contact.** Rings filtering expects `+sip.instance` to carry the app device id, but `SipAccount` has no device id. Either add an `instanceId` to the contract, or OpenSIPS maps contact to device by the per-device auth username (already unique). Until then the instance is a random per-install UUID.
-2. **Voicemail target.** Should `toVoicemail` use a URI from the platform, for example a `voicemailUri` in the `sip-credentials` response, instead of `*97`? WS2 should confirm that its 302 handling ignores the Contact anyway.
-3. **liblinphone's AAR also asks for** CAMERA, BLUETOOTH, MODIFY_AUDIO_SETTINGS, ACCESS_NOTIFICATION_POLICY, ACCESS_WIFI_STATE and CHANGE_WIFI_MULTICAST_STATE. These are left in. CAMERA is on the spec's list (QR); the others are normal permissions not on it. Remove them in the app manifest with `tools:node="remove"`, or accept them?
-4. **NOTICE beyond liblinphone.** The plugin also ships `androidx.core:core-ktx` 1.16.0 and `kotlinx-coroutines-android` 1.10.2 (both Apache-2.0), which need NOTICE lines. The liblinphone AAR bundles native third-party code (mediastreamer2, belle-sip, bctoolbox, oRTP, opus, speex, mbedTLS, libsrtp and others) whose notices it does not ship. Their licences need collecting from the linphone-sdk 5.5.39 source tree for the "Open source licences" screen.
-5. **Call history on the device.** liblinphone keeps its own call-log database by default; it is not exported or uploaded. Should it be turned off?
-6. **Release date.** 5.5.39 was published to Belledonne's repository today (27 Oct). It is pinned as specified. Belledonne's release notes for it were not reviewed.
-7. **The root app** needs `minSdk 29` (already) and, in 3.2, the merged manifest checked against the spec's permission list. Nothing in `lib/`, the root `pubspec.yaml` or the root `android/` was touched.
+Answered by mobile-lead (27 Oct): the contract gained `instanceId` (used for `+sip.instance`); the voicemail target stays `*97` as a constructor option; the extra AAR permissions are settled as listed above; NOTICE now lists AndroidX Core, kotlinx.coroutines and the AAR's native libraries; the licence finding goes into decision 135's follow-up.
+
+1. **Call history on the device.** liblinphone keeps its own call-log database by default; it is not exported or uploaded. Should it be turned off?
+2. **Release date.** 5.5.39 was published to Belledonne's repository on 27 Oct. It is pinned as specified. Belledonne's release notes for it were not reviewed.
+3. **Native licences not established** (see NOTICE): the post-quantum KEM code (ML-KEM/Kyber symbols; liboqs is a linphone-sdk submodule but not confirmed in this build) and libxml2 (named in strings only). The other licences are from the upstream projects named in linphone-sdk's submodule list, read from the master branch, not from the 5.5.39 tag.
+4. **The root app** needs, in 3.2, its merged manifest checked against the spec's permission list. Nothing in `lib/`, the root `pubspec.yaml` or the root `android/` was touched.

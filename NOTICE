@@ -16,3 +16,37 @@ Third-party components are listed below with their licences as they are added.
   (the Android tools classes) and GNU General Public License version 2 or
   later headers (the generated API wrappers). The AAR itself contains no
   licence file. Source: https://gitlab.linphone.org/BC/public/linphone-sdk
+
+  Native libraries bundled in the liblinphone AAR (jni/), as found in the
+  release's .so files and Belledonne's public source repositories
+  (linphone-sdk and its external/ submodules). Belledonne's own components
+  (bctoolbox, belle-sip, belr, bzrtp, lime, mediastreamer2 and its plugins
+  msaaudio, msandroidcamera2 and mswebrtc, oRTP, liblinphone) are dual
+  licensed by Belledonne Communications: GNU AGPL-3.0 or proprietary.
+  Third-party code, under its upstream licence:
+  - opus 1.3.1 (includes SILK): BSD-3-Clause
+  - speex (codec, resampler, echo canceller): BSD-3-Clause (Xiph.Org)
+  - GSM 06.10 (libgsm): the TU Berlin permissive licence
+  - BroadVoice16 (bv16-floatingpoint): LGPL-2.1
+  - libvpx: BSD-3-Clause; aom (libaom): BSD-2-Clause; dav1d: BSD-2-Clause
+  - libsrtp 2 (libsrtp2.so): BSD-3-Clause (Cisco)
+  - mbedTLS: Apache-2.0 (or GPL-2.0-or-later)
+  - decaf (Ed448): MIT
+  - xerces-c 3: Apache-2.0
+  - soci: BSL-1.0; SQLite: public domain; zlib: zlib licence
+  - OpenLDAP client library: OpenLDAP Public License 2.8
+  - libjpeg-turbo (libjpeg.so, libturbojpeg.so): IJG, BSD-3-Clause and zlib
+  - jsoncpp (libjsoncpp.so): MIT
+  - ZXing-C++ (libZXing.so): Apache-2.0
+  - WebRTC audio processing (in libmswebrtc.so): BSD-3-Clause
+  - LLVM libc++ (libc++_shared.so): Apache-2.0 WITH LLVM-exception
+  - Not established: the post-quantum KEM code (ML-KEM/Kyber symbols; liboqs,
+    MIT, is a linphone-sdk submodule but its presence in this build is not
+    confirmed) and libxml2 (MIT; named in strings only).
+
+- AndroidX Core (androidx.core:core-ktx 1.16.0), The Android Open Source
+  Project. Apache-2.0. Used by packages/vp_linphone.
+
+- kotlinx.coroutines (org.jetbrains.kotlinx:kotlinx-coroutines-android
+  1.10.2), JetBrains. Apache-2.0. Used by packages/vp_linphone (Pigeon's
+  generated Kotlin).

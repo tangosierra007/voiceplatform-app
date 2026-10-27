@@ -46,12 +46,14 @@ void main() {
         outboundProxy: 'sip:sip.voiceplatform.com.au:5061;transport=tls',
         displayName: 'Ava Nguyen',
         expiresSeconds: 600,
+        instanceId: 'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6',
         push: PushParams(provider: 'fcm', prid: 'token-1', param: 'voiceplatform-app'),
       ),
     );
-    expect(received['register']!.length, 9);
+    expect(received['register']!.length, 10);
     expect(received['register']![5], 600);
-    expect(received['register']![6], 'fcm');
+    expect(received['register']![6], 'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6');
+    expect(received['register']![7], 'fcm');
   });
 
   test('a Pigeon error envelope becomes the typed contract error', () async {

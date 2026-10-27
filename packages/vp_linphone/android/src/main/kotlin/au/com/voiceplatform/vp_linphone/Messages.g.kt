@@ -560,13 +560,14 @@ interface VpLinphoneHostApi {
   suspend fun start()
   suspend fun stop()
   /** The password crosses the channel once, here, and is never sent back. */
-  fun register(authUsername: String, password: String, domain: String, outboundProxy: String, displayName: String, expiresSeconds: Long, pushProvider: String?, pushPrid: String?, pushParam: String?)
+  fun register(authUsername: String, password: String, domain: String, outboundProxy: String, displayName: String, expiresSeconds: Long, instanceId: String, pushProvider: String?, pushPrid: String?, pushParam: String?)
   suspend fun unregister()
   fun updatePush(provider: String, prid: String, param: String)
   fun call(number: String, callerId: String?): String
   fun answer(callId: String)
   fun decline(callId: String)
-  fun toVoicemail(callId: String)
+  /** 302 to `sip:<voicemailUser>@<domain>`. */
+  fun toVoicemail(callId: String, voicemailUser: String)
   fun hangup(callId: String)
   fun hold(callId: String)
   fun resume(callId: String)
@@ -634,11 +635,12 @@ interface VpLinphoneHostApi {
             val outboundProxyArg = args[3] as String
             val displayNameArg = args[4] as String
             val expiresSecondsArg = args[5] as Long
-            val pushProviderArg = args[6] as String?
-            val pushPridArg = args[7] as String?
-            val pushParamArg = args[8] as String?
+            val instanceIdArg = args[6] as String
+            val pushProviderArg = args[7] as String?
+            val pushPridArg = args[8] as String?
+            val pushParamArg = args[9] as String?
             val wrapped: List<Any?> = try {
-              api.register(authUsernameArg, passwordArg, domainArg, outboundProxyArg, displayNameArg, expiresSecondsArg, pushProviderArg, pushPridArg, pushParamArg)
+              api.register(authUsernameArg, passwordArg, domainArg, outboundProxyArg, displayNameArg, expiresSecondsArg, instanceIdArg, pushProviderArg, pushPridArg, pushParamArg)
               listOf(null)
             } catch (exception: Throwable) {
               MessagesPigeonUtils.wrapError(exception)
@@ -747,8 +749,9 @@ interface VpLinphoneHostApi {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
             val callIdArg = args[0] as String
+            val voicemailUserArg = args[1] as String
             val wrapped: List<Any?> = try {
-              api.toVoicemail(callIdArg)
+              api.toVoicemail(callIdArg, voicemailUserArg)
               listOf(null)
             } catch (exception: Throwable) {
               MessagesPigeonUtils.wrapError(exception)

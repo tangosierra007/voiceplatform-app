@@ -449,6 +449,7 @@ class VpLinphoneHostApi {
     String outboundProxy,
     String displayName,
     int expiresSeconds,
+    String instanceId,
     String? pushProvider,
     String? pushPrid,
     String? pushParam,
@@ -467,6 +468,7 @@ class VpLinphoneHostApi {
       outboundProxy,
       displayName,
       expiresSeconds,
+      instanceId,
       pushProvider,
       pushPrid,
       pushParam,
@@ -551,7 +553,8 @@ class VpLinphoneHostApi {
     _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
   }
 
-  Future<void> toVoicemail(String callId) async {
+  /// 302 to `sip:<voicemailUser>@<domain>`.
+  Future<void> toVoicemail(String callId, String voicemailUser) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.toVoicemail$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -559,7 +562,7 @@ class VpLinphoneHostApi {
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[callId]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[callId, voicemailUser]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);

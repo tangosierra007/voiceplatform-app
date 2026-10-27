@@ -33,6 +33,7 @@ class FakeHost extends VpLinphoneHostApi {
     String outboundProxy,
     String displayName,
     int expiresSeconds,
+    String instanceId,
     String? pushProvider,
     String? pushPrid,
     String? pushParam,
@@ -43,6 +44,7 @@ class FakeHost extends VpLinphoneHostApi {
     outboundProxy,
     displayName,
     expiresSeconds,
+    instanceId,
     pushProvider,
     pushPrid,
     pushParam,
@@ -59,7 +61,7 @@ class FakeHost extends VpLinphoneHostApi {
   @override
   Future<void> decline(String callId) => _rec('decline', [callId], null);
   @override
-  Future<void> toVoicemail(String callId) => _rec('toVoicemail', [callId], null);
+  Future<void> toVoicemail(String callId, String voicemailUser) => _rec('toVoicemail', [callId, voicemailUser], null);
   @override
   Future<void> hangup(String callId) => _rec('hangup', [callId], null);
   @override
@@ -90,6 +92,7 @@ const account = SipAccount(
   outboundProxy: 'sip:sip.voiceplatform.com.au:5061;transport=tls',
   displayName: 'Ava Nguyen',
   expiresSeconds: 600,
+  instanceId: 'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6',
   push: PushParams(provider: 'fcm', prid: 'token-1', param: 'voiceplatform-app'),
 );
 
@@ -143,6 +146,7 @@ void main() {
       'sip:sip.voiceplatform.com.au:5061;transport=tls',
       'Ava Nguyen',
       600,
+      'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6',
       'fcm',
       'token-1',
       'voiceplatform-app',
@@ -158,9 +162,10 @@ void main() {
       outboundProxy: 'sip:sip.voiceplatform.com.au:5061;transport=tls',
       displayName: 'Ava',
       expiresSeconds: 600,
+      instanceId: 'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6',
     );
     await engine.register(desktop);
-    expect(host.calls.single.sublist(7), [null, null, null]);
+    expect(host.calls.single.sublist(8), [null, null, null]);
   });
 
   test('updatePush, call with caller ID, and every call control', () async {
@@ -196,6 +201,21 @@ void main() {
     ]);
     expect(host.calls[1], ['call', '0491 570 737', '+61355501201']);
     expect(host.calls[12], ['setAudioRoute', AudioRouteMsg.speaker]);
+  });
+
+  test('to voicemail redirects to *97 by default, or the configured target', () async {
+    await engine.toVoicemail('call-1');
+    final custom = VpLinphoneEngine(hostApi: host, voicemailUser: '*98');
+    await custom.toVoicemail('call-1');
+    expect(host.calls, [
+      ['toVoicemail', 'call-1', '*97'],
+      ['toVoicemail', 'call-1', '*98'],
+    ]);
+  });
+
+  test('register passes the instance id', () async {
+    await engine.register(account);
+    expect(host.calls.single[7], 'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6');
   });
 
   test('emergency numbers go straight to the platform side', () async {

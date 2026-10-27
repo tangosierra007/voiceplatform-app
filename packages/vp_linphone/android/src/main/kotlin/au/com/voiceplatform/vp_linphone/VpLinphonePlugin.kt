@@ -78,12 +78,13 @@ class VpLinphonePlugin : FlutterPlugin, VpLinphoneHostApi {
         outboundProxy: String,
         displayName: String,
         expiresSeconds: Long,
+        instanceId: String,
         pushProvider: String?,
         pushPrid: String?,
         pushParam: String?,
     ) = LinphoneEngine.register(
         authUsername, password, domain, outboundProxy, displayName,
-        expiresSeconds.coerceIn(60, 86400).toInt(), pushProvider, pushPrid, pushParam,
+        expiresSeconds.coerceIn(60, 86400).toInt(), instanceId, pushProvider, pushPrid, pushParam,
     )
 
     override suspend fun unregister() = suspendCancellableCoroutine { cont ->
@@ -96,7 +97,7 @@ class VpLinphonePlugin : FlutterPlugin, VpLinphoneHostApi {
     override fun call(number: String, callerId: String?): String = LinphoneEngine.call(number, callerId)
     override fun answer(callId: String) = LinphoneEngine.answer(callId)
     override fun decline(callId: String) = LinphoneEngine.decline(callId)
-    override fun toVoicemail(callId: String) = LinphoneEngine.toVoicemail(callId)
+    override fun toVoicemail(callId: String, voicemailUser: String) = LinphoneEngine.toVoicemail(callId, voicemailUser)
     override fun hangup(callId: String) = LinphoneEngine.hangup(callId)
     override fun hold(callId: String) = LinphoneEngine.hold(callId)
     override fun resume(callId: String) = LinphoneEngine.resume(callId)
