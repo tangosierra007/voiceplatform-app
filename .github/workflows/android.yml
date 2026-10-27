@@ -1,0 +1,261 @@
+name: android
+
+# Android CI: analyze, test, debug APK, release App Bundle, and the upload to
+# Play internal testing (manual dispatch from main, or a v* tag only).
+#
+# Versions: versionName is the `version:` name in pubspec.yaml; versionCode is
+# this workflow's run number (github.run_number, one counter for every run of
+# android.yml, so it only goes up). A v* tag must equal v<pubspec version name>.
+#
+# Every third-party action is pinned to a full commit SHA; the tag is in the
+# comment beside it.
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_status:
+        description: "Play release status on the internal track (draft until the app's first release is set up in Play Console)"
+        type: choice
+        options: [draft, completed]
+        default: draft
+
+permissions: {}
+
+env:
+  FLUTTER_VERSION: "3.47.8"
+  JAVA_VERSION: "17"
+  # Must match android/app (compileSdk) and Flutter's flutter.ndkVersion.
+  ANDROID_PLATFORM: "platforms;android-36"
+  ANDROID_BUILD_TOOLS: "build-tools;36.0.0"
+  ANDROID_NDK: "ndk;28.2.13676358"
+  APP_ID: au.com.voiceplatform.app
+
+jobs:
+  analyze-test:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: android-analyze-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Check the Flutter version
+        run: flutter --version | grep -F "Flutter ${FLUTTER_VERSION} "
+      - name: Get dependencies (app and every package)
+        run: |
+          flutter pub get
+          for p in packages/*/; do
+            [ -f "$p/pubspec.yaml" ] || continue
+            (cd "$p" && flutter pub get)
+          done
+      - name: flutter analyze (whole tree, packages included)
+        run: flutter analyze
+      - name: Test the app
+        run: flutter test
+      - name: Test every package that has tests
+        run: |
+          set -euo pipefail
+          for p in packages/*/; do
+            p=${p%/}
+            [ -f "$p/pubspec.yaml" ] && [ -d "$p/test" ] || { echo "$p: no tests"; continue; }
+            if grep -Eq '^\s+sdk:\s*flutter\s*$' "$p/pubspec.yaml"; then
+              echo "::group::flutter test $p"; (cd "$p" && flutter test); echo "::endgroup::"
+            else
+              echo "::group::dart test $p"; (cd "$p" && dart test); echo "::endgroup::"
+            fi
+          done
+
+  build:
+    name: Build debug APK and release App Bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: android-build-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install Android SDK components
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" "$ANDROID_NDK" > /dev/null
+      - run: flutter pub get
+      - name: Debug APK
+        run: flutter build apk --debug --build-number=${{ github.run_number }}
+      - name: Release App Bundle (unsigned in CI)
+        # No upload key is given to this job, so the bundle is unsigned. Only
+        # the play-internal job below signs, with the key from secrets.
+        run: flutter build appbundle --release --build-number=${{ github.run_number }}
+      - name: Report signing state
+        run: |
+          aab=build/app/outputs/bundle/release/app-release.aab
+          if jarsigner -verify "$aab" | grep -q "jar is unsigned"; then
+            msg="Release App Bundle is UNSIGNED (no upload key in this job). Not uploadable to Play."
+          else
+            echo "::error::Release App Bundle is signed in a job that has no upload key"; exit 1
+          fi
+          echo "::notice::$msg"
+          { echo "### Android build"; echo "- versionCode ${{ github.run_number }}"; echo "- $msg"; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-${{ github.run_number }}
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            build/app/outputs/bundle/release/app-release.aab
+          retention-days: 14
+
+  play-track-guard:
+    name: Play track guard (internal only)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Every Play track named in CI is internal
+        # Fails on any track setting in .github/ or android/fastlane/ whose
+        # value is not the literal "internal", and on any mention of the other
+        # release channels or of promoting a release (see the script).
+        run: bash .github/scripts/play-track-guard.sh
+
+  play-internal:
+    name: Upload to Play internal testing
+    needs: [analyze-test, build, play-track-guard]
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: play-internal
+      cancel-in-progress: false
+    env:
+      HAS_PLAY_JSON: ${{ secrets.PLAY_UPLOAD_JSON != '' }}
+      HAS_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 != '' }}
+      HAS_STORE_PW: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD != '' }}
+      HAS_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS != '' }}
+      HAS_KEY_PW: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD != '' }}
+    steps:
+      - name: Check the upload secrets
+        id: secrets
+        run: |
+          set -euo pipefail
+          n=0
+          for v in HAS_PLAY_JSON HAS_KEYSTORE HAS_STORE_PW HAS_ALIAS HAS_KEY_PW; do
+            if [ "${!v}" = "true" ]; then n=$((n+1)); else echo "not set: $v"; fi
+          done
+          if [ "$n" -eq 0 ]; then
+            echo "::notice::Play upload skipped: PLAY_UPLOAD_JSON and the ANDROID_UPLOAD_* secrets are not set."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          elif [ "$n" -lt 5 ]; then
+            echo "::error::Only some Play upload secrets are set ($n of 5); set all five or none."; exit 1
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tag matches the pubspec version
+        if: steps.secrets.outputs.configured == 'true' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          name=$(sed -nE 's/^version:\s*([^+[:space:]]+).*/\1/p' pubspec.yaml)
+          [ "v$name" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME does not match pubspec version $name"; exit 1; }
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install Android SDK components
+        if: steps.secrets.outputs.configured == 'true'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" "$ANDROID_NDK" > /dev/null
+      - name: Write the upload keystore
+        if: steps.secrets.outputs.configured == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "keystore written: $(stat -c %s "$RUNNER_TEMP/upload.jks") bytes"
+      - name: Signed release App Bundle
+        if: steps.secrets.outputs.configured == 'true'
+        env:
+          VP_REQUIRE_UPLOAD_KEY: "true"
+          VP_UPLOAD_STORE_FILE: ${{ runner.temp }}/upload.jks
+          VP_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          VP_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          VP_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          flutter pub get
+          flutter build appbundle --release --build-number=${{ github.run_number }}
+      - name: Refuse an unsigned or debug-signed bundle
+        if: steps.secrets.outputs.configured == 'true'
+        run: |
+          aab=build/app/outputs/bundle/release/app-release.aab
+          jarsigner -verify "$aab" | grep -q "jar verified" || { echo "::error::bundle is not signed"; exit 1; }
+          if keytool -printcert -jarfile "$aab" | grep -q "CN=Android Debug"; then echo "::error::bundle is debug-signed"; exit 1; fi
+          echo "Signed with the upload key; SHA-256:"; keytool -printcert -jarfile "$aab" | grep -m1 'SHA256:'
+      - name: Keep the signed bundle (for a first upload by hand in Play Console)
+        if: steps.secrets.outputs.configured == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-signed-${{ github.run_number }}
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 7
+      - name: Write the Play service account key
+        if: steps.secrets.outputs.configured == 'true'
+        env:
+          PLAY_JSON: ${{ secrets.PLAY_UPLOAD_JSON }}
+        run: |
+          umask 077
+          printf '%s' "$PLAY_JSON" > "$RUNNER_TEMP/play-upload.json"
+      - name: Upload to the internal track
+        if: steps.secrets.outputs.configured == 'true'
+        # The track is hard-coded; play-track-guard fails the run if any other
+        # track is named. The service account has testing-track rights only.
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJson: ${{ runner.temp }}/play-upload.json
+          packageName: ${{ env.APP_ID }}
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          track: internal
+          status: ${{ github.event_name == 'workflow_dispatch' && inputs.release_status || 'completed' }}
+      - name: Remove key files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks" "$RUNNER_TEMP/play-upload.json"
