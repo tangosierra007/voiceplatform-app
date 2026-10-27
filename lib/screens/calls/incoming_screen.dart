@@ -199,7 +199,8 @@ class IncomingScreen extends ConsumerWidget {
     }
 
     if (!await mic.isGranted() && !await mic.request()) return refused();
-    await mic.requestBluetooth();
+    // BLUETOOTH_CONNECT is asked by CallFlow once the call connects, so no
+    // system dialog stands between Answer and the caller.
     try {
       await ref.read(callEngineProvider).answer(callId);
     } on MicrophoneDenied {

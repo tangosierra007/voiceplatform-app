@@ -24,8 +24,9 @@ abstract interface class MicPermission {
   /// Telecom still rings, but no incoming-call notification shows (WS3).
   Future<void> requestNotifications();
 
-  /// BLUETOOTH_CONNECT (Android 12+), asked when a call starts, so headsets
-  /// and car kits can carry it. Refusing leaves the earpiece and speaker.
+  /// BLUETOOTH_CONNECT (Android 12+), asked once a call connects (never
+  /// before answering), so headsets and car kits can carry it. Refusing
+  /// leaves the earpiece and speaker.
   Future<void> requestBluetooth();
 }
 
@@ -148,8 +149,7 @@ Future<String?> startCallWith(
     }
     return null;
   }
-  // Headsets and car kits: asked as the call starts, not needed to go on.
-  await mic.requestBluetooth();
+  // BLUETOOTH_CONNECT is asked by CallFlow once the call connects.
   final engine = read(callEngineProvider);
   final held = <String>[];
   for (final c in engine.activeCalls) {

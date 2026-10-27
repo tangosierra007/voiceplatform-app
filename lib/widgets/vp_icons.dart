@@ -80,6 +80,34 @@ enum VpIcon {
     '<path d="M3 3l18 18"/><path d="M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 4.5-2.4M14.5 10.1A10 10 0 0 1 19 12.5M2 8.8a15 15 0 0 1 4.3-2.5M11 5a15 15 0 0 1 11 3.8"/><circle cx="12" cy="20" r=".8"/>',
   ),
 
+  /// AppRecents: missed, incoming, outgoing.
+  missedCall(
+    '<path d="M6.6 3.5h2.3c.4 0 .8.3.9.7l1 3.3c.1.4 0 .8-.3 1.1l-1.4 1.3a12 12 0 0 0 5 5l1.3-1.4c.3-.3.7-.4 1.1-.3l3.3 1c.4.1.7.5.7.9v2.3c0 1.1-.9 2-2 2A17.5 17.5 0 0 1 4.6 5.5c0-1.1.9-2 2-2z"/><path d="M15 4l5 5M20 4l-5 5"/>',
+  ),
+  incomingCall(
+    '<path d="M6.6 3.5h2.3c.4 0 .8.3.9.7l1 3.3c.1.4 0 .8-.3 1.1l-1.4 1.3a12 12 0 0 0 5 5l1.3-1.4c.3-.3.7-.4 1.1-.3l3.3 1c.4.1.7.5.7.9v2.3c0 1.1-.9 2-2 2A17.5 17.5 0 0 1 4.6 5.5c0-1.1.9-2 2-2z"/><path d="M20 4l-5.5 5.5M14.5 5v4.5H19"/>',
+  ),
+  outgoingCall(
+    '<path d="M6.6 3.5h2.3c.4 0 .8.3.9.7l1 3.3c.1.4 0 .8-.3 1.1l-1.4 1.3a12 12 0 0 0 5 5l1.3-1.4c.3-.3.7-.4 1.1-.3l3.3 1c.4.1.7.5.7.9v2.3c0 1.1-.9 2-2 2A17.5 17.5 0 0 1 4.6 5.5c0-1.1.9-2 2-2z"/><path d="M14.5 9.5L20 4M15.5 4H20v4.5"/>',
+  ),
+
+  /// AppRecents row details.
+  info('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>'),
+
+  /// AppVoicemail player (pause is the artboard's; play is its pair).
+  pause('<path d="M8 5v14M16 5v14"/>'),
+  play('<path d="M7.5 5l11 7-11 7z"/>'),
+
+  /// AppVoicemail delete.
+  trash('<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>'),
+
+  /// Greeting recorder (not drawn on an artboard; the mute icon without the
+  /// slash, and a stop square).
+  mic(
+    '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/>',
+  ),
+  stop('<rect x="7" y="7" width="10" height="10" rx="1.5"/>'),
+
   /// AppEmergency "Call 000 now", the keypad call button.
   phone(
     '<path d="M6.6 3.5h2.3c.4 0 .8.3.9.7l1 3.3c.1.4 0 .8-.3 1.1l-1.4 1.3a12 12 0 0 0 5 5l1.3-1.4c.3-.3.7-.4 1.1-.3l3.3 1c.4.1.7.5.7.9v2.3c0 1.1-.9 2-2 2A17.5 17.5 0 0 1 4.6 5.5c0-1.1.9-2 2-2z"/>',

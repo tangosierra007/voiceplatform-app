@@ -8,7 +8,7 @@ import 'package:voiceplatform_app/nav/routes.dart';
 import 'package:voiceplatform_app/screens/calls/in_call_screen.dart';
 import 'package:voiceplatform_app/screens/calls/incoming_screen.dart';
 import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
-import 'package:voiceplatform_app/screens/placeholders.dart';
+import 'package:voiceplatform_app/screens/contacts/contacts_screen.dart';
 import 'package:voiceplatform_app/screens/signin/sign_in_screen.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
@@ -107,14 +107,7 @@ void main() {
       expect(find.byType(InCallScreen), findsNothing);
       expect(find.byType(VpTabBar), findsOneWidget);
       // Back on the tab the user was on.
-      expect(find.byType(TabPlaceholder), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byType(TabPlaceholder),
-          matching: find.text('Contacts'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.byType(ContactsScreen), findsOneWidget);
       await e.dispose();
     },
   );

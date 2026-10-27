@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:call_engine/call_engine.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,15 +19,21 @@ import 'package:voiceplatform_app/platform/device_keys.dart';
 import 'package:voiceplatform_app/platform/phone.dart';
 import 'package:voiceplatform_app/engine/engine_provider.dart';
 import 'package:voiceplatform_app/engine/fake_call_engine.dart';
+import 'package:voiceplatform_app/features/recents/greetings.dart';
+import 'package:voiceplatform_app/features/recents/media_player.dart';
+import 'package:voiceplatform_app/features/recents/recents_data.dart';
 import 'package:voiceplatform_app/net/events.dart';
 import 'package:voiceplatform_app/net/live_events.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
+import '../../tool/mock_server/fixtures.dart' as fx;
 import 'call_fakes.dart';
+import 'fake_api.dart';
 import 'fakes.dart';
 
 export 'call_fakes.dart';
+export 'fake_api.dart';
 export 'fakes.dart';
 
 /// The badges and lines the artboards show: Recents 2, Messages 1.
@@ -64,6 +71,12 @@ Future<Widget> appUnderTest({
   DeskPhoneCall? deskPhone,
   EngineUi? ui,
   StatusStatus myStatus = StatusStatus.available,
+  FakeMediaPlayer? player,
+  FixedPhoneContacts? phoneSource,
+  Future<void> Function()? onHistorySeen,
+  FakeApi? api,
+  String? accessToken,
+  void Function(Iterable<String>)? addressBook,
 }) async {
   SharedPreferences.setMockInitialValues({
     if (theme != ThemePreference.system)
@@ -100,15 +113,55 @@ Future<Widget> appUnderTest({
         ),
       ),
       if (clock != null) clockProvider.overrideWithValue(clock),
+      if (api != null)
+        dioProvider.overrideWith(
+          (ref) => Dio(BaseOptions(baseUrl: 'http://127.0.0.1:9/app/v1'))
+            ..httpClientAdapter = api
+            ..interceptors.add(
+              AppHeadersInterceptor(
+                appHeader: 'android/$appVersion',
+                accessToken: () => ref.read(accessTokenProvider),
+              ),
+            ),
+        ),
+      if (accessToken != null)
+        accessTokenProvider.overrideWith(() => _PresetToken(accessToken)),
       micPermissionProvider.overrideWithValue(mic ?? FakeMic()),
       if (ui != null) engineUiProvider.overrideWithValue(ui),
       deskPhoneCallProvider.overrideWithValue(
         deskPhone ?? (n, id) async => 'Desk phone 202',
       ),
       phoneContactsSourceProvider.overrideWithValue(
-        FixedPhoneContacts(phoneContacts),
+        phoneSource ?? FixedPhoneContacts(phoneContacts),
       ),
-      colleaguesProvider.overrideWith((ref) async => fixtureColleagues()),
+      addressBookScrubberProvider.overrideWithValue(addressBook ?? (_) {}),
+      colleagueDirectoryProvider.overrideWith(
+        (ref) async => fixtureDirectory(now: clock?.call()),
+      ),
+      colleaguesProvider.overrideWith(
+        (ref) async => fixtureColleagues(now: clock?.call()),
+      ),
+      teamsProvider.overrideWith((ref) async => fixtureTeams()),
+      meProvider.overrideWith(
+        (ref) async => Me.fromJson(fx.me(status: myStatus.json!)),
+      ),
+      historyProvider.overrideWith(
+        (ref, f) async => fixtureHistory(
+          filter: switch (f) {
+            RecentsFilter.missed => 'missed',
+            RecentsFilter.voicemail => 'voicemail',
+            _ => 'all',
+          },
+          mine: f == RecentsFilter.mine,
+        ),
+      ),
+      markHistorySeenProvider.overrideWithValue(onHistorySeen ?? () async {}),
+      voicemailBoxesProvider.overrideWith((ref) async => fixtureBoxes()),
+      voicemailMessagesProvider.overrideWith(
+        (ref, box) async => fixtureVoicemails(box: box),
+      ),
+      greetingsProvider.overrideWith((ref) async => fixtureGreetings()),
+      mediaPlayerProvider.overrideWithValue(player ?? FakeMediaPlayer()),
       sharedContactsProvider.overrideWith((ref) async => fixtureShared()),
       callerIdsProvider.overrideWith((ref) async => fixtureCallerIds()),
       myStatusProvider.overrideWith(() => PresetStatus(myStatus)),
@@ -125,3 +178,11 @@ LiveEvents quietLiveEvents() => LiveEvents(
   connect: () => StreamController<ServerEvent>().stream,
   poll: (_) async => (items: null, etag: null),
 );
+
+class _PresetToken extends AccessTokenNotifier {
+  _PresetToken(this.token);
+  final String token;
+
+  @override
+  String? build() => token;
+}

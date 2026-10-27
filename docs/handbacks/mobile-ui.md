@@ -276,3 +276,32 @@ The manifest gains READ_CONTACTS (in spec 22's list; the Contacts tab asks for i
 - **A new call that fails** brings the held call back.
 - **Disabled buttons are dimmed.** "Talk first" and "Send now" stay dimmed until a colleague is picked, and outline and ghost buttons now dim when disabled.
 - **Mock server.** It records the last push token, for the new `test/engine/engine_session_test.dart`.
+
+## 4.4 `feat/app-features` (part A: Recents, Voicemail, Contacts)
+
+Split in two, as the brief allows past ~2,500 lines: this PR is Recents, Voicemail and Contacts; Messages, Me and AppSignedOut follow in part B, stacked on this branch.
+
+### What is built
+
+- **Recents** (`lib/screens/recents/recents_screen.dart`, data in `lib/features/recents/`). Filters All, Missed (count), Voicemail (count), Mine only, from `GET /history` and its `counts`. Rows as AppRecents: missed and voicemail in `status-bad`, "Answered by Mia on her desk phone", Private. Tapping a row calls back through `dialNumber()` (emergency first, microphone, caller ID); Private has no call back. The info button opens a details sheet (number, outcome, full time, line, Call back, Play voicemail). Opening Recents posts `history/seen`; the `badges` stream event now drives the tab badges (`liveBadgesProvider`), forgotten and re-read from `/me` after the app changes them.
+- **Voicemail inside Recents.** Box chips All boxes, Mine and the shared boxes with new counts; the open message in the player card (dot, name, time and box, number, play/pause, waveform with seek and a screen-reader slider, times, Call back, Speaker, Delete); the other messages below, long press or a screen-reader action to mark heard or new. Playing marks it heard.
+- **APP8.** `MediaPlayer` (`lib/features/recents/media_player.dart`) streams a fresh signed URL each load with a plain `ProgressiveAudioSource` (just_audio, headers sent natively, not via its local proxy). The bearer goes only to the API's own origin. `test/player_no_cache_test.dart` holds it: no caching or stream source, origin check, and a scan of `lib/` for caching, file sources and document or download directories. The earpiece is the default; Speaker switches to the loudspeaker.
+- **Greeting** (`/recents/greeting`, inside the Recents tab). The three greetings with Record / Record again, Play, and "Use the standard one". Recording is AAC in M4A, mono 16 kHz, stopping itself at 2:00; Save uploads `audio/mp4` with its length (`PUT /voicemail/greetings/{kind}`), then deletes the temporary file. The generated client's `File` body sends no content type, so the upload uses dio directly.
+- **Contacts** (`lib/screens/contacts/contacts_screen.dart`). Search, Colleagues / Teams / Phone contacts. Band "N colleagues · M free now": N is the directory's `total`, M is counted from live presence. Presence dots and text from the live events client, "On a call · 1:37" ticking, "Do not disturb until …" when there is an end. Teams show people, free now and number, and expand to members. Phone contacts shows the shared phonebook first, each marked "In the apps", then the phone's own contacts.
+- **APP12.** READ_CONTACTS is asked only on the first opening of the Phone contacts tab (remembered in shared preferences); refusing shows a line and Open Settings, everything else works. Names from the address book overlay Recents and calls on the device only; every name and number read is registered with `DiagnosticsScrubber.rememberAddressBookValues`. `test/contacts_stay_local_test.dart` checks the asking rules, that no request carries an address-book value, and the scrubber registration.
+- **BLUETOOTH_CONNECT (WS6).** No longer asked in `startCallWith` or on Answer; `CallFlow` asks once per call when it first connects, which covers dialled, answered and answered-after-Settings calls (`test/calls/bluetooth_after_connect_test.dart`).
+- **Shared widgets** (`lib/widgets/vp_list.dart`): page title, `.seg` group (48 px tap targets, at least 48 wide), row, row text, round icon button, link, band, empty line. `VpButton` gains `dense` (8 px sides, 16 px icon) and `toggled`.
+- **Tests.** Recents, Voicemail and Greeting behaviour, Contacts with live presence, APP8, APP12, Bluetooth; labelled 48 px targets and 200 % text on every new screen; colour-pair contrast. Goldens `recents_*`, `voicemail_*`, `contacts_*`, `greeting_light`, compared in `test/goldens/compare/features_side_by_side.png`.
+
+### Dependencies (NOTICE updated)
+
+just_audio 0.10 and audio_session 0.2 (MIT), record 7.1 (BSD-3-Clause), path_provider 2.1 (BSD-3-Clause, now direct).
+
+### Deviations and copy to confirm
+
+- Free count is real: the sample data has 3 free (Mia, Priya, Tom), so the band reads "3 free now", not the artboard's 4 (TJ's real-count decision).
+- AppVoicemail and AppContacts have no dark artboards; their dark goldens are from tokens.
+- The "All" chip is 48 px wide (44 on the artboard) for the tap target; the title row keeps 48 px with or without the Greeting link so the filters don't jump.
+- Not on any artboard, please confirm: the details sheet ("To the Sales line", "Play voicemail"); delete confirmation ("Delete this voicemail?", "The message from X goes for everyone who shares the Sales box." / "goes for good."); legal hold "This voicemail is kept on hold, so it can't be deleted."; the Greeting screen copy; the Phone contacts refusal line; "Shared phonebook", "On this phone", "In the apps" tag; "Outgoing · No answer", "· Busy", "· Didn't connect"; empty and failed-load lines.
+- Mark heard / mark as new is a long press and a screen-reader action, as the artboard has no control for it.
+- Earpiece by default for voicemail; Speaker uses Android's communication mode, restored on stop.

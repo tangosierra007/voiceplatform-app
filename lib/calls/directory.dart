@@ -5,16 +5,30 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../diagnostics/scrubber.dart';
 import '../net/api.dart';
 import '../net/events.dart';
 import '../net/live_events.dart';
 import 'numbers.dart';
 
+/// `GET /directory/colleagues`: the colleagues with team and presence, and
+/// the tenant's total.
+final colleagueDirectoryProvider = FutureProvider<Colleagues>((ref) async {
+  if (ref.watch(accessTokenProvider) == null) {
+    return const Colleagues(total: 0, freeNow: 0, items: []);
+  }
+  return ref.watch(appApiProvider).directory.getDirectoryColleagues();
+});
+
 /// Colleagues with team, from `GET /directory/colleagues`.
-final colleaguesProvider = FutureProvider<List<Colleague>>((ref) async {
+final colleaguesProvider = FutureProvider<List<Colleague>>(
+  (ref) async => (await ref.watch(colleagueDirectoryProvider.future)).items,
+);
+
+/// Teams (hunt groups) with their members' user ids.
+final teamsProvider = FutureProvider<List<Team>>((ref) async {
   if (ref.watch(accessTokenProvider) == null) return const [];
-  return (await ref.watch(appApiProvider).directory.getDirectoryColleagues())
-      .items;
+  return ref.watch(appApiProvider).directory.getDirectoryTeams();
 });
 
 /// The tenant phonebook's "in the apps" entries.
@@ -67,9 +81,18 @@ class PhoneContact {
   final List<String> numbers;
 }
 
-/// Reads the address book only when READ_CONTACTS is already granted; it is
-/// never asked for here (the Contacts tab asks, in 4.4).
+/// The device's address book. Read only when READ_CONTACTS is granted, and
+/// asked for only when the Phone contacts tab is first opened ([request]).
+/// What it reads stays in memory on the device (APP12): it never goes into a
+/// request, and every name and number is registered with the diagnostics
+/// scrubber so no log or crash report can carry it either.
 abstract interface class PhoneContactsSource {
+  /// Granted already; never shows a dialog.
+  Future<bool> isGranted();
+
+  /// Shows the system dialog once; true when granted.
+  Future<bool> request();
+
   Future<List<PhoneContact>> readIfAllowed();
 }
 
@@ -77,9 +100,27 @@ class DevicePhoneContacts implements PhoneContactsSource {
   const DevicePhoneContacts();
 
   @override
+  Future<bool> isGranted() async {
+    try {
+      return await Permission.contacts.isGranted;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> request() async {
+    try {
+      return (await Permission.contacts.request()).isGranted;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<List<PhoneContact>> readIfAllowed() async {
     try {
-      if (!await Permission.contacts.isGranted) return const [];
+      if (!await isGranted()) return const [];
       final all = await FlutterContacts.getAll(
         properties: {ContactProperty.name, ContactProperty.phone},
       );
@@ -98,9 +139,18 @@ final phoneContactsSourceProvider = Provider<PhoneContactsSource>(
   (ref) => const DevicePhoneContacts(),
 );
 
-final phoneContactsProvider = FutureProvider<List<PhoneContact>>(
-  (ref) => ref.watch(phoneContactsSourceProvider).readIfAllowed(),
+/// Where address-book values are registered so diagnostics never carry them.
+final addressBookScrubberProvider = Provider<void Function(Iterable<String>)>(
+  (ref) => DiagnosticsScrubber.instance.rememberAddressBookValues,
 );
+
+final phoneContactsProvider = FutureProvider<List<PhoneContact>>((ref) async {
+  final list = await ref.watch(phoneContactsSourceProvider).readIfAllowed();
+  ref.read(addressBookScrubberProvider)([
+    for (final p in list) ...[p.name, ...p.numbers],
+  ]);
+  return list;
+});
 
 /// Who a number belongs to, for the keypad's match line and the call screens.
 @immutable

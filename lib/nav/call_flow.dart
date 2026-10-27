@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vp_linphone/vp_linphone.dart' show VpUiRequest, VpUiRequestKind;
 
+import '../calls/call_actions.dart';
 import '../engine/engine_provider.dart';
 import 'routes.dart';
 
@@ -58,6 +59,9 @@ class _CallFlowState extends ConsumerState<CallFlow> {
 
   final Map<String, CallState> _last = {};
 
+  /// Calls BLUETOOTH_CONNECT has been asked for: once per call.
+  final Set<String> _bluetoothAsked = {};
+
   void _onCall(CallSnapshot c) {
     final router = ref.read(routerProvider);
     final here = router.routerDelegate.currentConfiguration.uri.path;
@@ -72,6 +76,13 @@ class _CallFlowState extends ConsumerState<CallFlow> {
       case CallState.dialling:
         if (!showing) router.go(Routes.inCall(c.id));
       case CallState.connected:
+        // BLUETOOTH_CONNECT once the call is up, never before answering
+        // (WS6): the system dialog must not stand between the user and the
+        // Answer button. Any path that ends connected passes here, including
+        // answering after a trip to Settings for the microphone.
+        if (_bluetoothAsked.add(c.id)) {
+          unawaited(ref.read(micPermissionProvider).requestBluetooth());
+        }
         // Only on the change to connected: a merge or a mute must not move.
         if (prev != CallState.connected &&
             prev != CallState.heldByMe &&
@@ -80,6 +91,7 @@ class _CallFlowState extends ConsumerState<CallFlow> {
         }
       case CallState.ended:
         _last.remove(c.id);
+        _bluetoothAsked.remove(c.id);
         if (!showing && isCallRoute(here)) return;
         final engine = ref.read(callEngineProvider);
         final next = engine.activeCalls.where((o) => o.id != c.id).firstOrNull;

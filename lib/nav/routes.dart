@@ -7,8 +7,11 @@ import '../auth/version.dart';
 import '../screens/calls/in_call_screen.dart';
 import '../screens/calls/incoming_screen.dart';
 import '../screens/calls/transfer_screen.dart';
+import '../screens/contacts/contacts_screen.dart';
 import '../screens/keypad/keypad_screen.dart';
 import '../screens/placeholders.dart';
+import '../screens/recents/greeting_screen.dart';
+import '../screens/recents/recents_screen.dart';
 import '../screens/signin/basic_screen.dart';
 import '../screens/signin/code_screen.dart';
 import '../screens/signin/qr_screen.dart';
@@ -24,6 +27,9 @@ import '../theme/app_theme.dart';
 abstract final class Routes {
   static const keypad = '/keypad';
   static const recents = '/recents';
+
+  /// The Greeting link from Voicemail.
+  static const greeting = '/recents/greeting';
   static const contacts = '/contacts';
   static const messages = '/messages';
   static const me = '/me';
@@ -122,10 +128,20 @@ final routerProvider = Provider<GoRouter>((ref) {
                 GoRoute(
                   path: Routes.forTab(t),
                   pageBuilder: (context, state) => NoTransitionPage(
-                    child: t == AppTab.keypad
-                        ? const KeypadScreen()
-                        : TabPlaceholder(tab: t),
+                    child: switch (t) {
+                      AppTab.keypad => const KeypadScreen(),
+                      AppTab.recents => const RecentsScreen(),
+                      AppTab.contacts => const ContactsScreen(),
+                      _ => TabPlaceholder(tab: t),
+                    },
                   ),
+                  routes: [
+                    if (t == AppTab.recents)
+                      GoRoute(
+                        path: 'greeting',
+                        builder: (context, state) => const GreetingScreen(),
+                      ),
+                  ],
                   redirect: t == AppTab.messages
                       ? (context, state) =>
                             ProviderScope.containerOf(context)

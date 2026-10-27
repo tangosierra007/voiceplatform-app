@@ -45,6 +45,8 @@ class VpButton extends StatelessWidget {
     this.height = 54,
     this.large = true,
     this.busy = false,
+    this.dense = false,
+    this.toggled,
   });
 
   final String label;
@@ -54,6 +56,13 @@ class VpButton extends StatelessWidget {
   final double height;
   final bool large;
   final bool busy;
+
+  /// 8 px sides and a 16 px icon, for buttons sharing a row (the artboards'
+  /// `padding: 0 8px`).
+  final bool dense;
+
+  /// A switch-like button (Speaker): on shows the brand tint and border.
+  final bool? toggled;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +83,11 @@ class VpButton extends StatelessWidget {
         Colors.transparent,
       ),
       VpButtonKind.primary => (c.brand, c.onBrand, c.brand),
+      VpButtonKind.outline when toggled == true => (
+        c.brandTint,
+        c.text,
+        c.brand,
+      ),
       VpButtonKind.outline => (c.surface, c.text, c.borderStrong),
       VpButtonKind.ghost => (Colors.transparent, c.text, Colors.transparent),
     };
@@ -89,11 +103,12 @@ class VpButton extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: enabled,
+      toggled: toggled,
       label: label,
       excludeSemantics: true,
       onTap: enabled ? onPressed : null,
       // Shorter than 48 px to see (the artboards' 40 px), 48 px to touch.
-      child: _TapPad(
+      child: VpTapPad(
         height: height,
         onTap: enabled ? onPressed : null,
         child: Material(
@@ -114,7 +129,11 @@ class VpButton extends StatelessWidget {
               constraints: BoxConstraints(minHeight: height),
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: large ? VpSpace.s5 : VpSpace.s4,
+                  horizontal: dense
+                      ? VpSpace.s2
+                      : large
+                      ? VpSpace.s5
+                      : VpSpace.s4,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -129,7 +148,7 @@ class VpButton extends StatelessWidget {
                         ),
                       )
                     else if (icon != null)
-                      VpSvgIcon(icon!, size: 20, colour: fg),
+                      VpSvgIcon(icon!, size: dense ? 16 : 20, colour: fg),
                     if (busy || icon != null) const SizedBox(width: VpSpace.s2),
                     Flexible(
                       child: Text(
@@ -151,8 +170,9 @@ class VpButton extends StatelessWidget {
 }
 
 /// Pads a short control to a 48 px tap target without changing how it looks.
-class _TapPad extends StatelessWidget {
-  const _TapPad({
+class VpTapPad extends StatelessWidget {
+  const VpTapPad({
+    super.key,
     required this.height,
     required this.onTap,
     required this.child,
