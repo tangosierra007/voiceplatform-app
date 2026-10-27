@@ -156,32 +156,25 @@ object Mapping {
 /** Dial-string rules. */
 object Rules {
     /**
-     * Australian emergency numbers: the digits 000, 112 or 106, also when
-     * dialled with a 0 in front, whatever separators the user typed. Used only
-     * to place such a call more readily ([callGate]); never to refuse one.
+     * A mirror of the contract's `isEmergencyNumber()` (packages/call_engine),
+     * which stays the one rule: only the digits count. The Dart engine refuses
+     * these before anything reaches Kotlin; this copy is the native backstop so
+     * no INVITE can ever be sent for one. Both are tested against the same
+     * table, `test/fixtures/emergency_numbers.txt`.
      */
-    fun isEmergency(number: String): Boolean {
-        // Letters, `*` and `#` make it something else (a SIP name, a feature code).
-        if (number.any { it.isLetter() || it == '*' || it == '#' }) return false
-        return number.filter { it.isDigit() } in EMERGENCY
-    }
+    fun isEmergency(number: String): Boolean = number.filter { it in '0'..'9' } in EMERGENCY
 
     private val EMERGENCY = setOf("000", "112", "106", "0000", "0112", "0106")
 
     /**
-     * The checks call() makes before placing a call, as an error code
-     * (`not_registered`, `microphone_denied`) or null to place it.
-     *
-     * Nothing here refuses a number for being an emergency number (CLAUDE.md
-     * rule 8). With no account held there is nowhere to send any call, so an
-     * emergency number gets the same `not_registered` as any other (the UI
-     * has already offered the phone's dialler). With an account held, an
-     * emergency number skips the "registered now" and microphone checks, so
-     * it is placed even while a re-registration is pending or the mic is off.
+     * The checks call() makes, in order, as an error code or null to place the
+     * call. An emergency number is refused first, before the account, the
+     * registration and the microphone (decision 139 as amended): the app never
+     * places one; the UI opens the phone's dialler.
      */
     fun callGate(number: String, hasAccount: Boolean, registered: Boolean, micGranted: Boolean): String? {
+        if (isEmergency(number)) return "emergency_use_dialler"
         if (!hasAccount) return "not_registered"
-        if (isEmergency(number)) return null
         if (!registered) return "not_registered"
         if (!micGranted) return "microphone_denied"
         return null

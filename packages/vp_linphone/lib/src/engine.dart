@@ -84,13 +84,15 @@ final class VpLinphoneEngine implements CallEngine {
 
   // ------------------------------------------------------------ calls
 
-  /// Never refuses a number for being an emergency number (CLAUDE.md rule 8).
-  /// With no account held it throws [NotRegistered], as for any number (the UI
-  /// has offered the phone's dialler first). With an account, the platform side
-  /// places 000, 112 and 106 even while not registered right now or without the
-  /// microphone permission.
+  /// An emergency number ([isEmergencyNumber], the contract's one rule) throws
+  /// [EmergencyNumberUseDialler] before anything else: no registration,
+  /// microphone or engine check, and nothing is sent to the platform side, so
+  /// no INVITE. The UI opens the phone's dialler (decision 139 as amended).
   @override
-  Future<String> call(String number, {String? callerId}) => _guard(() => _host.call(number, callerId));
+  Future<String> call(String number, {String? callerId}) {
+    if (isEmergencyNumber(number)) return Future.error(const EmergencyNumberUseDialler());
+    return _guard(() => _host.call(number, callerId));
+  }
 
   @override
   Future<void> answer(String callId) => _guard(() => _host.answer(callId), callId: callId);
@@ -116,9 +118,13 @@ final class VpLinphoneEngine implements CallEngine {
   @override
   Future<void> sendDtmf(String callId, String digits) => _guard(() => _host.sendDtmf(callId, digits), callId: callId);
 
+  /// A transfer to an emergency number is refused like a call to one: the app
+  /// never sets one up.
   @override
-  Future<void> transferBlind(String callId, String target) =>
-      _guard(() => _host.transferBlind(callId, target), callId: callId);
+  Future<void> transferBlind(String callId, String target) {
+    if (isEmergencyNumber(target)) return Future.error(const EmergencyNumberUseDialler());
+    return _guard(() => _host.transferBlind(callId, target), callId: callId);
+  }
 
   @override
   Future<void> transferAttended(String callId, String consultCallId) =>
@@ -161,6 +167,7 @@ final class VpLinphoneEngine implements CallEngine {
   }
 
   static CallEngineError _error(PlatformException e, String? callId) => switch (e.code) {
+    'emergency_use_dialler' => const EmergencyNumberUseDialler(),
     'not_registered' => const NotRegistered(),
     'microphone_denied' => const MicrophoneDenied(),
     'no_such_call' => NoSuchCall(callId ?? '?'),

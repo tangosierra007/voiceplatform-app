@@ -38,7 +38,7 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
   - `transferBlind` = REFER (`transferTo`). `transferAttended` = REFER with Replaces (`transferToAnother`); the held call shows `transferring` until it ends.
   - `merge` creates a local audio conference (it adds to one if a call is already in a conference).
   - `setAudioRoute` picks from liblinphone's audio devices (earpiece, speaker, Bluetooth, wired/USB). `car` is refused until Telecom arrives (3.2).
-- **Emergency (rule 8):** nothing in `call()` refuses a number for being an emergency number; the checks are in one pure function, `Rules.callGate`, with JVM tests. With no account held (never registered, or after `unregister()` dropped revoked credentials) every call, an emergency number included, throws the same `NotRegistered`; the UI has already offered the phone's dialler. With an account held, an emergency number (000, 112, 106, also with a leading 0) skips the "registered right now" and microphone checks and is placed. `requireCore` (engine not started) and the register path's address checks treat every number alike.
+- **Emergency (decision 139 as amended, 27 Oct):** emergency numbers always go to the phone's dialler; the app never places one. `VpLinphoneEngine.call()` checks the contract's `isEmergencyNumber()` first, before registration, microphone or engine state, throws `EmergencyNumberUseDialler` and sends nothing to the platform side, so no INVITE. Kotlin keeps a mirror of the rule as a backstop, the first line of `LinphoneEngine.call()` (code `emergency_use_dialler`, mapped to the same error). `Rules.callGate` refuses it ahead of every other check. Both rules are tested against one table, `test/fixtures/emergency_numbers.txt`, so they can't drift apart. `transferBlind` to an emergency number is refused the same way (Dart first, the Kotlin backstop in the address builder), since a REFER would make the platform set the call up.
 - **Snapshots:**
   - `encrypted` is true only when the account's transport is TLS and the call's current media encryption is SRTP.
   - `hdAudio` is true for opus or G722 as the used payload type.
@@ -58,17 +58,17 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
 ### Tests
 
 - `flutter analyze` (package and example): no issues.
-- `flutter test` (package): 53 tests pass.
+- `flutter test` (package): 57 tests pass.
   - `incoming_headers_test.dart`: the parser.
   - `log_scrubber_test.dart`: the same sample lines as Kotlin, including an Authorization header, the password and full numbers.
-  - `engine_test.dart`: the Dart side against a fake host API.
+  - `engine_test.dart`: the Dart side against a fake host API, including the emergency table (every emergency number throws `EmergencyNumberUseDialler` with nothing sent, also before `start()` and `register()`; the table agrees with `isEmergencyNumber()`).
   - `channel_test.dart`: real Pigeon messages on a mock platform channel, including the error envelope.
 - `flutter test` (example): 1 test passes.
-- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 39 tests pass.
+- Kotlin JVM unit tests, `gradlew :vp_linphone:testDebugUnitTest` from `example/android`: 37 tests pass.
   - `LogScrubberTest`: the log sink's scrubber on lines with an Authorization header, a password and full phone numbers.
   - `CallLogFileTest`
   - `MappingTest`: call states, end reasons (answered elsewhere), registration failures, codec order, HD, routes.
-  - `RulesTest`: emergency, `callGate` (an emergency number with an account is placed; with no account it gets the same `not_registered` as a normal number; no outcome refuses on the number), dial strings, DTMF, instance ids.
+  - `RulesTest`: the Kotlin mirror against the shared emergency table, `callGate` (emergency refused first whatever the account, registration or microphone; normal numbers need all three), dial strings, DTMF, instance ids.
 - `flutter build apk --debug` (example): builds (277 MB debug APK: four ABIs, unstripped liblinphone).
 - **Not done (not allowed in 3.1):** any live registration or call. Everything that talks to liblinphone at runtime is unproven until the live SIP tests.
 
@@ -83,7 +83,9 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
   - 162 files (the generated API wrappers, for example `Account.java`): "GNU General Public License ... either version 2 of the License, or (at your option) any later version".
   - 5 files have no licence header.
 
-So the release says GPL-3.0 in its metadata and AGPL-3.0-or-later / GPL-2.0-or-later in its source headers, which differs from the plain AGPL-3.0 that was expected. Both combine with this AGPL-3.0 app (GPL-3.0 section 13 / AGPL-3.0 section 13). `NOTICE` records this.
+So the release says GPL-3.0 in its metadata and AGPL-3.0-or-later / GPL-2.0-or-later in its source headers, which differs from the plain AGPL-3.0 that was expected. Both combine with this AGPL-3.0 app (GPL-3.0 section 13 / AGPL-3.0 section 13).
+
+**NOTICE is generated** (TJ, 27 Oct). The liblinphone section is written by `packages/vp_linphone/tool/liblinphone_notice.dart`. Re-run it on an upgrade from `packages/vp_linphone`: `dart run tool/liblinphone_notice.dart --version <v> --write ../../NOTICE`. It reads only the SDK's own files and checks each download against the repository's `.sha256`: the POM `<licenses>`, any LICENSE, COPYING or NOTICE file in the AAR or sources jar (there are none), each Java source's header, the root CA bundle's header, and licence-like strings inside the native libraries. Each statement names its source file. The only licence the SDK states is for the SDK as a whole (POM) and for the Java sources (their headers). **For every native component the licence is not stated in the SDK**, ML-KEM and libxml2 included, and NOTICE says so plainly. The only text found in a native library is a copyright line in libjpeg-turbo's `libjpeg.so` and `libturbojpeg.so` ("Copyright (C) 1991-2024 The libjpeg-turbo Project and many others"), with no licence. The root CA bundle states no licence either. The upstream licences I listed in the previous round came from Belledonne's source repositories, not from the SDK, so they were removed from NOTICE.
 
 ### Header formats assumed (WS2 emits these on INVITEs to app contacts)
 
@@ -117,9 +119,9 @@ X-VP-Last-Answered: "Mia Chen";at=2026-10-27T03:15:00Z
 
 ### Open questions
 
-Answered by mobile-lead (27 Oct): the contract gained `instanceId` (used for `+sip.instance`); the voicemail target stays `*97` as a constructor option; the extra AAR permissions are settled as listed above; NOTICE now lists AndroidX Core, kotlinx.coroutines and the AAR's native libraries; the licence finding goes into decision 135's follow-up.
+Answered by mobile-lead (27 Oct): the contract gained `instanceId` (used for `+sip.instance`); the voicemail target stays `*97` as a constructor option; the extra AAR permissions are settled as listed above; NOTICE lists AndroidX Core and kotlinx.coroutines, and its liblinphone section is generated from the SDK's own files (above); the licence finding goes into decision 135's follow-up; emergency numbers always go to the dialler (decision 139 as amended).
 
 1. **Call history on the device.** liblinphone keeps its own call-log database by default; it is not exported or uploaded. Should it be turned off?
 2. **Release date.** 5.5.39 was published to Belledonne's repository on 27 Oct. It is pinned as specified. Belledonne's release notes for it were not reviewed.
-3. **Native licences not established** (see NOTICE): the post-quantum KEM code (ML-KEM/Kyber symbols; liboqs is a linphone-sdk submodule but not confirmed in this build) and libxml2 (named in strings only). The other licences are from the upstream projects named in linphone-sdk's submodule list, read from the master branch, not from the 5.5.39 tag.
+3. **Native licences are not stated in the SDK** (see NOTICE): about 28 components, ML-KEM and libxml2 among them. For distribution, their licence texts have to come from somewhere: the linphone-sdk 5.5.39 source tag, or Belledonne directly. That is a call for you and TJ; nothing in this branch infers them.
 4. **The root app** needs, in 3.2, its merged manifest checked against the spec's permission list. Nothing in `lib/`, the root `pubspec.yaml` or the root `android/` was touched.

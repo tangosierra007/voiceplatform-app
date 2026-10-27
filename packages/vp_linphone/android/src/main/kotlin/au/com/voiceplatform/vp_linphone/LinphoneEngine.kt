@@ -425,6 +425,10 @@ object LinphoneEngine {
     }
 
     private fun target(number: String): org.linphone.core.Address {
+        // Backstop for transfers too: never a SIP request towards an emergency number.
+        if (Rules.isEmergency(number)) {
+            throw VpFlutterError("emergency_use_dialler", "Emergency numbers use the phone dialler")
+        }
         val d = domain ?: throw VpFlutterError("not_registered", "No account")
         val dial = Rules.dialString(number)
         if (!Rules.isDialable(dial)) throw VpFlutterError("invalid_state", "Not a dialable number")
@@ -433,10 +437,14 @@ object LinphoneEngine {
     }
 
     fun call(number: String, callerId: String?): String {
+        // First, before the core state or anything else: never an INVITE for
+        // an emergency number (the Dart side refuses it already).
+        if (Rules.isEmergency(number)) {
+            log("emergency number refused: use the phone dialler")
+            throw VpFlutterError("emergency_use_dialler", "Emergency numbers use the phone dialler")
+        }
         val c = requireCore()
         val acc = account
-        val emergency = Rules.isEmergency(number)
-        // Never refuses on the number itself; see Rules.callGate.
         when (
             Rules.callGate(
                 number,
@@ -445,6 +453,8 @@ object LinphoneEngine {
                 micGranted = micGranted(),
             )
         ) {
+            "emergency_use_dialler" ->
+                throw VpFlutterError("emergency_use_dialler", "Emergency numbers use the phone dialler")
             "not_registered" -> throw VpFlutterError("not_registered", "Not registered")
             "microphone_denied" -> throw VpFlutterError("microphone_denied", "Microphone permission not granted")
         }
@@ -457,7 +467,7 @@ object LinphoneEngine {
         val call = c.inviteAddressWithParams(address, params)
             ?: throw VpFlutterError("invalid_state", "Call could not be placed")
         val t = track(call)
-        log("call ${t.id} outgoing${if (emergency) " emergency" else ""}")
+        log("call ${t.id} outgoing")
         emitCall(t)
         return t.id
     }

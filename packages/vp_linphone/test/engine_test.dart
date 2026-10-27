@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 
 import 'package:call_engine/call_engine.dart';
@@ -112,6 +113,13 @@ CallMsg msg(String id, CallStateMsg state, {bool incoming = false, EndReasonMsg?
   headerRepeat: incoming ? '3' : null,
 );
 
+/// test/fixtures/emergency_numbers.txt, shared with the Kotlin RulesTest.
+List<({bool emergency, String number})> emergencyTable() => [
+  for (final line in File('test/fixtures/emergency_numbers.txt').readAsLinesSync())
+    if (line.trim().isNotEmpty && !line.startsWith('#'))
+      (emergency: line.startsWith('E'), number: line.substring(line.indexOf('\t') + 1)),
+];
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -218,34 +226,48 @@ void main() {
     expect(host.calls.single[7], 'urn:uuid:0e2f3c4a-5b6c-4d7e-8f90-a1b2c3d4e5f6');
   });
 
-  test('an emergency number with no account is NotRegistered, like any number', () async {
-    Future<Object?> err(String n) async {
-      host.nextError = PlatformException(code: 'not_registered', message: 'Not registered');
-      try {
-        await engine.call(n);
-      } catch (e) {
-        return e;
+  group('emergency numbers use the phone dialler', () {
+    final rows = emergencyTable();
+
+    test('the shared table agrees with the contract rule', () {
+      expect(rows.where((r) => r.emergency).length, greaterThanOrEqualTo(6));
+      for (final r in rows) {
+        expect(isEmergencyNumber(r.number), r.emergency, reason: "'${r.number}'");
       }
-      return null;
-    }
+    });
 
-    final emergency = await err('000');
-    final normal = await err('0491 570 737');
-    expect(emergency, isA<NotRegistered>());
-    expect(normal, isA<NotRegistered>());
-    expect((emergency as NotRegistered).message, (normal as NotRegistered).message);
-  });
+    test('call() throws EmergencyNumberUseDialler first and sends nothing', () async {
+      for (final r in rows.where((r) => r.emergency)) {
+        // Whatever the platform side would say (registered or not, mic or not).
+        host.nextError = PlatformException(code: 'microphone_denied');
+        await expectLater(engine.call(r.number), throwsA(isA<EmergencyNumberUseDialler>()), reason: r.number);
+        host.nextError = null;
+      }
+      expect(host.calls, isEmpty);
+    });
 
-  test('emergency numbers with an account go straight to the platform side and are placed', () async {
-    await engine.register(account);
-    host.calls.clear();
-    final ids = <String>[];
-    for (final n in ['000', '112', '106', '0000']) {
-      host.nextCallId = 'call-$n';
-      ids.add(await engine.call(n));
-    }
-    expect(host.calls.map((c) => c[1]), ['000', '112', '106', '0000']);
-    expect(ids, ['call-000', 'call-112', 'call-106', 'call-0000']);
+    test('also before register() and start(), with a caller ID', () async {
+      final fresh = VpLinphoneEngine(hostApi: host);
+      await expectLater(fresh.call('000', callerId: '+61355501201'), throwsA(isA<EmergencyNumberUseDialler>()));
+      expect(host.calls, isEmpty);
+    });
+
+    test('normal numbers still reach the platform side', () async {
+      for (final r in rows.where((r) => !r.emergency && r.number.isNotEmpty)) {
+        await engine.call(r.number);
+      }
+      expect(host.calls.length, rows.where((r) => !r.emergency && r.number.isNotEmpty).length);
+    });
+
+    test('a blind transfer to an emergency number is refused too', () async {
+      await expectLater(engine.transferBlind('call-1', '000'), throwsA(isA<EmergencyNumberUseDialler>()));
+      expect(host.calls, isEmpty);
+    });
+
+    test('the Kotlin backstop code maps to the same error', () async {
+      host.nextError = PlatformException(code: 'emergency_use_dialler');
+      await expectLater(engine.call('204'), throwsA(isA<EmergencyNumberUseDialler>()));
+    });
   });
 
   group('platform errors become CallEngineError', () {

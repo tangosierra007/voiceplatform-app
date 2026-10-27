@@ -1,0 +1,25 @@
+# The emergency-number table shared by the Dart test (against the contract's
+# isEmergencyNumber) and the Kotlin test (against Rules.isEmergency).
+# E = emergency, N = not. Columns are separated by one tab.
+E	000
+E	112
+E	106
+E	0000
+E	0112
+E	0106
+E	 0 0 0 
+E	1-1-2
+E	(000)
+E	+112
+E	*000
+E	000#
+E	1 0 6
+N	0001
+N	1122
+N	00000
+N	0491 570 737
+N	03 5550 1201
+N	204
+N	*97
+N	sos
+N	
