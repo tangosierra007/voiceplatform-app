@@ -70,6 +70,34 @@ class AudioMsg {
   List<AudioRouteMsg> available;
 }
 
+/// The contract's PushMessage types (app-api.openapi.yaml). Only the four the
+/// app handles reach Dart; incoming_call and call_cancelled are native.
+enum PushTypeMsg { incomingCall, callCancelled, voicemail, message, signedOut, config }
+
+class PushMsg {
+  PushMsg({required this.type, required this.pushId});
+  PushTypeMsg type;
+  String pushId;
+  String? sentAt;
+}
+
+enum UiRequestKindMsg { showIncoming, showCall }
+
+/// Asks the app (WS4) to show a screen: from a notification tap, the
+/// full-screen intent on a locked phone, or an answer from the notification.
+class UiRequestMsg {
+  UiRequestMsg({required this.kind, required this.callId});
+  UiRequestKindMsg kind;
+  String callId;
+}
+
+class BatteryMsg {
+  BatteryMsg({required this.ignoringOptimizations, required this.lateWakesLastWeek, required this.manufacturer});
+  bool ignoringOptimizations;
+  int lateWakesLastWeek;
+  String manufacturer;
+}
+
 /// Dart to Kotlin. Errors come back as PlatformException with one of the codes
 /// `not_registered`, `microphone_denied`, `no_such_call`, `invalid_state`.
 @HostApi()
@@ -117,6 +145,23 @@ abstract class VpLinphoneHostApi {
 
   @async
   Uint8List exportLastCallLog();
+
+  /// Re-sends the current registration, calls and audio state (a Flutter
+  /// engine attaching after a push woke the engine natively).
+  void syncState();
+
+  /// Pushes that arrived while no Flutter engine was attached (types only).
+  List<PushMsg> takePendingPushes();
+
+  /// The UI request the activity was launched with, once.
+  UiRequestMsg? takeUiRequest();
+
+  BatteryMsg batteryStatus();
+  void openBatteryOptimizationSettings();
+
+  /// Android 14+: whether the full-screen incoming-call UI is allowed.
+  bool canUseFullScreenIntent();
+  void openFullScreenIntentSettings();
 }
 
 /// Kotlin to Dart events.
@@ -128,4 +173,11 @@ abstract class VpLinphoneEventsApi {
 
   /// Microphone level of the active call in dBm0 (liblinphone's record volume).
   void onInputLevel(double dbm0);
+
+  void onPush(PushMsg push);
+  void onUiRequest(UiRequestMsg request);
+
+  /// An incoming call was shown as a heads-up notification because the
+  /// full-screen intent is not allowed (Android 14+).
+  void onFullScreenIntentDenied(String callId);
 }

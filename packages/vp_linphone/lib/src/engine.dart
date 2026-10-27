@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'incoming_headers.dart';
 import 'log_scrubber.dart';
 import 'messages.g.dart';
+import 'platform_types.dart';
 
 /// Maps liblinphone's record volume (dBm0) to the 0..1 waveform level:
 /// -60 dBm0 and below is 0, 0 dBm0 is 1, linear in between.
@@ -29,6 +30,8 @@ final class VpLinphoneEngine implements CallEngine {
     : _host = hostApi ?? VpLinphoneHostApi(binaryMessenger: binaryMessenger) {
     _events = _Events(this);
     VpLinphoneEventsApi.setUp(_events, binaryMessenger: binaryMessenger);
+    // A push may have woken the engine before Flutter ran: catch up.
+    unawaited(_host.syncState().catchError((Object _) {}));
   }
 
   final VpLinphoneHostApi _host;
@@ -41,6 +44,9 @@ final class VpLinphoneEngine implements CallEngine {
   final _calls = StreamController<CallSnapshot>.broadcast();
   final _audio = StreamController<AudioState>.broadcast();
   final _level = StreamController<double>.broadcast();
+  final _pushes = StreamController<VpPushMessage>.broadcast();
+  final _ui = StreamController<VpUiRequest>.broadcast();
+  final _fsiDenied = StreamController<String>.broadcast();
   final Map<String, CallSnapshot> _active = {};
 
   /// The receiving end of the Kotlin events, for tests that play the platform.
@@ -225,6 +231,70 @@ final class VpLinphoneEngine implements CallEngine {
 
   void _onInputLevel(double dbm0) => _level.add(levelFromDbm0(dbm0));
 
+  void _onPush(PushMsg m) {
+    final p = _pushFrom(m);
+    if (p != null) _pushes.add(p);
+  }
+
+  void _onUiRequest(UiRequestMsg m) => _ui.add(_uiFrom(m));
+
+  static VpPushMessage? _pushFrom(PushMsg m) {
+    final type = switch (m.type) {
+      PushTypeMsg.voicemail => VpPushType.voicemail,
+      PushTypeMsg.message => VpPushType.message,
+      PushTypeMsg.signedOut => VpPushType.signedOut,
+      PushTypeMsg.config => VpPushType.config,
+      PushTypeMsg.incomingCall || PushTypeMsg.callCancelled => null,
+    };
+    if (type == null) return null;
+    return VpPushMessage(type, m.pushId, sentAt: m.sentAt == null ? null : DateTime.tryParse(m.sentAt!)?.toUtc());
+  }
+
+  static VpUiRequest _uiFrom(UiRequestMsg m) => VpUiRequest(
+    m.kind == UiRequestKindMsg.showIncoming ? VpUiRequestKind.showIncoming : VpUiRequestKind.showCall,
+    m.callId,
+  );
+
+  // ------------------------------------------------------------ Android extras (WS4)
+
+  /// Pushes for the app (`voicemail`, `message`, `signed_out`, `config`) while it runs.
+  Stream<VpPushMessage> get pushMessages => _pushes.stream;
+
+  /// Pushes that arrived while the app was not running, oldest first; once.
+  Future<List<VpPushMessage>> takePendingPushes() async => [
+    for (final m in await _guard(_host.takePendingPushes)) ?_pushFrom(m),
+  ];
+
+  /// Screen requests from the incoming-call notification (the route hook for
+  /// AppIncoming and AppInCall).
+  Stream<VpUiRequest> get uiRequests => _ui.stream;
+
+  /// The request the app was launched with (a cold start from the
+  /// notification), once; null when there is none.
+  Future<VpUiRequest?> takeUiRequest() async {
+    final m = await _guard(_host.takeUiRequest);
+    return m == null ? null : _uiFrom(m);
+  }
+
+  /// Call ids shown as a heads-up notification because Android 14+ refused
+  /// the full-screen intent; the app can explain and offer the setting.
+  Stream<String> get fullScreenIntentDenied => _fsiDenied.stream;
+
+  Future<bool> canUseFullScreenIntent() => _guard(_host.canUseFullScreenIntent);
+  Future<void> openFullScreenIntentSettings() => _guard(_host.openFullScreenIntentSettings);
+
+  Future<VpBatteryStatus> batteryStatus() async {
+    final b = await _guard(_host.batteryStatus);
+    return VpBatteryStatus(
+      ignoringOptimizations: b.ignoringOptimizations,
+      lateWakesLastWeek: b.lateWakesLastWeek,
+      manufacturer: b.manufacturer,
+    );
+  }
+
+  /// Android's battery optimisation list (no permission, no exemption request).
+  Future<void> openBatteryOptimizationSettings() => _guard(_host.openBatteryOptimizationSettings);
+
   static DateTime? _time(int? ms) => ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
 }
 
@@ -243,4 +313,13 @@ final class _Events implements VpLinphoneEventsApi {
 
   @override
   void onInputLevel(double dbm0) => _engine._onInputLevel(dbm0);
+
+  @override
+  void onPush(PushMsg push) => _engine._onPush(push);
+
+  @override
+  void onUiRequest(UiRequestMsg request) => _engine._onUiRequest(request);
+
+  @override
+  void onFullScreenIntentDenied(String callId) => _engine._fsiDenied.add(callId);
 }

@@ -108,6 +108,12 @@ enum EndReasonMsg { local, remote, declined, busy, noAnswer, answeredElsewhere, 
 
 enum AudioRouteMsg { earpiece, speaker, bluetooth, wiredHeadset, car }
 
+/// The contract's PushMessage types (app-api.openapi.yaml). Only the four the
+/// app handles reach Dart; incoming_call and call_cancelled are native.
+enum PushTypeMsg { incomingCall, callCancelled, voicemail, message, signedOut, config }
+
+enum UiRequestKindMsg { showIncoming, showCall }
+
 class RegistrationMsg {
   RegistrationMsg({required this.state, this.failure, this.sipCode});
 
@@ -332,6 +338,144 @@ class AudioMsg {
   }
 }
 
+class PushMsg {
+  PushMsg({required this.type, required this.pushId, this.sentAt});
+
+  PushTypeMsg type;
+
+  String pushId;
+
+  String? sentAt;
+
+  List<Object?> _toList() {
+    return <Object?>[type, pushId, sentAt];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static PushMsg decode(Object result) {
+    result as List<Object?>;
+    return PushMsg(type: result[0]! as PushTypeMsg, pushId: result[1]! as String, sentAt: result[2] as String?);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PushMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(type, other.type) && _deepEquals(pushId, other.pushId) && _deepEquals(sentAt, other.sentAt);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PushMsg(type: $type, pushId: $pushId, sentAt: $sentAt)';
+  }
+}
+
+/// Asks the app (WS4) to show a screen: from a notification tap, the
+/// full-screen intent on a locked phone, or an answer from the notification.
+class UiRequestMsg {
+  UiRequestMsg({required this.kind, required this.callId});
+
+  UiRequestKindMsg kind;
+
+  String callId;
+
+  List<Object?> _toList() {
+    return <Object?>[kind, callId];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static UiRequestMsg decode(Object result) {
+    result as List<Object?>;
+    return UiRequestMsg(kind: result[0]! as UiRequestKindMsg, callId: result[1]! as String);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! UiRequestMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(kind, other.kind) && _deepEquals(callId, other.callId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'UiRequestMsg(kind: $kind, callId: $callId)';
+  }
+}
+
+class BatteryMsg {
+  BatteryMsg({required this.ignoringOptimizations, required this.lateWakesLastWeek, required this.manufacturer});
+
+  bool ignoringOptimizations;
+
+  int lateWakesLastWeek;
+
+  String manufacturer;
+
+  List<Object?> _toList() {
+    return <Object?>[ignoringOptimizations, lateWakesLastWeek, manufacturer];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static BatteryMsg decode(Object result) {
+    result as List<Object?>;
+    return BatteryMsg(
+      ignoringOptimizations: result[0]! as bool,
+      lateWakesLastWeek: result[1]! as int,
+      manufacturer: result[2]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! BatteryMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(ignoringOptimizations, other.ignoringOptimizations) &&
+        _deepEquals(lateWakesLastWeek, other.lateWakesLastWeek) &&
+        _deepEquals(manufacturer, other.manufacturer);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'BatteryMsg(ignoringOptimizations: $ignoringOptimizations, lateWakesLastWeek: $lateWakesLastWeek, manufacturer: $manufacturer)';
+  }
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -354,14 +498,29 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is AudioRouteMsg) {
       buffer.putUint8(133);
       writeValue(buffer, value.index);
-    } else if (value is RegistrationMsg) {
+    } else if (value is PushTypeMsg) {
       buffer.putUint8(134);
+      writeValue(buffer, value.index);
+    } else if (value is UiRequestKindMsg) {
+      buffer.putUint8(135);
+      writeValue(buffer, value.index);
+    } else if (value is RegistrationMsg) {
+      buffer.putUint8(136);
       writeValue(buffer, value.encode());
     } else if (value is CallMsg) {
-      buffer.putUint8(135);
+      buffer.putUint8(137);
       writeValue(buffer, value.encode());
     } else if (value is AudioMsg) {
-      buffer.putUint8(136);
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    } else if (value is PushMsg) {
+      buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    } else if (value is UiRequestMsg) {
+      buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    } else if (value is BatteryMsg) {
+      buffer.putUint8(141);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -387,11 +546,23 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : AudioRouteMsg.values[value];
       case 134:
-        return RegistrationMsg.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : PushTypeMsg.values[value];
       case 135:
-        return CallMsg.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : UiRequestKindMsg.values[value];
       case 136:
+        return RegistrationMsg.decode(readValue(buffer)!);
+      case 137:
+        return CallMsg.decode(readValue(buffer)!);
+      case 138:
         return AudioMsg.decode(readValue(buffer)!);
+      case 139:
+        return PushMsg.decode(readValue(buffer)!);
+      case 140:
+        return UiRequestMsg.decode(readValue(buffer)!);
+      case 141:
+        return BatteryMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -712,6 +883,129 @@ class VpLinphoneHostApi {
     );
     return pigeonVar_replyValue! as Uint8List;
   }
+
+  /// Re-sends the current registration, calls and audio state (a Flutter
+  /// engine attaching after a push woke the engine natively).
+  Future<void> syncState() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.syncState$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
+  }
+
+  /// Pushes that arrived while no Flutter engine was attached (types only).
+  Future<List<PushMsg>> takePendingPushes() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.takePendingPushes$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as List<Object?>).cast<PushMsg>();
+  }
+
+  /// The UI request the activity was launched with, once.
+  Future<UiRequestMsg?> takeUiRequest() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.takeUiRequest$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return pigeonVar_replyValue as UiRequestMsg?;
+  }
+
+  Future<BatteryMsg> batteryStatus() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.batteryStatus$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as BatteryMsg;
+  }
+
+  Future<void> openBatteryOptimizationSettings() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.openBatteryOptimizationSettings$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
+  }
+
+  /// Android 14+: whether the full-screen incoming-call UI is allowed.
+  Future<bool> canUseFullScreenIntent() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.canUseFullScreenIntent$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as bool;
+  }
+
+  Future<void> openFullScreenIntentSettings() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.openFullScreenIntentSettings$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
+  }
 }
 
 /// Kotlin to Dart events.
@@ -726,6 +1020,14 @@ abstract class VpLinphoneEventsApi {
 
   /// Microphone level of the active call in dBm0 (liblinphone's record volume).
   void onInputLevel(double dbm0);
+
+  void onPush(PushMsg push);
+
+  void onUiRequest(UiRequestMsg request);
+
+  /// An incoming call was shown as a heads-up notification because the
+  /// full-screen intent is not allowed (Android 14+).
+  void onFullScreenIntentDenied(String callId);
 
   static void setUp(VpLinphoneEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -818,6 +1120,81 @@ abstract class VpLinphoneEventsApi {
           final double arg_dbm0 = args[0]! as double;
           try {
             api.onInputLevel(arg_dbm0);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onPush$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final PushMsg arg_push = args[0]! as PushMsg;
+          try {
+            api.onPush(arg_push);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onUiRequest$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final UiRequestMsg arg_request = args[0]! as UiRequestMsg;
+          try {
+            api.onUiRequest(arg_request);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onFullScreenIntentDenied$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String arg_callId = args[0]! as String;
+          try {
+            api.onFullScreenIntentDenied(arg_callId);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

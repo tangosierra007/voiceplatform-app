@@ -30,9 +30,10 @@ import org.linphone.core.TransportType
  * (the foreground service) and lives exactly as long as it does. Everything
  * here runs on the main looper, where liblinphone iterates.
  *
- * Credentials: the password is handed to liblinphone's in-memory AuthInfo and
- * to the log scrubber, never stored on disk (the Core's config has no file),
- * never logged, never in an event.
+ * Credentials: the password is handed to liblinphone's in-memory AuthInfo, to
+ * the log scrubber and to [CredentialStore] (Keystore-encrypted, so a push can
+ * re-register while the app is not running). The Core's config has no file;
+ * the password is never logged and never in an event.
  */
 object LinphoneEngine {
 
@@ -74,6 +75,7 @@ object LinphoneEngine {
         var hdrAlsoRinging: String? = null
         var hdrRepeat: String? = null
         var hdrLastAnswered: String? = null
+        var announced = false
     }
 
     private val calls = LinkedHashMap<String, Tracked>()
@@ -92,7 +94,9 @@ object LinphoneEngine {
     /** The call log file; cheap, no native code loaded. */
     @Synchronized
     fun attach(context: Context) {
+        appContext = context.applicationContext
         if (logFile == null) logFile = CallLogFile(File(context.noBackupFilesDir, "vp_linphone"), scrubber)
+        if (TelecomBridge.control == null) TelecomBridge.control = telecomControl
     }
 
     /** Once per process, before the first Core: no logcat, no liblinphone log files. */
@@ -125,9 +129,20 @@ object LinphoneEngine {
         logFile?.write("ENGINE", message)
     }
 
+    /** For the Telecom and push code: one scrubbed line in the call log. */
+    fun logLine(level: String, message: String) {
+        logFile?.write(level, message)
+    }
+
     // ---------------------------------------------------------------- service lifecycle
 
-    fun requestStart(context: Context, done: (Throwable?) -> Unit) {
+    /** True when CallEngine.start() asked for the engine; a push wake alone leaves it false. */
+    private var startedByApp = false
+    private var appContext: Context? = null
+
+    fun requestStart(context: Context, byApp: Boolean = true, done: (Throwable?) -> Unit) {
+        appContext = context.applicationContext
+        if (byApp) startedByApp = true
         if (core != null) return done(null)
         startWaiters += done
         if (startWaiters.size > 1) return
@@ -139,6 +154,7 @@ object LinphoneEngine {
     }
 
     fun requestStop(context: Context, done: () -> Unit) {
+        startedByApp = false
         if (core == null && service == null) return done()
         stopWaiters += done
         context.stopService(Intent(context, EngineService::class.java))
@@ -243,6 +259,8 @@ object LinphoneEngine {
         c.disableChat(Reason.NotImplemented)
         // The platform's no-answer timer decides when ringing stops.
         c.incTimeout = 600
+        // The incoming-call notification rings (ringtone channel), not liblinphone.
+        c.disableCallRinging(true)
         c.isKeepAliveEnabled = true
         applyCodecOrder(c)
     }
@@ -313,6 +331,8 @@ object LinphoneEngine {
         params.isPublishEnabled = false
         params.pushNotificationAllowed = false
         params.remotePushNotificationAllowed = false
+        // Stopping the engine after a push wake must keep the push contact.
+        params.isUnregisterAtStopEnabled = false
         applyPush(params, pushProvider, pushPrid, pushParam)
 
         val auth = factory.createAuthInfo(authUsername, null, password, null, null, sipDomain)
@@ -323,6 +343,16 @@ object LinphoneEngine {
         account = acc
         authInfo = auth
         domain = sipDomain
+        appContext?.let {
+            runCatching {
+                CredentialStore(it).save(
+                    AccountRecord(
+                        authUsername, password, sipDomain, outboundProxy, displayName, expiresSeconds, instanceId,
+                        pushProvider, pushPrid, pushParam,
+                    ),
+                )
+            }.onFailure { e -> log("account not kept for push wakes: ${e.javaClass.simpleName}") }
+        }
         log("register ${if (pushPrid != null) "with" else "without"} push params, expires $expiresSeconds")
     }
 
@@ -344,10 +374,15 @@ object LinphoneEngine {
         applyPush(params, provider, prid, param)
         acc.setParams(params)
         acc.refreshRegister()
+        appContext?.let { ctx ->
+            val store = CredentialStore(ctx)
+            store.load()?.let { store.save(it.copy(pushProvider = provider, pushPrid = prid, pushParam = param)) }
+        }
         log("push params updated")
     }
 
     fun unregister(done: () -> Unit) {
+        appContext?.let { CredentialStore(it).clear() }
         val c = core
         val acc = account
         if (c == null || acc == null) {
@@ -396,7 +431,10 @@ object LinphoneEngine {
         val event = when (state) {
             RegistrationState.None -> RegistrationMsg(RegStateMsg.NONE)
             RegistrationState.Progress -> RegistrationMsg(RegStateMsg.PROGRESS)
-            RegistrationState.Ok -> RegistrationMsg(RegStateMsg.OK, sipCode = 200)
+            RegistrationState.Ok -> {
+                appContext?.let { VpPush.get(it).onRegistered() }
+                RegistrationMsg(RegStateMsg.OK, sipCode = 200)
+            }
             RegistrationState.Cleared -> RegistrationMsg(RegStateMsg.CLEARED)
             RegistrationState.Failed -> {
                 val ei = acc.errorInfo
@@ -468,6 +506,7 @@ object LinphoneEngine {
             ?: throw VpFlutterError("invalid_state", "Call could not be placed")
         val t = track(call)
         log("call ${t.id} outgoing")
+        service?.let { TelecomBridge.placeOutgoing(it, TelecomBridge.CallInfo(t.id, false, Rules.dialString(number), null)) }
         emitCall(t)
         return t.id
     }
@@ -607,6 +646,13 @@ object LinphoneEngine {
     // ---------------------------------------------------------------- audio
 
     fun setAudioRoute(route: AudioRouteMsg) {
+        // With a Telecom connection up, Telecom owns the route (Bluetooth, car).
+        if (TelecomBridge.requestRoute(route)) return
+        applyLinphoneRoute(route)
+        emitAudio()
+    }
+
+    private fun applyLinphoneRoute(route: AudioRouteMsg) {
         val c = requireCore()
         val devices = c.audioDevices
         val out = Mapping.deviceTypes(route).firstNotNullOfOrNull { type ->
@@ -626,10 +672,12 @@ object LinphoneEngine {
             t.call.outputAudioDevice = out
             input?.let { t.call.inputAudioDevice = it }
         }
-        emitAudio()
     }
 
+    private var telecomAudio: AudioMsg? = null
+
     private fun emitAudio() {
+        if (TelecomBridge.hasConnections) telecomAudio?.let { msg -> listeners.forEach { it.onAudio(msg) }; return }
         val c = core ?: return
         val devices = c.audioDevices
         val available = devices
@@ -652,6 +700,99 @@ object LinphoneEngine {
             }
             main.postDelayed(this, LEVEL_INTERVAL_MS)
         }
+    }
+
+    // ---------------------------------------------------------------- Telecom and push
+
+    val hasLiveCall: Boolean get() = calls.values.any { it.state != CallStateMsg.ENDED }
+
+    /** Engine commands from the system UI, headsets and cars, through Telecom. */
+    private val telecomControl = object : TelecomBridge.Control {
+        override fun execute(command: EngineCommand) {
+            try {
+                when (command) {
+                    is EngineCommand.Answer -> answer(command.callId)
+                    is EngineCommand.Decline -> decline(command.callId)
+                    is EngineCommand.Hangup -> hangup(command.callId)
+                    is EngineCommand.Hold -> hold(command.callId)
+                    is EngineCommand.Resume -> resume(command.callId)
+                    is EngineCommand.Dtmf -> sendDtmf(command.callId, command.digits)
+                }
+            } catch (e: VpFlutterError) {
+                log("system command refused: ${e.code}")
+            }
+        }
+
+        override fun onTelecomAudio(route: AudioRouteMsg, available: List<AudioRouteMsg>) {
+            // Keep liblinphone's devices in step with Telecom's route.
+            runCatching { applyLinphoneRoute(if (route == AudioRouteMsg.CAR) AudioRouteMsg.BLUETOOTH else route) }
+            val msg = AudioMsg(route, available)
+            telecomAudio = msg
+            listeners.forEach { it.onAudio(msg) }
+        }
+
+        override fun onTelecomRefused(callId: String, incoming: Boolean) {
+            val t = calls[callId] ?: return
+            log("call $callId refused by Telecom")
+            runCatching { if (incoming) decline(callId) else hangup(callId) }
+            if (!incoming) t.intent = Mapping.LocalIntent.HANGUP
+        }
+    }
+
+    /**
+     * An `incoming_call` push: start the service and Core if they aren't, then
+     * register with the stored account (same pn-prid), or refresh the
+     * registration that is already there, so the platform relays the INVITE.
+     */
+    fun wakeForPush(context: Context) {
+        requestStart(context, byApp = false) { error ->
+            if (error != null) {
+                log("push wake failed: ${error.javaClass.simpleName}")
+                return@requestStart
+            }
+            val acc = account
+            if (acc != null) {
+                acc.refreshRegister()
+                log("push wake: registration refreshed")
+                return@requestStart
+            }
+            val record = CredentialStore(context).load()
+            if (record == null) {
+                log("push wake: no stored account")
+                return@requestStart
+            }
+            try {
+                register(
+                    record.authUsername, record.password, record.domain, record.outboundProxy, record.displayName,
+                    record.expiresSeconds, record.instanceId, record.pushProvider, record.pushPrid, record.pushParam,
+                )
+                log("push wake: registering")
+            } catch (e: VpFlutterError) {
+                log("push wake: register refused ${e.code}")
+            }
+        }
+    }
+
+    /** After a push wake that brought no call (or `call_cancelled`): stop unless the app started us. */
+    fun sleepAfterPush(context: Context) {
+        if (startedByApp || hasLiveCall) return
+        log("push wake over: engine stops")
+        requestStop(context) {}
+    }
+
+    private fun currentRegistration(): RegistrationMsg = when (account?.state) {
+        RegistrationState.Ok, RegistrationState.Refreshing -> RegistrationMsg(RegStateMsg.OK, sipCode = 200)
+        RegistrationState.Progress -> RegistrationMsg(RegStateMsg.PROGRESS)
+        RegistrationState.Failed -> RegistrationMsg(RegStateMsg.FAILED, RegFailureMsg.UNKNOWN)
+        RegistrationState.Cleared -> RegistrationMsg(RegStateMsg.CLEARED)
+        else -> RegistrationMsg(RegStateMsg.NONE)
+    }
+
+    /** Re-sends everything to a Flutter engine that attaches late (after a push wake). */
+    fun syncState() {
+        emitRegistration(currentRegistration())
+        calls.values.filter { it.state != CallStateMsg.ENDED }.forEach { emitCall(it) }
+        emitAudio()
     }
 
     // ---------------------------------------------------------------- log export
@@ -713,6 +854,8 @@ object LinphoneEngine {
 
     private fun emitCall(t: Tracked) {
         val msg = snapshot(t)
+        appContext?.let { TelecomBridge.onSnapshot(it, msg) }
+        if (msg.state == CallStateMsg.CONNECTED) service?.setInCall(true, micGranted())
         listeners.forEach { it.onCall(msg) }
     }
 
@@ -725,7 +868,25 @@ object LinphoneEngine {
             return
         }
         if (t.state == CallStateMsg.ENDED) return
-        if (state == Call.State.IncomingReceived || state == Call.State.IncomingEarlyMedia) readHeaders(t)
+        if (state == Call.State.IncomingReceived || state == Call.State.IncomingEarlyMedia) {
+            readHeaders(t)
+            if (!t.announced) {
+                t.announced = true
+                appContext?.let { ctx ->
+                    VpPush.get(ctx).onCallArrived()
+                    val remote = call.remoteAddress
+                    TelecomBridge.addIncoming(
+                        ctx,
+                        TelecomBridge.CallInfo(
+                            t.id,
+                            true,
+                            remote.username?.takeIf { it.isNotBlank() } ?: "anonymous",
+                            remote.displayName?.takeIf { it.isNotBlank() },
+                        ),
+                    )
+                }
+            }
+        }
         var mapped = Mapping.callState(state) ?: return
         if (mapped == CallStateMsg.CONNECTED && t.connectedAt == null) t.connectedAt = System.currentTimeMillis()
         if (t.transferring && mapped != CallStateMsg.ENDED) mapped = CallStateMsg.TRANSFERRING
@@ -777,7 +938,9 @@ object LinphoneEngine {
 
         override fun onFirstCallStarted(core: Core) {
             logFile?.beginCall()
-            service?.setInCall(true, micGranted())
+            // phoneCall only while ringing or dialling; microphone is added once
+            // a call is connected (the app may be in the background until then).
+            service?.setInCall(true, false)
             main.removeCallbacks(levelTick)
             main.post(levelTick)
         }

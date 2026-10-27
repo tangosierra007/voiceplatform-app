@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Incoming call on a locked phone (Play: calling app declaration). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- liblinphone's AAR asks for these; the app has no camera or data-sync
          foreground service, and each would need its own Play declaration. -->
@@ -33,5 +35,30 @@
             android:name=".EngineService"
             android:exported="false"
             android:foregroundServiceType="phoneCall|microphone" />
+
+        <!-- Self-managed Telecom calls (MANAGE_OWN_CALLS). -->
+        <service
+            android:name=".VpConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+
+        <!-- FCM data messages, beside firebase_messaging's own receiver: only
+             Google Play services (c2dm SEND) can send to it. -->
+        <receiver
+            android:name=".PushReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".CallActionReceiver"
+            android:exported="false" />
     </application>
 </manifest>

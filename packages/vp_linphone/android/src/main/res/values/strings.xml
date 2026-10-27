@@ -5,4 +5,9 @@
     <string name="vp_linphone_notification_title">VoicePlatform</string>
     <string name="vp_linphone_notification_ready">Ready for calls</string>
     <string name="vp_linphone_notification_in_call">Call in progress</string>
+    <string name="vp_linphone_incoming_channel">Incoming calls</string>
+    <string name="vp_linphone_incoming_silent_channel">Incoming calls (silenced)</string>
+    <string name="vp_linphone_incoming_text">Incoming call</string>
+    <string name="vp_linphone_answer">Answer</string>
+    <string name="vp_linphone_decline">Decline</string>
 </resources>

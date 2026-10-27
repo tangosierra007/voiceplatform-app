@@ -281,6 +281,36 @@ enum class AudioRouteMsg(val raw: Int) {
   }
 }
 
+/**
+ * The contract's PushMessage types (app-api.openapi.yaml). Only the four the
+ * app handles reach Dart; incoming_call and call_cancelled are native.
+ */
+enum class PushTypeMsg(val raw: Int) {
+  INCOMING_CALL(0),
+  CALL_CANCELLED(1),
+  VOICEMAIL(2),
+  MESSAGE(3),
+  SIGNED_OUT(4),
+  CONFIG(5);
+
+  companion object {
+    fun ofRaw(raw: Int): PushTypeMsg? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+enum class UiRequestKindMsg(val raw: Int) {
+  SHOW_INCOMING(0),
+  SHOW_CALL(1);
+
+  companion object {
+    fun ofRaw(raw: Int): UiRequestKindMsg? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class RegistrationMsg (
   val state: RegStateMsg,
@@ -464,6 +494,142 @@ data class AudioMsg (
     return "AudioMsg(route=$route, available=$available)"
   }
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class PushMsg (
+  val type: PushTypeMsg,
+  val pushId: String,
+  val sentAt: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PushMsg {
+      val type = pigeonVar_list[0] as PushTypeMsg
+      val pushId = pigeonVar_list[1] as String
+      val sentAt = pigeonVar_list[2] as String?
+      return PushMsg(type, pushId, sentAt)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      type,
+      pushId,
+      sentAt,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PushMsg
+    return MessagesPigeonUtils.deepEquals(this.type, other.type) && MessagesPigeonUtils.deepEquals(this.pushId, other.pushId) && MessagesPigeonUtils.deepEquals(this.sentAt, other.sentAt)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.type)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.pushId)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.sentAt)
+    return result
+  }
+  override fun toString(): String {
+    return "PushMsg(type=$type, pushId=$pushId, sentAt=$sentAt)"
+  }
+}
+
+/**
+ * Asks the app (WS4) to show a screen: from a notification tap, the
+ * full-screen intent on a locked phone, or an answer from the notification.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class UiRequestMsg (
+  val kind: UiRequestKindMsg,
+  val callId: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): UiRequestMsg {
+      val kind = pigeonVar_list[0] as UiRequestKindMsg
+      val callId = pigeonVar_list[1] as String
+      return UiRequestMsg(kind, callId)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      kind,
+      callId,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as UiRequestMsg
+    return MessagesPigeonUtils.deepEquals(this.kind, other.kind) && MessagesPigeonUtils.deepEquals(this.callId, other.callId)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.kind)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.callId)
+    return result
+  }
+  override fun toString(): String {
+    return "UiRequestMsg(kind=$kind, callId=$callId)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class BatteryMsg (
+  val ignoringOptimizations: Boolean,
+  val lateWakesLastWeek: Long,
+  val manufacturer: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): BatteryMsg {
+      val ignoringOptimizations = pigeonVar_list[0] as Boolean
+      val lateWakesLastWeek = pigeonVar_list[1] as Long
+      val manufacturer = pigeonVar_list[2] as String
+      return BatteryMsg(ignoringOptimizations, lateWakesLastWeek, manufacturer)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      ignoringOptimizations,
+      lateWakesLastWeek,
+      manufacturer,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as BatteryMsg
+    return MessagesPigeonUtils.deepEquals(this.ignoringOptimizations, other.ignoringOptimizations) && MessagesPigeonUtils.deepEquals(this.lateWakesLastWeek, other.lateWakesLastWeek) && MessagesPigeonUtils.deepEquals(this.manufacturer, other.manufacturer)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.ignoringOptimizations)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.lateWakesLastWeek)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.manufacturer)
+    return result
+  }
+  override fun toString(): String {
+    return "BatteryMsg(ignoringOptimizations=$ignoringOptimizations, lateWakesLastWeek=$lateWakesLastWeek, manufacturer=$manufacturer)"
+  }
+}
 private open class MessagesPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -493,18 +659,43 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
         }
       }
       134.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          RegistrationMsg.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          PushTypeMsg.ofRaw(it.toInt())
         }
       }
       135.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          CallMsg.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          UiRequestKindMsg.ofRaw(it.toInt())
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          RegistrationMsg.fromList(it)
+        }
+      }
+      137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          CallMsg.fromList(it)
+        }
+      }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           AudioMsg.fromList(it)
+        }
+      }
+      139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PushMsg.fromList(it)
+        }
+      }
+      140.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          UiRequestMsg.fromList(it)
+        }
+      }
+      141.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          BatteryMsg.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -532,16 +723,36 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.raw.toLong())
       }
-      is RegistrationMsg -> {
+      is PushTypeMsg -> {
         stream.write(134)
+        writeValue(stream, value.raw.toLong())
+      }
+      is UiRequestKindMsg -> {
+        stream.write(135)
+        writeValue(stream, value.raw.toLong())
+      }
+      is RegistrationMsg -> {
+        stream.write(136)
         writeValue(stream, value.toList())
       }
       is CallMsg -> {
-        stream.write(135)
+        stream.write(137)
         writeValue(stream, value.toList())
       }
       is AudioMsg -> {
-        stream.write(136)
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is PushMsg -> {
+        stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is UiRequestMsg -> {
+        stream.write(140)
+        writeValue(stream, value.toList())
+      }
+      is BatteryMsg -> {
+        stream.write(141)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -578,6 +789,20 @@ interface VpLinphoneHostApi {
   fun merge(callIdA: String, callIdB: String)
   fun setAudioRoute(route: AudioRouteMsg)
   suspend fun exportLastCallLog(): ByteArray
+  /**
+   * Re-sends the current registration, calls and audio state (a Flutter
+   * engine attaching after a push woke the engine natively).
+   */
+  fun syncState()
+  /** Pushes that arrived while no Flutter engine was attached (types only). */
+  fun takePendingPushes(): List<PushMsg>
+  /** The UI request the activity was launched with, once. */
+  fun takeUiRequest(): UiRequestMsg?
+  fun batteryStatus(): BatteryMsg
+  fun openBatteryOptimizationSettings()
+  /** Android 14+: whether the full-screen incoming-call UI is allowed. */
+  fun canUseFullScreenIntent(): Boolean
+  fun openFullScreenIntentSettings()
 
   companion object {
     /** The codec used by VpLinphoneHostApi. */
@@ -945,6 +1170,114 @@ interface VpLinphoneHostApi {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.syncState$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.syncState()
+              listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.takePendingPushes$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.takePendingPushes())
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.takeUiRequest$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.takeUiRequest())
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.batteryStatus$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.batteryStatus())
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.openBatteryOptimizationSettings$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.openBatteryOptimizationSettings()
+              listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.canUseFullScreenIntent$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.canUseFullScreenIntent())
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.openFullScreenIntentSettings$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.openFullScreenIntentSettings()
+              listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -1025,6 +1358,67 @@ class VpLinphoneEventsApi(private val binaryMessenger: BinaryMessenger, private 
       val channelName = "dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onInputLevel$separatedMessageChannelSuffix"
       val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
       channel.send(listOf(dbm0Arg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(VpFlutterError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(MessagesPigeonUtils.createConnectionError(channelName))
+        } 
+      }
+    }
+  }
+  suspend fun onPush(pushArg: PushMsg)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onPush$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(pushArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(VpFlutterError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(MessagesPigeonUtils.createConnectionError(channelName))
+        } 
+      }
+    }
+  }
+  suspend fun onUiRequest(requestArg: UiRequestMsg)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onUiRequest$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(requestArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(VpFlutterError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(MessagesPigeonUtils.createConnectionError(channelName))
+        } 
+      }
+    }
+  }
+  /**
+   * An incoming call was shown as a heads-up notification because the
+   * full-screen intent is not allowed (Android 14+).
+   */
+  suspend fun onFullScreenIntentDenied(callIdArg: String)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onFullScreenIntentDenied$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(callIdArg)) {
         if (it is List<*>) {
           if (it.size > 1) {
             continuation.resumeWithException(VpFlutterError(it[0] as String, it[1] as String, it[2] as String?))

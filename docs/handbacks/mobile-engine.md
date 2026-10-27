@@ -136,3 +136,86 @@ Answered by mobile-lead (27 Oct): the contract gained `instanceId` (used for `+s
 2. **Release date.** 5.5.39 was published to Belledonne's repository on 27 Oct. It is pinned as specified. Belledonne's release notes for it were not reviewed.
 3. **Licences still open:** aom, GSM 06.10, BroadVoice16, decaf, WebRTC and liboqs's third-party parts have no established upstream licence, and versions are not confirmed for most third-party components (texts and versions from Belledonne's forks need gitlab.linphone.org access). mswebrtc is settled: GPL-2.0-or-later by its source headers. Previously: native licences are not stated in the SDK (see NOTICE): about 28 components, ML-KEM and libxml2 among them. For distribution, their licence texts have to come from somewhere: the linphone-sdk 5.5.39 source tag, or Belledonne directly. That is a call for you and TJ; nothing in this branch infers them.
 4. **The root app** needs, in 3.2, its merged manifest checked against the spec's permission list. Nothing in `lib/`, the root `pubspec.yaml` or the root `android/` was touched.
+
+## 3.2 (Android) `feat/telecom-fcm`
+
+Branch `feat/telecom-fcm` from `main` at `89752d3`. One PR, not merged.
+
+### What's built
+
+- **Self-managed Telecom** (`VpConnectionService`, `VpConnection`, `TelecomBridge`):
+  - Every call is a Telecom connection: outgoing through `placeCall`, incoming through `addNewIncomingCall`. The PhoneAccount is `CAPABILITY_SELF_MANAGED` with the `sip` and `tel` schemes.
+  - Answer, reject, hold, unhold, disconnect and DTMF from the system, headsets and cars become engine commands through `ConnectionMachine` (pure, JVM-tested). Hanging up a ringing call from a headset is a decline (486) for this device.
+  - Engine snapshots drive the connection: ringing, dialing, active, holding, then disconnected with a cause. The causes are LOCAL, REMOTE, REJECTED, BUSY, MISSED, ERROR and **ANSWERED_ELSEWHERE**, the last from a CANCEL with `cause=200`, which also clears the notification.
+  - **Audio routes** come from Telecom while a connection exists: `CallEndpoint` on Android 14+, `CallAudioState` below.
+    - They feed `CallEngine.audio`, and `setAudioRoute` goes through Telecom; liblinphone's devices follow.
+    - `car` is a Bluetooth endpoint whose device class is car audio (needs `BLUETOOTH_CONNECT`); otherwise it shows as `bluetooth`.
+- **Emergency:** `placeCall`, the outgoing connection request, `call()` and the address builder all refuse 000, 112 and 106 first. There is never a self-managed emergency call, whoever asks Telecom for one.
+- **Incoming notification** (`IncomingCallNotifier`):
+  - CallStyle with Answer and Decline, on a ringtone channel (insistent). liblinphone's own ringing is off.
+  - It carries a full-screen intent to the app's activity. On Android 14+ without the permission it falls back to a plain heads-up notification with the two actions, because Android refuses a CallStyle notification without a full-screen intent. The fallback is reported to Dart.
+  - Answer opens the app and answers, so the microphone is used while the app is in front. Decline is a broadcast.
+  - The plugin (`ActivityAware`) shows the activity over the lock screen and turns the screen on while a call rings.
+- **Route hook for WS4:**
+  - `VpLinphoneEngine.uiRequests` (`showIncoming` and `showCall` with the call id) and `takeUiRequest()` for a cold start.
+  - `fullScreenIntentDenied`, `canUseFullScreenIntent()` and `openFullScreenIntentSettings()`.
+  - No Flutter screens.
+- **FCM:**
+  - `firebase_core` 5.1.0 and `firebase_messaging` 17.0.1 (pinned) give the token: `VpPushTokens.start()`.
+  - On a refresh, `VpPushTokens` calls `CallEngine.updatePush` and emits on `tokens`; that stream is the hook for `PUT /devices/me/push-token`.
+  - Data messages are received **natively** by `PushReceiver`, which sits beside firebase_messaging's receiver on the same c2dm broadcast. An incoming call therefore never waits for Flutter to start.
+- **`PushHandler`** (pure; JVM-tested with a fake clock):
+  - `incoming_call` starts the service (`phoneCall`) and the Core, and registers again with the stored account and the same pn-prid. If a registration is already up, it refreshes it.
+  - The 8 s budget runs from `sentAt` (from receipt when `sentAt` is missing). A later registration goes into `WakeLog`.
+  - `call_cancelled` ends the wake at once unless a call is up.
+  - With no INVITE within 30 s, the engine goes back to sleep.
+  - Duplicate `pushId`s are dropped.
+  - `voicemail`, `message`, `signed_out` and `config` go to `VpLinphoneEngine.pushMessages`. If no Flutter engine is attached, they are kept (types only, at most 20) for `takePendingPushes()`.
+- **Account for push wakes:** `CredentialStore` keeps the account register() was given, AES-256-GCM under an Android Keystore key, in `noBackupFilesDir`. It is cleared by unregister(), and nothing reads it back through the Flutter API (APP4).
+  - The account is registered with `unregisterAtStop` off, so stopping the engine after a wake keeps the push contact.
+- **Microphone:** the foreground service is `phoneCall` while ringing or dialling. It adds `microphone` once a call is connected.
+- **Battery** (no `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`): `batteryStatus()` gives whether the app is ignoring optimisations, the late wakes in the last 7 days and `Build.MANUFACTURER`. `openBatteryOptimizationSettings()` opens `ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`.
+- **Root app:** the google-services Gradle plugin is in `android/settings.gradle.kts` and `android/app/build.gradle.kts` (outside the signing block). The root app still doesn't depend on vp_linphone (4.2).
+- **NOTICE:** firebase_core, firebase_messaging, the Firebase Android SDK and the google-services plugin.
+
+### Tests
+
+- `flutter analyze` (package, example, root app): clean.
+- `flutter test` (package): 70 pass. The new `android_extras_test.dart` covers the push, UI-request and full-screen-intent streams, pending pushes, battery, and `VpPushTokens` with a fake token source.
+- Kotlin JVM tests: 55 pass, including:
+  - `ConnectionMachineTest`: the state machine, system events and disconnect causes.
+  - `PushHandlerTest`: dedupe, wake, late registration counted from receipt and from `sentAt`, cancel, the idle timeout and delivery, with a fake clock and scheduler.
+  - `AccountRecordTest`.
+- Example and root debug APKs build.
+
+### On TJ's A53 (Android 15), with a fake engine behind TelecomBridge (no SIP, no FCM send)
+
+- An incoming call rings in Telecom, with the CallStyle heads-up showing Answer and Decline.
+- Answer from the notification opens the app, makes the call ACTIVE and sends `showCall`.
+- Decline gives DisconnectCause REJECTED.
+- The headset key answers a ringing call and hangs up an active one.
+- "Answered elsewhere" gives ANSWERED_ELSEWHERE, and the notification is cleared.
+- An outgoing call goes DIALING, then ACTIVE.
+- Endpoints reported: earpiece and speaker.
+- On a locked screen the full-screen intent shows the activity over the keyguard and sends `showIncoming`.
+- With the full-screen intent denied (appops), the call falls back to a plain heads-up and Dart gets `fullScreenIntentDenied`. This test found a crash, now fixed: Android refuses a CallStyle notification without a full-screen intent.
+- A simulated `incoming_call` push starts the service (type `phoneCall`, 0x4). `call_cancelled` stopped it within 1.5 s; with no call, the 30 s idle timeout stopped it.
+- A `voicemail` push reached the Dart stream.
+- `call('000')` threw `EmergencyNumberUseDialler`.
+- Battery status read `ignoring=false late=0 samsung`.
+
+Not verified: a real SIP INVITE or FCM message, Bluetooth or car routes (none paired), and microphone capture on an answer from the lock screen.
+
+### Deviations
+
+- **Credentials at rest.** For push wakes, the account (password included) is kept Keystore-encrypted on the device. In 3.1 it was in memory only; spec 22 allows "memory and the platform keystore".
+- **Pushes for the app** are received natively and forwarded to Dart. firebase_messaging is used for the token only (no `onMessage` or background isolate).
+- **Example app:** it has bench-only Kotlin, a fake engine and a simulated push, that is not in the plugin's API. It has no google-services config, so `VpPushTokens.start()` returns null there.
+- **SDK package:** the FlutterFire Gradle build installed Android SDK Platform 34 (`platforms;android-34`, 95 MB) automatically.
+
+### Open questions
+
+1. firebase_messaging 17 deprecates `getToken`/`onTokenRefresh` for `register()`/`onRegistered`, which give a Firebase Installation ID as the send target. We keep the FCM token as pn-prid. Moving needs WS2's push gateway to send to the new target.
+2. Microphone from the lock screen. Answering from Telecom or a headset while the app is in the background adds the `microphone` foreground-service type when the call connects; Android may refuse that from the background, and the code then falls back to `phoneCall` only. This needs a live call test. If capture is silent, the fix is to open the activity on answer, as the notification's Answer button does.
+3. The root app must depend on vp_linphone and call `VpLinphoneEngine`, `VpPushTokens.start()` and `addVpLinphoneLicenses()` (4.2). The Firebase Android SDK's Apache-2.0 texts are not in Flutter's LicenseRegistry; they would need an oss-licenses step.
+4. `POST_NOTIFICATIONS` and `BLUETOOTH_CONNECT` are runtime permissions WS4 must ask for. Without the first, Telecom still has the call but no notification shows.

@@ -50,13 +50,19 @@ class EngineService : Service() {
     }
 
     /** Called by the engine when the first call starts and the last one ends. */
+    private var micType = false
+
     fun setInCall(inCall: Boolean, mic: Boolean) {
+        val wantMic = inCall && mic
+        if (this.inCall == inCall && micType == wantMic) return
         this.inCall = inCall
         try {
-            goForeground(inCall, mic)
+            goForeground(inCall, wantMic)
+            micType = wantMic
         } catch (e: RuntimeException) {
             // Keep the phoneCall type if the microphone type is refused.
-            if (mic) goForeground(inCall, mic = false)
+            micType = false
+            if (wantMic) goForeground(inCall, mic = false)
         }
     }
 
