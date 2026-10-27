@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vp_linphone/vp_linphone.dart';
 
 import 'app.dart';
 import 'net/api.dart';
@@ -13,9 +14,8 @@ import 'theme/theme_preference.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicences();
-  // TODO(4.2): once vp_linphone (app PR #5) is a dependency, call
-  // addVpLinphoneLicenses() here so its native components' licence texts
-  // appear under Open source licences.
+  // The SIP engine's native components (liblinphone and the rest).
+  addVpLinphoneLicenses();
   final prefs = await SharedPreferences.getInstance();
   final info = await PackageInfo.fromPlatform();
   final model = await _deviceModel();

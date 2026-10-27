@@ -241,10 +241,44 @@ class MockServer {
           return await r.error(401, 'token_expired', 'Access token expired');
         }
       }
+      // Like the API's zod schemas: an optional field may be left out but
+      // never sent as null (only CallSettingsPatch's clearable fields are
+      // nullable in the contract).
+      final json = req.headers.contentType?.mimeType == 'application/json';
+      if (json && !path.endsWith('/me/call-settings')) {
+        final raw = utf8.decode(await r.bytes());
+        if (raw.isNotEmpty) {
+          final where = _nullAt(jsonDecode(raw), '');
+          if (where != null) {
+            return await r.error(
+              400,
+              'validation',
+              '$where: Expected string, received null',
+            );
+          }
+        }
+      }
       await route.$4(r);
     } catch (e) {
       if (!r.done) await r.error(500, 'mock_error', '$e');
     }
+  }
+
+  /// The path of the first null in [v], or null when there is none.
+  static String? _nullAt(Object? v, String at) {
+    if (v == null) return at.isEmpty ? '(body)' : at;
+    if (v is Map) {
+      for (final e in v.entries) {
+        final hit = _nullAt(e.value, at.isEmpty ? '${e.key}' : '$at.${e.key}');
+        if (hit != null) return hit;
+      }
+    } else if (v is List) {
+      for (var i = 0; i < v.length; i++) {
+        final hit = _nullAt(v[i], '$at[$i]');
+        if (hit != null) return hit;
+      }
+    }
+    return null;
   }
 
   static String? _appVersion(String? header) {
@@ -1012,12 +1046,15 @@ class _Req {
 
   Map<String, String> get query => req.uri.queryParameters;
 
+  Uint8List? _bytes;
+
   Future<Uint8List> bytes() async {
+    if (_bytes != null) return _bytes!;
     final b = BytesBuilder(copy: false);
     await for (final chunk in req) {
       b.add(chunk);
     }
-    return b.takeBytes();
+    return _bytes = b.takeBytes();
   }
 
   Future<Map<String, Object?>> body() async {

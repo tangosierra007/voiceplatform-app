@@ -20,6 +20,6 @@ Map<String, dynamic> _$SharedContactToJson(SharedContact instance) =>
     <String, dynamic>{
       'id': instance.id,
       'name': instance.name,
-      'company': instance.company,
-      'numbers': instance.numbers,
+      'company': ?instance.company,
+      'numbers': instance.numbers.map((e) => e.toJson()).toList(),
     };

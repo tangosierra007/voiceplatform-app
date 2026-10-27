@@ -14,7 +14,7 @@ AppConfig _$AppConfigFromJson(Map<String, dynamic> json) => AppConfig(
 );
 
 Map<String, dynamic> _$AppConfigToJson(AppConfig instance) => <String, dynamic>{
-  'platform': instance.platform,
+  'platform': instance.platform.toJson(),
   'minimumVersion': instance.minimumVersion,
   'recommendedVersion': instance.recommendedVersion,
   'storeUrl': instance.storeUrl,

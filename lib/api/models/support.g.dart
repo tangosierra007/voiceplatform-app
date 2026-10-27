@@ -11,5 +11,5 @@ Support _$SupportFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$SupportToJson(Support instance) => <String, dynamic>{
   'name': instance.name,
-  'phone': instance.phone,
+  'phone': ?instance.phone,
 };

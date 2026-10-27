@@ -22,8 +22,8 @@ PresenceEntry _$PresenceEntryFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$PresenceEntryToJson(PresenceEntry instance) =>
     <String, dynamic>{
       'extension': instance.extensionValue,
-      'presence': instance.presence,
-      'since': instance.since?.toIso8601String(),
-      'dndUntil': instance.dndUntil?.toIso8601String(),
-      'detail': instance.detail,
+      'presence': instance.presence.toJson(),
+      'since': ?instance.since?.toIso8601String(),
+      'dndUntil': ?instance.dndUntil?.toIso8601String(),
+      'detail': ?instance.detail,
     };

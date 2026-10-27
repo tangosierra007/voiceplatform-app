@@ -16,6 +16,6 @@ OverrideInput _$OverrideInputFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$OverrideInputToJson(OverrideInput instance) =>
     <String, dynamic>{
-      'mode': instance.mode,
-      'until': instance.until?.toIso8601String(),
+      'mode': instance.mode.toJson(),
+      'until': ?instance.until?.toIso8601String(),
     };

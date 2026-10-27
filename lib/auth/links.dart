@@ -6,7 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'auth.dart';
 
-/// The sign-in links the app answers (spec 22, Sign-in items 2 to 5).
+/// The one sign-in link the app answers: the email's App Link (spec 22,
+/// Sign-in items 2 to 4). The portal's QR (`vpapp://signin/<token>`) is read
+/// only by the in-app scanner; a `vpapp` link from another app does nothing,
+/// so nothing outside the app can sign this phone in (login CSRF).
 sealed class SignInLink {
   const SignInLink();
 }
@@ -18,12 +21,6 @@ final class EmailSignInLink extends SignInLink {
   final String linkToken;
 }
 
-/// `vpapp://signin/<token>` from the portal's QR.
-final class QrSignInLink extends SignInLink {
-  const QrSignInLink(this.token);
-  final String token;
-}
-
 SignInLink? parseSignInLink(Uri uri) {
   final seg = uri.pathSegments.where((s) => s.isNotEmpty).toList();
   if (uri.scheme == 'https' &&
@@ -32,11 +29,11 @@ SignInLink? parseSignInLink(Uri uri) {
       seg[1] == 'signin') {
     return EmailSignInLink(seg[2], seg[3]);
   }
-  final qr = qrSignInToken(uri.toString());
-  return qr == null ? null : QrSignInLink(qr);
+  return null;
 }
 
-/// The token in `vpapp://signin/<token>`, or null.
+/// The token in a scanned `vpapp://signin/<token>`, or null. For the in-app
+/// scanner only.
 String? qrSignInToken(String text) {
   final uri = Uri.tryParse(text.trim());
   if (uri == null || uri.scheme != 'vpapp' || uri.host != 'signin') {
@@ -51,7 +48,7 @@ final incomingLinksProvider = Provider<Stream<Uri>>(
   (ref) => AppLinks().uriLinkStream,
 );
 
-/// Completes sign-in from a link. A link for a request this phone did not
+/// Completes sign-in from the email's link. A link for a request this phone did not
 /// make (forwarded, or the app restarted and lost the secret) shows "This
 /// link only signs in the phone that asked for it" on AppSignIn.
 class SignInLinkListener extends ConsumerStatefulWidget {
@@ -86,8 +83,6 @@ class _SignInLinkListenerState extends ConsumerState<SignInLinkListener> {
       switch (link) {
         case EmailSignInLink(:final requestId, :final linkToken):
           await auth.completeWithLink(requestId, linkToken);
-        case QrSignInLink(:final token):
-          await auth.completeWithQr(token);
       }
     } on SignInFailure catch (e) {
       if (e.message.isNotEmpty && e.code != 'not_this_phone') {

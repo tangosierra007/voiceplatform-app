@@ -13,4 +13,7 @@ ViaDeskPhoneInput _$ViaDeskPhoneInputFromJson(Map<String, dynamic> json) =>
     );
 
 Map<String, dynamic> _$ViaDeskPhoneInputToJson(ViaDeskPhoneInput instance) =>
-    <String, dynamic>{'number': instance.number, 'callerId': instance.callerId};
+    <String, dynamic>{
+      'number': instance.number,
+      'callerId': ?instance.callerId,
+    };

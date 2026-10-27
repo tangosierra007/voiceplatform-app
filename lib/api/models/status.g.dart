@@ -17,7 +17,7 @@ Status _$StatusFromJson(Map<String, dynamic> json) => Status(
 );
 
 Map<String, dynamic> _$StatusToJson(Status instance) => <String, dynamic>{
-  'status': instance.status,
-  'dndUntil': instance.dndUntil?.toIso8601String(),
-  'changedAt': instance.changedAt?.toIso8601String(),
+  'status': instance.status.toJson(),
+  'dndUntil': ?instance.dndUntil?.toIso8601String(),
+  'changedAt': ?instance.changedAt?.toIso8601String(),
 };

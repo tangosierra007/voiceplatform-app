@@ -25,11 +25,11 @@ DeviceSummary _$DeviceSummaryFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$DeviceSummaryToJson(DeviceSummary instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'kind': instance.kind,
+      'kind': instance.kind.toJson(),
       'label': instance.label,
       'isThisDevice': instance.isThisDevice,
       'rings': instance.rings,
       'canSignOut': instance.canSignOut,
-      'lastSeenAt': instance.lastSeenAt?.toIso8601String(),
-      'signedInAt': instance.signedInAt?.toIso8601String(),
+      'lastSeenAt': ?instance.lastSeenAt?.toIso8601String(),
+      'signedInAt': ?instance.signedInAt?.toIso8601String(),
     };

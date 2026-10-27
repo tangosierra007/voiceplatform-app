@@ -22,8 +22,8 @@ Map<String, dynamic> _$ColleagueToJson(Colleague instance) => <String, dynamic>{
   'name': instance.name,
   'initials': instance.initials,
   'extension': instance.extensionValue,
-  'team': instance.team,
-  'role': instance.role,
-  'mobile': instance.mobile,
-  'presence': instance.presence,
+  'team': ?instance.team,
+  'role': ?instance.role,
+  'mobile': ?instance.mobile,
+  'presence': instance.presence.toJson(),
 };

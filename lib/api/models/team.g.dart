@@ -21,9 +21,9 @@ Team _$TeamFromJson(Map<String, dynamic> json) => Team(
 Map<String, dynamic> _$TeamToJson(Team instance) => <String, dynamic>{
   'id': instance.id,
   'name': instance.name,
-  'number': instance.number,
+  'number': ?instance.number,
   'memberCount': instance.memberCount,
   'freeCount': instance.freeCount,
-  'ringOrder': instance.ringOrder,
+  'ringOrder': ?instance.ringOrder?.toJson(),
   'members': instance.members,
 };

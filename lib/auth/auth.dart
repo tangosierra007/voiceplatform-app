@@ -131,7 +131,9 @@ class AuthController extends Notifier<AuthState> {
   Future<void> _restore() async {
     final stored = await _store.read();
     if (stored == null) {
-      state = const NotSignedIn();
+      // A link opened the app cold and already answered (for example "This
+      // link only signs in the phone that asked for it"): keep its notice.
+      if (state is AuthStarting) state = const NotSignedIn();
       return;
     }
     // Signed in at once (offline still opens the app); the access token

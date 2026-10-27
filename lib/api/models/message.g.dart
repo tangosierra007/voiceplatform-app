@@ -20,10 +20,10 @@ Message _$MessageFromJson(Map<String, dynamic> json) => Message(
 Map<String, dynamic> _$MessageToJson(Message instance) => <String, dynamic>{
   'id': instance.id,
   'threadId': instance.threadId,
-  'direction': instance.direction,
+  'direction': instance.direction.toJson(),
   'at': instance.at.toIso8601String(),
-  'kind': instance.kind,
-  'text': instance.text,
-  'senderName': instance.senderName,
-  'status': instance.status,
+  'kind': instance.kind.toJson(),
+  'text': ?instance.text,
+  'senderName': ?instance.senderName,
+  'status': instance.status.toJson(),
 };

@@ -3,13 +3,15 @@
 //
 //   dart run pigeon --input tool/pigeons/device_keys.dart
 //
+// (Not .g.dart: build_runner would take that for its own output.)
+//
 // The key never leaves the Keystore: Dart sees only the public key and
 // signatures.
 import 'package:pigeon/pigeon.dart';
 
 @ConfigurePigeon(
   PigeonOptions(
-    dartOut: 'lib/platform/device_keys.g.dart',
+    dartOut: 'lib/platform/device_keys.pigeon.dart',
     dartPackageName: 'voiceplatform_app',
     kotlinOut: 'android/app/src/main/kotlin/au/com/voiceplatform/app/keys/DeviceKeysApi.g.kt',
     kotlinOptions: KotlinOptions(package: 'au.com.voiceplatform.app.keys'),

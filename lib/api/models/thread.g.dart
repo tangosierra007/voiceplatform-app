@@ -25,9 +25,9 @@ Map<String, dynamic> _$ThreadToJson(Thread instance) => <String, dynamic>{
   'lineId': instance.lineId,
   'lineLabel': instance.lineLabel,
   'number': instance.number,
-  'name': instance.name,
+  'name': ?instance.name,
   'lastAt': instance.lastAt.toIso8601String(),
   'lastText': instance.lastText,
   'unread': instance.unread,
-  'channel': instance.channel,
+  'channel': ?instance.channel?.toJson(),
 };

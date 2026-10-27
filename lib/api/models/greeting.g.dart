@@ -16,8 +16,8 @@ Greeting _$GreetingFromJson(Map<String, dynamic> json) => Greeting(
 );
 
 Map<String, dynamic> _$GreetingToJson(Greeting instance) => <String, dynamic>{
-  'kind': instance.kind,
+  'kind': instance.kind.toJson(),
   'isCustom': instance.isCustom,
-  'durationSeconds': instance.durationSeconds,
-  'updatedAt': instance.updatedAt?.toIso8601String(),
+  'durationSeconds': ?instance.durationSeconds,
+  'updatedAt': ?instance.updatedAt?.toIso8601String(),
 };

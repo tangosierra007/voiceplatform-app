@@ -18,8 +18,8 @@ Recording _$RecordingFromJson(Map<String, dynamic> json) => Recording(
 Map<String, dynamic> _$RecordingToJson(Recording instance) => <String, dynamic>{
   'id': instance.id,
   'at': instance.at.toIso8601String(),
-  'direction': instance.direction,
+  'direction': instance.direction.toJson(),
   'number': instance.number,
-  'name': instance.name,
+  'name': ?instance.name,
   'durationSeconds': instance.durationSeconds,
 };

@@ -16,6 +16,6 @@ RecordingPage _$RecordingPageFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$RecordingPageToJson(RecordingPage instance) =>
     <String, dynamic>{
-      'items': instance.items,
-      'nextBefore': instance.nextBefore,
+      'items': instance.items.map((e) => e.toJson()).toList(),
+      'nextBefore': ?instance.nextBefore,
     };

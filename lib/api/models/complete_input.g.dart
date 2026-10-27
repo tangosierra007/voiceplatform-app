@@ -18,8 +18,8 @@ CompleteInput _$CompleteInputFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$CompleteInputToJson(CompleteInput instance) =>
     <String, dynamic>{
       'requestSecret': instance.requestSecret,
-      'code': instance.code,
-      'linkToken': instance.linkToken,
+      'code': ?instance.code,
+      'linkToken': ?instance.linkToken,
       'devicePublicKey': instance.devicePublicKey,
-      'device': instance.device,
+      'device': instance.device.toJson(),
     };

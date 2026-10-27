@@ -16,7 +16,7 @@ PushMessage _$PushMessageFromJson(Map<String, dynamic> json) => PushMessage(
 
 Map<String, dynamic> _$PushMessageToJson(PushMessage instance) =>
     <String, dynamic>{
-      'type': instance.type,
+      'type': instance.type.toJson(),
       'pushId': instance.pushId,
-      'sentAt': instance.sentAt?.toIso8601String(),
+      'sentAt': ?instance.sentAt?.toIso8601String(),
     };

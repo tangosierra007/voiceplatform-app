@@ -15,8 +15,8 @@ DeviceInfo _$DeviceInfoFromJson(Map<String, dynamic> json) => DeviceInfo(
 
 Map<String, dynamic> _$DeviceInfoToJson(DeviceInfo instance) =>
     <String, dynamic>{
-      'platform': instance.platform,
+      'platform': instance.platform.toJson(),
       'model': instance.model,
-      'osVersion': instance.osVersion,
+      'osVersion': ?instance.osVersion,
       'appVersion': instance.appVersion,
     };

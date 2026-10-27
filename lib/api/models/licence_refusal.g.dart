@@ -17,9 +17,9 @@ LicenceRefusal _$LicenceRefusalFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$LicenceRefusalToJson(LicenceRefusal instance) =>
     <String, dynamic>{
-      'error': instance.error,
+      'error': instance.error.toJson(),
       'message': instance.message,
-      'extension': instance.extensionValue,
-      'extensionName': instance.extensionName,
-      'refusalToken': instance.refusalToken,
+      'extension': ?instance.extensionValue,
+      'extensionName': ?instance.extensionName,
+      'refusalToken': ?instance.refusalToken,
     };

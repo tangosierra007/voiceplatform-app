@@ -3,12 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
-import 'package:voiceplatform_app/auth/version.dart';
 import 'package:voiceplatform_app/screens/signin/basic_screen.dart';
 import 'package:voiceplatform_app/screens/signin/code_screen.dart';
 import 'package:voiceplatform_app/screens/signin/sign_in_screen.dart';
-import 'package:voiceplatform_app/screens/signin/update_screen.dart';
-import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
 
 import '../support/app_harness.dart';
 import '../support/phone.dart';
@@ -251,76 +248,6 @@ void main() {
     });
   });
 
-  group('AppUpdate', () {
-    testWidgets(
-      'blocks everything; no back; Update now opens the Play listing',
-      (tester) async {
-        usePhone(tester);
-        final phone = FakePhone();
-        await tester.pumpWidget(
-          await appUnderTest(
-            updateRequired: configWithMinimum('1.0.2'),
-            appVersion: '1.0.1',
-            phone: phone,
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(find.byType(UpdateScreen), findsOneWidget);
-        expect(find.byType(VpTabBar), findsNothing);
-        expect(find.text('Update to keep calling'), findsOneWidget);
-        expect(
-          find.textContaining('This version (1.0.1) can no longer'),
-          findsOneWidget,
-        );
-        expect(
-          find.text("For emergencies, use your phone's dialler."),
-          findsOneWidget,
-        );
-
-        final popped = await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(popped, isTrue, reason: 'the back press is taken and ignored');
-        expect(find.byType(UpdateScreen), findsOneWidget);
-
-        await tester.tap(find.text('Update now'));
-        await tester.pump();
-        expect(phone.opened.single, contains('id=au.com.voiceplatform.app'));
-      },
-    );
-
-    testWidgets('the recommended-version banner on the tabs, until Not now', (
-      tester,
-    ) async {
-      usePhone(tester);
-      await tester.pumpWidget(
-        await appUnderTest(
-          config: configWithMinimum('1.0.0', recommended: '1.0.3'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('A new version of the app is ready.'), findsOneWidget);
-      await tester.tap(find.text('Not now'));
-      await tester.pumpAndSettle();
-      expect(find.text('A new version of the app is ready.'), findsNothing);
-    });
-
-    testWidgets('a banner dismissed today stays away', (tester) async {
-      usePhone(tester);
-      final today = DateTime.now();
-      await tester.pumpWidget(
-        await appUnderTest(
-          config: configWithMinimum('1.0.0', recommended: '1.0.3'),
-          prefs: {
-            UpdateBannerNotifier.storageKey:
-                '${today.year}-${today.month}-${today.day}',
-          },
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('A new version of the app is ready.'), findsNothing);
-    });
-  });
-
   group('links', () {
     testWidgets('a forwarded link shows the notice on AppSignIn', (
       tester,
@@ -387,6 +314,43 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
+  });
+
+  group('links (WS6 review)', () {
+    testWidgets('a vpapp link from another app does nothing', (tester) async {
+      usePhone(tester);
+      final links = StreamController<Uri>();
+      addTearDown(links.close);
+      final auth = ScriptedAuth(const NotSignedIn());
+      await tester.pumpWidget(
+        await appUnderTest(authController: auth, links: links.stream),
+      );
+      await tester.pumpAndSettle();
+      links.add(Uri.parse('vpapp://signin/mock-qr-token'));
+      await tester.pumpAndSettle();
+      expect(auth.calls, isEmpty);
+      expect(find.byType(SignInScreen), findsOneWidget);
+    });
+
+    testWidgets(
+      'cold start from a forwarded link keeps the notice (real controller)',
+      (tester) async {
+        usePhone(tester);
+        // The link is there before the stored session is read.
+        final links = Stream<Uri>.value(
+          Uri.parse('https://portal.voiceplatform.com.au/app/signin/r-9/tok'),
+        );
+        await tester.pumpWidget(
+          await appUnderTest(realAuth: true, links: links),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(SignInScreen), findsOneWidget);
+        expect(
+          find.text('This link only signs in the phone that asked for it.'),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }
 

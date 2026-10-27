@@ -15,6 +15,6 @@ MessagePage _$MessagePageFromJson(Map<String, dynamic> json) => MessagePage(
 
 Map<String, dynamic> _$MessagePageToJson(MessagePage instance) =>
     <String, dynamic>{
-      'items': instance.items,
-      'nextBefore': instance.nextBefore,
+      'items': instance.items.map((e) => e.toJson()).toList(),
+      'nextBefore': ?instance.nextBefore,
     };

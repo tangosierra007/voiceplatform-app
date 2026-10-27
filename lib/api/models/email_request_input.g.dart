@@ -17,5 +17,5 @@ Map<String, dynamic> _$EmailRequestInputToJson(EmailRequestInput instance) =>
     <String, dynamic>{
       'email': instance.email,
       'requestSecret': instance.requestSecret,
-      'device': instance.device,
+      'device': instance.device.toJson(),
     };

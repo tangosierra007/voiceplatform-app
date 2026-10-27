@@ -369,4 +369,78 @@ void main() {
     expect(live.consecutiveFailures, 0);
     await live.dispose();
   });
+
+  group('optional fields (zod: missing is fine, null is refused)', () {
+    test('the generated client leaves absent fields out', () {
+      final body = const CompleteInput(
+        requestSecret: 's',
+        code: '123456',
+        devicePublicKey: 'k',
+        device: DeviceInfo(
+          platform: Platform.android,
+          model: 'Pixel 8',
+          appVersion: '1.0.0',
+        ),
+      ).toJson();
+      expect(body.containsKey('linkToken'), isFalse);
+      expect((body['device']! as Map).containsKey('osVersion'), isFalse);
+      expect(body.values, isNot(contains(isNull)));
+    });
+
+    test('the mock refuses a null optional field with 400', () async {
+      final raw = Dio(BaseOptions(baseUrl: server.baseUri.toString()));
+      try {
+        await raw.post<Object?>(
+          '/auth/email-requests',
+          options: Options(headers: {'X-VP-App': 'android/1.0.0'}),
+          data: {
+            'email': SignInFixtures.advancedEmail,
+            'requestSecret': 's',
+            'device': {
+              'platform': 'android',
+              'model': 'Pixel 8',
+              'appVersion': '1.0.0',
+              'osVersion': null,
+            },
+          },
+        );
+        fail('expected 400');
+      } on DioException catch (e) {
+        expect(e.response?.statusCode, 400);
+        expect('${e.response?.data}', contains('device.osVersion'));
+      }
+    });
+
+    test(
+      'a full sign-in through the generated client passes the mock',
+      () async {
+        token = null;
+        final req = await api.signin.postAuthEmailRequests(
+          body: const EmailRequestInput(
+            email: SignInFixtures.advancedEmail,
+            requestSecret: 'secret-n',
+            device: DeviceInfo(
+              platform: Platform.android,
+              model: 'Pixel 8',
+              appVersion: '1.0.0',
+            ),
+          ),
+        );
+        final s = await api.signin.postAuthEmailRequestsRequestIdComplete(
+          requestId: req.requestId,
+          body: const CompleteInput(
+            requestSecret: 'secret-n',
+            code: SignInFixtures.code,
+            devicePublicKey: 'spki',
+            device: DeviceInfo(
+              platform: Platform.android,
+              model: 'Pixel 8',
+              appVersion: '1.0.0',
+            ),
+          ),
+        );
+        expect(s.me.name, 'Ava Nguyen');
+      },
+    );
+  });
 }

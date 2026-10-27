@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
   call_engine:
     path: packages/call_engine
+  vp_linphone:
+    path: packages/vp_linphone
   dio: ^5.11.1
   flutter_riverpod: ^3.4.3
   flutter_svg: ^2.3.0

@@ -16,7 +16,7 @@ HistoryPage _$HistoryPageFromJson(Map<String, dynamic> json) => HistoryPage(
 
 Map<String, dynamic> _$HistoryPageToJson(HistoryPage instance) =>
     <String, dynamic>{
-      'items': instance.items,
-      'nextBefore': instance.nextBefore,
-      'counts': instance.counts,
+      'items': instance.items.map((e) => e.toJson()).toList(),
+      'nextBefore': ?instance.nextBefore,
+      'counts': instance.counts.toJson(),
     };

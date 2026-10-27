@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/auth/session_store.dart';
-import 'package:voiceplatform_app/auth/version.dart';
 import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/platform/device_keys.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
@@ -303,38 +302,6 @@ void main() {
       c2.read(authProvider);
       await pumpEventQueue();
       expect(c2.read(authProvider), isA<SignedIn>());
-    });
-  });
-
-  group('version gate (APP7)', () {
-    test('below the minimum: /config sets AppUpdate', () async {
-      final old = await make(version: '0.9.0');
-      await old.read(appConfigProvider.notifier).check();
-      expect(old.read(updateRequiredProvider)?.minimumVersion, '1.0.0');
-    });
-
-    test('any 426 sets AppUpdate', () async {
-      final old = await make(version: '0.9.0');
-      await expectLater(old.read(appApiProvider).me.getMe(), throwsA(anything));
-      expect(old.read(updateRequiredProvider), isNotNull);
-    });
-
-    test('between minimum and recommended: the banner, once a day', () async {
-      await c.read(appConfigProvider.notifier).check();
-      expect(c.read(updateRequiredProvider), isNull);
-      expect(c.read(updateBannerProvider), isTrue);
-      await c.read(updateBannerProvider.notifier).dismiss();
-      c.invalidate(updateBannerProvider);
-      expect(c.read(updateBannerProvider), isFalse);
-      now = now.add(const Duration(days: 1));
-      c.invalidate(updateBannerProvider);
-      expect(c.read(updateBannerProvider), isTrue);
-    });
-
-    test('at or above recommended: no banner', () async {
-      final current = await make(version: '1.0.2');
-      await current.read(appConfigProvider.notifier).check();
-      expect(current.read(updateBannerProvider), isFalse);
     });
   });
 }

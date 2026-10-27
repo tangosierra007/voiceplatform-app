@@ -13,4 +13,7 @@ PushTokenInput _$PushTokenInputFromJson(Map<String, dynamic> json) =>
     );
 
 Map<String, dynamic> _$PushTokenInputToJson(PushTokenInput instance) =>
-    <String, dynamic>{'provider': instance.provider, 'token': instance.token};
+    <String, dynamic>{
+      'provider': instance.provider.toJson(),
+      'token': instance.token,
+    };

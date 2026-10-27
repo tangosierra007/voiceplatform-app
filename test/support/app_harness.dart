@@ -40,6 +40,9 @@ Future<Widget> appUnderTest({
   LiveEvents? live,
   AuthState auth = const SignedIn('60000000-0000-4000-8000-000000000001'),
   ScriptedAuth? authController,
+
+  /// The real AuthController (empty session store, fake key, no network).
+  bool realAuth = false,
   AppConfig? updateRequired,
   AppConfig? config,
   FakePhone? phone,
@@ -65,7 +68,8 @@ Future<Widget> appUnderTest({
       shellStatusProvider.overrideWithValue(status),
       callEngineProvider.overrideWithValue(e),
       liveEventsProvider.overrideWithValue(live ?? quietLiveEvents()),
-      authProvider.overrideWith(() => authController ?? ScriptedAuth(auth)),
+      if (!realAuth)
+        authProvider.overrideWith(() => authController ?? ScriptedAuth(auth)),
       appConfigProvider.overrideWith(() => NoConfigCheck(config)),
       if (updateRequired != null)
         updateRequiredProvider.overrideWith(

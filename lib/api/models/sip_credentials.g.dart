@@ -27,5 +27,5 @@ Map<String, dynamic> _$SipCredentialsToJson(SipCredentials instance) =>
       'outboundProxy': instance.outboundProxy,
       'displayName': instance.displayName,
       'expiresSeconds': instance.expiresSeconds,
-      'pushParam': instance.pushParam,
+      'pushParam': ?instance.pushParam,
     };

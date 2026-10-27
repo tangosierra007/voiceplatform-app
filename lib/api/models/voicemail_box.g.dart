@@ -18,7 +18,7 @@ Map<String, dynamic> _$VoicemailBoxToJson(VoicemailBox instance) =>
     <String, dynamic>{
       'id': instance.id,
       'name': instance.name,
-      'kind': instance.kind,
+      'kind': instance.kind.toJson(),
       'newCount': instance.newCount,
       'totalCount': instance.totalCount,
     };

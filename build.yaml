@@ -1,0 +1,10 @@
+# build_runner options for the generated API client (dart run tool/gen_api.dart).
+targets:
+  $default:
+    builders:
+      json_serializable:
+        options:
+          # The API's zod schemas take a missing optional field but refuse
+          # null, so absent fields are left out of every request body.
+          include_if_null: false
+          explicit_to_json: true

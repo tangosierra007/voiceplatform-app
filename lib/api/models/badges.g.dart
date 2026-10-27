@@ -12,6 +12,6 @@ Badges _$BadgesFromJson(Map<String, dynamic> json) => Badges(
 );
 
 Map<String, dynamic> _$BadgesToJson(Badges instance) => <String, dynamic>{
-  'recents': instance.recents,
-  'messages': instance.messages,
+  'recents': ?instance.recents,
+  'messages': ?instance.messages,
 };

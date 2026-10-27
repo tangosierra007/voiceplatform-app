@@ -15,6 +15,6 @@ StatusInput _$StatusInputFromJson(Map<String, dynamic> json) => StatusInput(
 
 Map<String, dynamic> _$StatusInputToJson(StatusInput instance) =>
     <String, dynamic>{
-      'status': instance.status,
-      'dndUntil': instance.dndUntil?.toIso8601String(),
+      'status': instance.status.toJson(),
+      'dndUntil': ?instance.dndUntil?.toIso8601String(),
     };

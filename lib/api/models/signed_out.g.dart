@@ -20,10 +20,10 @@ SignedOut _$SignedOutFromJson(Map<String, dynamic> json) => SignedOut(
 );
 
 Map<String, dynamic> _$SignedOutToJson(SignedOut instance) => <String, dynamic>{
-  'error': instance.error,
+  'error': instance.error.toJson(),
   'message': instance.message,
-  'revokedBy': instance.revokedBy,
-  'revokedAt': instance.revokedAt?.toIso8601String(),
-  'extension': instance.extensionValue,
-  'support': instance.support,
+  'revokedBy': ?instance.revokedBy,
+  'revokedAt': ?instance.revokedAt?.toIso8601String(),
+  'extension': ?instance.extensionValue,
+  'support': ?instance.support?.toJson(),
 };

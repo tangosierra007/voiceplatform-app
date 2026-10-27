@@ -21,7 +21,8 @@ abstract interface class SessionStore {
 }
 
 /// flutter_secure_storage: values encrypted with a key held in Android
-/// Keystore; excluded from backups by the plugin.
+/// Keystore. Never in a backup: the app turns backups off as a whole
+/// (`allowBackup=false` and `data_extraction_rules.xml` excluding everything).
 class SecureSessionStore implements SessionStore {
   SecureSessionStore([FlutterSecureStorage? storage])
     : _s = storage ?? const FlutterSecureStorage();

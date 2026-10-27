@@ -21,5 +21,5 @@ Map<String, dynamic> _$SessionToJson(Session instance) => <String, dynamic>{
   'refreshToken': instance.refreshToken,
   'refreshExpiresAt': instance.refreshExpiresAt.toIso8601String(),
   'deviceId': instance.deviceId,
-  'me': instance.me,
+  'me': instance.me.toJson(),
 };

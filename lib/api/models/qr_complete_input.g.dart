@@ -17,5 +17,5 @@ Map<String, dynamic> _$QrCompleteInputToJson(QrCompleteInput instance) =>
     <String, dynamic>{
       'qrToken': instance.qrToken,
       'devicePublicKey': instance.devicePublicKey,
-      'device': instance.device,
+      'device': instance.device.toJson(),
     };

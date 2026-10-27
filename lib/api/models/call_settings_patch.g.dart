@@ -17,9 +17,9 @@ CallSettingsPatch _$CallSettingsPatchFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$CallSettingsPatchToJson(CallSettingsPatch instance) =>
     <String, dynamic>{
-      'ringSeconds': instance.ringSeconds,
-      'followMeTo': instance.followMeTo,
-      'followMeSeconds': instance.followMeSeconds,
-      'followMeConfirm': instance.followMeConfirm,
-      'forwardAlwaysTo': instance.forwardAlwaysTo,
+      'ringSeconds': ?instance.ringSeconds,
+      'followMeTo': ?instance.followMeTo,
+      'followMeSeconds': ?instance.followMeSeconds,
+      'followMeConfirm': ?instance.followMeConfirm,
+      'forwardAlwaysTo': ?instance.forwardAlwaysTo,
     };

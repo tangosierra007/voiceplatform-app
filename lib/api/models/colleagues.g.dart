@@ -18,5 +18,5 @@ Map<String, dynamic> _$ColleaguesToJson(Colleagues instance) =>
     <String, dynamic>{
       'total': instance.total,
       'freeNow': instance.freeNow,
-      'items': instance.items,
+      'items': instance.items.map((e) => e.toJson()).toList(),
     };

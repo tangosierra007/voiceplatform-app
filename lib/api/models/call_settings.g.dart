@@ -20,11 +20,11 @@ CallSettings _$CallSettingsFromJson(Map<String, dynamic> json) => CallSettings(
 
 Map<String, dynamic> _$CallSettingsToJson(CallSettings instance) =>
     <String, dynamic>{
-      'ringDevices': instance.ringDevices,
+      'ringDevices': instance.ringDevices.map((e) => e.toJson()).toList(),
       'ringSeconds': instance.ringSeconds,
-      'followMeTo': instance.followMeTo,
-      'followMeSeconds': instance.followMeSeconds,
-      'followMeConfirm': instance.followMeConfirm,
-      'thenTo': instance.thenTo,
-      'forwardAlwaysTo': instance.forwardAlwaysTo,
+      'followMeTo': ?instance.followMeTo,
+      'followMeSeconds': ?instance.followMeSeconds,
+      'followMeConfirm': ?instance.followMeConfirm,
+      'thenTo': instance.thenTo.toJson(),
+      'forwardAlwaysTo': ?instance.forwardAlwaysTo,
     };

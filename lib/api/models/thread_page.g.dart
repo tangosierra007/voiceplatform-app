@@ -16,7 +16,7 @@ ThreadPage _$ThreadPageFromJson(Map<String, dynamic> json) => ThreadPage(
 
 Map<String, dynamic> _$ThreadPageToJson(ThreadPage instance) =>
     <String, dynamic>{
-      'items': instance.items,
-      'nextBefore': instance.nextBefore,
+      'items': instance.items.map((e) => e.toJson()).toList(),
+      'nextBefore': ?instance.nextBefore,
       'unreadTotal': instance.unreadTotal,
     };

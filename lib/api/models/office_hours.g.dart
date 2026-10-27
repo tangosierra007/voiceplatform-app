@@ -19,8 +19,8 @@ Map<String, dynamic> _$OfficeHoursToJson(OfficeHours instance) =>
     <String, dynamic>{
       'id': instance.id,
       'name': instance.name,
-      'mode': instance.mode,
+      'mode': instance.mode.toJson(),
       'openNow': instance.openNow,
-      'until': instance.until?.toIso8601String(),
-      'summary': instance.summary,
+      'until': ?instance.until?.toIso8601String(),
+      'summary': ?instance.summary,
     };

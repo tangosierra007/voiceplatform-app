@@ -29,9 +29,9 @@ Map<String, dynamic> _$VoicemailMessageToJson(VoicemailMessage instance) =>
       'boxName': instance.boxName,
       'at': instance.at.toIso8601String(),
       'number': instance.number,
-      'name': instance.name,
+      'name': ?instance.name,
       'durationSeconds': instance.durationSeconds,
       'heard': instance.heard,
-      'waveform': instance.waveform,
-      'transcript': instance.transcript,
+      'waveform': ?instance.waveform,
+      'transcript': ?instance.transcript,
     };

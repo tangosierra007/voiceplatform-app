@@ -16,6 +16,6 @@ VoicemailPage _$VoicemailPageFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$VoicemailPageToJson(VoicemailPage instance) =>
     <String, dynamic>{
-      'items': instance.items,
-      'nextBefore': instance.nextBefore,
+      'items': instance.items.map((e) => e.toJson()).toList(),
+      'nextBefore': ?instance.nextBefore,
     };

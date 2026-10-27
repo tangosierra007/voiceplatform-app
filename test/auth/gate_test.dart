@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/auth/links.dart';
@@ -95,10 +97,8 @@ void main() {
 
     test('the QR', () {
       expect(qrSignInToken('vpapp://signin/abc'), 'abc');
-      expect(
-        parseSignInLink(Uri.parse('vpapp://signin/abc')),
-        isA<QrSignInLink>(),
-      );
+      // Read by the in-app scanner only: as a link it does nothing.
+      expect(parseSignInLink(Uri.parse('vpapp://signin/abc')), isNull);
       expect(qrSignInToken('vpapp://other/abc'), isNull);
       expect(qrSignInToken('https://example.com/abc'), isNull);
       expect(qrSignInToken('vpapp://signin/'), isNull);
@@ -113,5 +113,29 @@ void main() {
       );
       expect(parseSignInLink(Uri.parse('tel:000')), isNull);
     });
+  });
+
+  test('the manifest has no vpapp intent filter (QR only via the scanner)', () {
+    final m = File('android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
+    expect(m, isNot(contains('android:scheme="vpapp"')));
+    expect(m, contains('android:autoVerify="true"'));
+  });
+
+  test('backups are off and shared storage permissions removed', () {
+    final m = File('android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
+    expect(m, contains('android:allowBackup="false"'));
+    expect(
+      m,
+      contains('android:dataExtractionRules="@xml/data_extraction_rules"'),
+    );
+    for (final p in ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE']) {
+      expect(
+        m,
+        contains('android.permission.$p" tools:node="remove"'),
+        reason: p,
+      );
+    }
   });
 }

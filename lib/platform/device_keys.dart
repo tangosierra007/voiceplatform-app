@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'device_keys.g.dart';
+import 'device_keys.pigeon.dart';
 
 /// The phone's device key (spec 22, Sign-in item 6): a P-256 key that never
 /// leaves Android Keystore. Its public half goes to the API when sign-in
