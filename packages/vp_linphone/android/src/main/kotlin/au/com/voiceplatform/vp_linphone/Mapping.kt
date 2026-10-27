@@ -37,7 +37,14 @@ object Mapping {
     }
 
     /** What this device asked for, so the end reason says so. */
-    enum class LocalIntent { HANGUP, DECLINE, TO_VOICEMAIL }
+    enum class LocalIntent {
+        HANGUP,
+        DECLINE,
+        TO_VOICEMAIL,
+
+        /** Ended by the engine: its media was not SRTP (APP13). */
+        INSECURE_MEDIA,
+    }
 
     data class EndFacts(
         val incoming: Boolean,
@@ -56,7 +63,13 @@ object Mapping {
             LocalIntent.DECLINE -> return EndReasonMsg.DECLINED
             LocalIntent.TO_VOICEMAIL -> return EndReasonMsg.TO_VOICEMAIL
             LocalIntent.HANGUP -> return EndReasonMsg.LOCAL
+            LocalIntent.INSECURE_MEDIA -> return EndReasonMsg.FAILED
             null -> {}
+        }
+        // 488 Not Acceptable Here: an offer without SRTP refused here, or our
+        // SRTP-only offer refused by the far end (APP13). Never "remote".
+        if (f.reason == Reason.NotAcceptable || f.protocolCode == MediaSecurity.NOT_ACCEPTABLE) {
+            return EndReasonMsg.FAILED
         }
         // CANCEL with Reason: SIP;cause=200;text="Call completed elsewhere".
         if (f.incoming && !f.wasConnected &&

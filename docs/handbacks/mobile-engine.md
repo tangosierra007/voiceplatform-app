@@ -18,7 +18,7 @@ Branch `feat/linphone-plugin` from `main` at `0524434`. One PR, not merged.
 - **Core set-up:**
   - The config has no file (`createConfigFromString("")`), so liblinphone writes no auth info to disk.
   - Client TLS only: UDP and TCP listeners off, a random TLS port. Server certificate and CN verified.
-  - SRTP SDES offered and never mandatory.
+  - SRTP SDES offered and never mandatory. *(Superseded: SRTP is mandatory, APP13; see "SRTP mandatory" below.)*
   - Video off, chat off, liblinphone's own push handling off.
   - DTMF by RFC 4733 only (no SIP INFO).
   - Incoming timeout 600 s, so the platform's no-answer timer decides when ringing stops.
@@ -136,6 +136,47 @@ Answered by mobile-lead (27 Oct): the contract gained `instanceId` (used for `+s
 2. **Release date.** 5.5.39 was published to Belledonne's repository on 27 Oct. It is pinned as specified. Belledonne's release notes for it were not reviewed.
 3. **Licences still open:** aom, GSM 06.10, BroadVoice16, decaf, WebRTC and liboqs's third-party parts have no established upstream licence, and versions are not confirmed for most third-party components (texts and versions from Belledonne's forks need gitlab.linphone.org access). mswebrtc is settled: GPL-2.0-or-later by its source headers. Previously: native licences are not stated in the SDK (see NOTICE): about 28 components, ML-KEM and libxml2 among them. For distribution, their licence texts have to come from somewhere: the linphone-sdk 5.5.39 source tag, or Belledonne directly. That is a call for you and TJ; nothing in this branch infers them.
 4. **The root app** needs, in 3.2, its merged manifest checked against the spec's permission list. Nothing in `lib/`, the root `pubspec.yaml` or the root `android/` was touched.
+
+## SRTP mandatory (APP13, TJ decision) `feat/srtp-mandatory`
+
+Branch `feat/srtp-mandatory` from `main` at `cbce9a0`. One PR, not merged. Required before the first Play upload.
+
+### What's built
+
+- **Policy** (`MediaSecurity.kt`, pure, JVM-tested): SDES-SRTP (`MediaEncryption.SRTP`, RFC 4568 `a=crypto`), as spec 22 says ("SRTP SDES") and as the edge carries it. Not DTLS-SRTP.
+  - **Core** (`configure`): `setMediaEncryption(SRTP)`, `setMediaEncryptionMandatory(true)`, capability negotiation off (with it on, liblinphone can put RTP/AVP on the m-line and offer SRTP only as a potential configuration). The m-line is therefore RTP/SAVP only, never RTP/AVP. If the build has no SRTP, the Core is not started (`MediaSecurity.Unavailable`, reported as a start failure): never plain RTP.
+  - **Call params:** `call()` and `answer()` set `mediaEncryption = SRTP` and capability negotiation off on the INVITE's and the 200 OK's params. Both first refuse (`InvalidState`) if the Core is not mandatory SRTP.
+  - **Account params:** liblinphone 5.5.39's `AccountParams` has no media-encryption setting (only `instantMessagingEncryptionMandatory`, for chat, which is off). Media encryption is per Core and per call.
+- **Falling back to plain RTP is refused or ends the call:**
+  - An incoming offer without crypto: liblinphone (mandatory) answers **488 Not Acceptable Here**; the call never rings.
+  - Our offer refused by the far end with 488 (the edge would not do SRTP): the call ends.
+  - An outgoing call answered without crypto, an incoming late-offer call, or a re-INVITE/UPDATE that drops crypto: every negotiation that leads to audio ends in `StreamsRunning`. There the engine checks `currentParams.mediaEncryption`; anything but SRTP (unknown included) and the call is terminated at once. With encryption mandatory, mediastreamer2 also sends and accepts no unencrypted RTP meanwhile.
+  - **End reason:** the contract's `EndReason.failed` in every case (a 488 either way, or the engine's own end). No contract change.
+- **Diagnostics:** `CallDiagnostics` does not report encryption, so nothing was added there. The call log it exports now has `media encryption SRTP, mandatory true` at Core start, `call <id> media encryption SRTP` at each `StreamsRunning`, and `call <id> ending: media encryption <x>, not SRTP (APP13)` when the engine ends one. `CallSnapshot.encrypted` is unchanged (TLS and SRTP).
+
+### Tests
+
+- Kotlin JVM (`gradlew :vp_linphone:testDebugUnitTest` from `example/android`): 79 pass, including `MediaSecurityTest`:
+  - the Core is SRTP, mandatory, without capability negotiation; no SRTP in the build means no engine; every call's params are SRTP;
+  - a Core that is not mandatory SRTP refuses calls;
+  - running media that is not SRTP (None, unknown, DTLS) ends the call; no other state is checked;
+  - an RTP-only offer refused with 488 (incoming, or our offer refused) and a call the engine ended are `failed`;
+  - source checks: the engine applies the policy to the Core and to both `call()` and `answer()`, and nothing in the plugin sets mandatory to false, `MediaEncryption.None`, or capability negotiation on.
+- `flutter analyze` and `flutter test` (root and packages): see the PR.
+- **Not done:** a two-Core loopback test. This PC has no emulator (no `emulator` package or system image in the SDK, and installing one was out of scope), and the A53 was off limits. So liblinphone's own 488 to a plain offer, and that `currentParams.mediaEncryption` reads SRTP at `StreamsRunning` on a real SDES call, are unproven until the live SIP tests. If the second were wrong every call would end as `failed` at once, so it is the first thing to check on the handset.
+
+### Handset test for TJ
+
+1. A normal call each way through the edge: two-way audio, the Encrypted tag shows, the exported log has `media encryption SRTP`.
+2. With an edge or test UA that offers RTP/AVP only: the INVITE gets 488 and the phone doesn't ring.
+3. A test UA that answers our offer without `a=crypto`: the call ends at once as `failed`.
+4. A re-INVITE without crypto mid-call: refused with 488 (the call goes on, encrypted) or ended as `failed`.
+
+### Open
+
+1. **Edge:** the app now needs the edge to offer and answer RTP/SAVP with SDES on every app branch and app-originated call. PR #117 (WS2 2.2) as read today has no SRTP change (its SIPp scenarios still use RTP/AVP). Until the edge's SRTP-only change lands, every app call fails with 488.
+2. **Store copy:** `docs/store/listing.md` now says every call is encrypted (TLS signalling, SRTP audio). **Do not merge** until the edge offers SDES RTP/SAVP on every app leg (WS2 `feat/app-srtp-mandatory`); merged first, every app call fails with 488.
+3. **Proposed guardrail row** for `docs/guardrails.md` (main repo): APP13, "Every app call's audio is SRTP (SDES), mandatory: the SDP never offers RTP/AVP, and a call that would carry plain RTP is refused (488) or ended (`failed`)". Test: app `MediaSecurityTest`; edge SIPp from WS2. Status: partial until the handset test.
 
 ## 3.2 (Android) `feat/telecom-fcm`
 

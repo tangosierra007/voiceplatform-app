@@ -7,7 +7,7 @@ Draft for task 5.4, following spec 22 (Play data safety) and `privacy-policy.md`
 | Question | Answer |
 | --- | --- |
 | Does the app collect or share any of the required user data types? | Yes |
-| Is all user data collected by the app encrypted in transit? | **Decide.** Yes only if every app call's audio uses SRTP. The API, SIP signalling (TLS) and GlitchTip (HTTPS) are always encrypted, but spec 22 turns SRTP on only when the edge carries it. If call audio can travel as plain RTP, the answer is No. |
+| Is all user data collected by the app encrypted in transit? | **Yes.** Call audio always uses SRTP: it is mandatory on every app call (APP13), and the app refuses or ends a call that would carry plain RTP. SIP signalling uses TLS; the API and GlitchTip use HTTPS. |
 | Do you provide a way for users to request that their data is deleted? | **Decide.** Accounts are created by the workplace's administrator, not in the app. Proposed: yes, through the workplace administrator or the support contact in the privacy policy, with a web page that says so. |
 
 ## Data types
@@ -33,6 +33,6 @@ Draft for task 5.4, following spec 22 (Play data safety) and `privacy-policy.md`
 
 ## Security practices section
 
-- Data is encrypted in transit: as decided above.
+- Data is encrypted in transit: Yes (call audio SRTP, mandatory, APP13; signalling TLS; API and GlitchTip HTTPS).
 - Independent security review: No.
 - Committed to the Play Families policy: Not applicable (not for children).
