@@ -112,7 +112,7 @@ The guard is defence in depth; the `play-internal` environment is the real contr
 - **Shared rules with vp_linphone:** not a shared package. The app scrubber has vp_linphone's placeholders and SIP rules plus wider ones (compound keys, single quotes, more headers, three digit separators). `shared_scrub_cases.dart` is the table both must pass. Proposed: WS3 copies it into `packages/vp_linphone/test/` and adopts the wider rules.
 - **Contacts:** the scrubber drops address-book data by key and category and replaces registered values. WS4's contacts feature must call `DiagnosticsScrubber.instance.rememberAddressBookValues(...)` when it loads contacts. A free-text name that was never registered can't be recognised.
 - **Outside `lib/diagnostics/`:** one added call to `Diagnostics.init` in `lib/main.dart`, and the NDK meta-data in `android/app/src/main/AndroidManifest.xml`.
-- **GlitchTip side (5.2 main repo):** the project should also discard client IPs (no IP stored), since the server can see them on upload.
+- **GlitchTip side:** no client IP reaches GlitchTip; Caddy passes no client-address header (WS6, #108).
 - The release bundle is about 11 MB larger (Sentry's native libraries).
 
 ## 5.4 `docs/store-listing`: store drafts (no uploads)
@@ -123,7 +123,9 @@ Open for mobile-lead or TJ:
 
 - Where the privacy policy is published (a public page) and the support email for the listing.
 - Data deletion answer: accounts come from the workplace administrator; proposed "yes, through the administrator or support", with a page saying so.
-- Call audio in the data safety form: proposed not declared as collected (transmitted live, never recorded or stored by the app). Voicemail greetings are declared as voice recordings.
+- Call audio is declared under voice or sound recordings, processed in transit and not stored (it passes through our servers and isn't end-to-end encrypted). Voicemail greetings are declared there too.
+- "Encrypted in transit": Yes only if every app call uses SRTP. Spec 22 turns SRTP on only when the edge carries it; if audio can be plain RTP, the answer is No.
+- "No IP address" in crash reports, verified: sentry 10.2.0 adds an IP only when `sendDefaultPii` is on (`_createUserOrSetDefaultIpAddress` in `sentry_client.dart`), and it is off. The app scrubber also removes `user` from every event. Caddy passes no client-address header to GlitchTip (WS6, #108), so GlitchTip sees only Caddy's internal address.
 - GlitchTip retention for crash reports: proposed 90 days (the privacy policy says so in brackets).
 - The foreground service video (TJ records it on the handset).
-- `USE_FULL_SCREEN_INTENT` and `READ_CONTACTS` aren't in the manifests yet. The declarations cover them for when WS3 and WS4 add them.
+- `READ_CONTACTS` comes with PR #16 and the full-screen intent with PR #15; the declarations cover both.

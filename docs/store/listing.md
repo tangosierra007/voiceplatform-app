@@ -52,7 +52,7 @@ Draft for task 5.4. Nothing here is uploaded yet. Plain Australian English, sent
 > Calls to 000, 112 and 106 go through your phone's own dialler and mobile network, so emergency services get your location.
 >
 > **Privacy**
-> The app collects only what it needs to work: your work email to sign you in, your phone's model and the app version to manage your devices, and crash reports that are cleaned on your phone before they're sent to servers we run ourselves. It never reads your location, and your phone contacts never leave your phone.
+> The app collects only what it needs to work, such as your work email to sign you in, your phone's model and the app version to manage your devices, and crash reports that are cleaned on your phone before they're sent to servers we run ourselves. It never reads your location, and your phone contacts never leave your phone. The privacy policy lists everything.
 >
 > **Open source**
 > VoicePlatform is free software under the GNU Affero General Public License, version 3. The source code is at github.com/tangosierra007/voiceplatform-app.

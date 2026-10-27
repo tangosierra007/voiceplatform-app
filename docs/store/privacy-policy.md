@@ -14,17 +14,16 @@ This policy covers the VoicePlatform app for Android (package `au.com.voiceplatf
 | Your phone's model and the app version | To show your signed-in devices in the app and the portal, and to tell you when an update is needed. | VoicePlatform's servers. |
 | A push token from Google Firebase Cloud Messaging | To wake the app when a call or text comes in. Push messages carry no names, numbers or message text. | VoicePlatform's servers and Google, which delivers the push. |
 | Crash and error reports | To find and fix faults. Each report is cleaned on your phone before it's sent: passwords, sign-in codes, tokens, email addresses, phone numbers and anything from your phone's contacts are removed. No screenshots and no IP address are included. | A crash reporting server we run ourselves (GlitchTip), not a third-party service. Kept [proposed: 90 days]. |
-| Call logs you choose to send | Only when you tap "Send call logs to support". The log of your last call is cleaned on your phone the same way, then cleaned again on our servers. | VoicePlatform's servers, seen only by support for your workplace. Kept 30 days. |
+| Call logs you choose to send | Only when you tap "Send call logs to support". The log of your last call is cleaned on your phone the same way, then cleaned again on our servers. | VoicePlatform's servers, seen by platform and reseller support for your workplace. Kept 30 days. |
 | Voicemail greetings you record | So callers hear your greeting. | Your workplace's voicemail on VoicePlatform. |
 | Texts you send | To send them from your workplace's mobile line. | Your workplace's account on VoicePlatform, like texts sent from the portal. |
-
-Calls are carried over the internet to VoicePlatform's servers while they're in progress, as with any phone call. The app does not record call audio.
+| Your voice during a call | To carry the call to the other person. | Passes through VoicePlatform's servers while the call is in progress. It isn't end-to-end encrypted, and the app doesn't record or store it. |
 
 ## What the app never collects
 
 - Your phone's contacts. The app reads them on your phone, only after you allow it, to show names. They are never sent to us, to crash reports, to call logs or to push messages.
 - Your location.
-- Call audio. The app doesn't record calls. (If your workplace records calls, that happens on its phone system, not in the app.)
+- Recordings of your calls. The app doesn't record calls. (If your workplace records calls, that happens on its phone system, not in the app.)
 - The content of messages, other than the texts you send through your workplace's SMS service.
 - Photos. The camera is used only to scan a sign-in code, and the image stays on your phone.
 - Advertising identifiers. There are no ads and no analytics or tracking.

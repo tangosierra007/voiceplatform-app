@@ -16,7 +16,7 @@ Draft for task 5.4. Paste the quoted text into Play Console, under App access an
 
 ## Things the reviewer may notice
 
-> - Emergency numbers (000, 112, 106) open the phone's own dialler with the number filled in; the app doesn't place emergency calls itself on a phone with a mobile network.
+> - Emergency numbers (000, 112, 106) always open the phone's own dialler with the number filled in; the app never places an emergency call itself.
 > - The microphone is requested when the first call starts, the camera only when the user taps to scan a sign-in code, and contacts only when the phone contacts tab is first opened. Refusing any of them leaves the rest of the app working.
 > - The Messages tab appears only for accounts with a workplace mobile line; the review account may not have one.
 > - Source code: github.com/tangosierra007/voiceplatform-app (AGPL-3.0).
