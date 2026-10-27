@@ -5,33 +5,37 @@ import 'dart:convert';
 /// before it is queued or sent to GlitchTip.
 ///
 /// Text rules (`scrub`), in this order:
-/// - exact secrets registered at run time (the SIP password, tokens) and
-///   values from the phone's address book (replaced by `[contact]`);
-/// - SIP `Authorization` and `Proxy-Authorization` header values, and digest
-///   parameters (`response`, `nonce`, `cnonce`, `nextnonce`, `rspauth`,
-///   `opaque`, `nc`);
-/// - password-like and token-like key/value pairs, also as JSON keys
-///   (`"password":`, `"token":`, `accessToken`, `refresh_token`,
-///   `requestSecret`, `pn-prid`, ...); `Bearer` tokens;
+/// - exact secrets registered at run time (the SIP password, tokens);
+/// - values from the phone's address book and their name parts, as whole
+///   words, any case, any whitespace (replaced by `[contact]`);
+/// - header values of `Authorization`, `Proxy-Authorization`, `Cookie`,
+///   `Set-Cookie` and `X-Api-Key`, and SIP digest parameters (`response`,
+///   `nonce`, `cnonce`, `nextnonce`, `rspauth`, `opaque`, `nc`);
+/// - key/value pairs whose key contains password, passwd, secret or token
+///   (`newPassword`, `client_secret`, `refreshToken` ...), or is pass, pwd,
+///   ha1, pn-prid or prid; keys may be quoted with `"` or `'`, values may be
+///   quoted with either too; `Bearer` tokens;
 /// - App Link and QR tokens (`/app/signin/<id>/<token>`,
 ///   `vpapp://signin/<token>`), media tokens (`/app/v1/media/<token>`) and
 ///   secret query parameters;
 /// - email addresses (SIP URIs are kept);
 /// - long opaque strings (32 or more base64url or hex characters, with both
 ///   letters and digits: request secrets, keys);
-/// - runs of 6 or more digits, which may be broken by up to two spaces,
-///   dashes, dots, slashes or brackets (phone numbers, 6-digit codes).
-///   Dotted IPv4 addresses are kept.
+/// - runs of 6 or more digits, which may be broken by up to three spaces,
+///   dashes, dots, slashes or brackets between digits (phone numbers, 6-digit
+///   codes). Dotted IPv4 addresses are kept.
 ///
-/// The SIP rules, placeholders and digit rule are the same as vp_linphone's
-/// `LogScrubber`, so the shared cases in `test/diagnostics/shared_scrub_cases.dart`
-/// give the same output from both.
+/// The placeholders and SIP rules match vp_linphone's `LogScrubber`; the
+/// cases in `test/diagnostics/shared_scrub_cases.dart` give the same output
+/// from both. This scrubber is wider (compound keys, single quotes, more
+/// headers, three separators).
 ///
-/// Structured data (`scrubJson`): any key naming the address book or contacts
-/// is dropped with its value (APP12); secret-named keys keep their name and
-/// lose their value; every other string is scrubbed as text, except the SDK's
-/// own structural fields (ids, timestamps, release, stack frames, device and
-/// OS contexts).
+/// Structured data (`scrubJson`, `scrubEventJson`): any key naming the address
+/// book or contacts is dropped with its value (APP12); secret-named keys keep
+/// their name and lose their value; every other string is scrubbed as text.
+/// Only the SDK's own fields at their known places in an event are kept as
+/// they are (top-level ids, timestamps, release; exception type and stack
+/// trace; breadcrumb timestamp, level and type; device and OS contexts).
 final class DiagnosticsScrubber {
   DiagnosticsScrubber();
 
@@ -46,6 +50,7 @@ final class DiagnosticsScrubber {
 
   final Set<String> _secrets = {};
   final Set<String> _addressBook = {};
+  RegExp? _addressBookPattern;
 
   /// Values that must never leave the device as they are (for example the SIP
   /// password once known). Values shorter than 4 characters are ignored.
@@ -53,43 +58,66 @@ final class DiagnosticsScrubber {
     if (value.length >= 4) _secrets.add(value);
   }
 
-  /// Names, numbers and other values read from the phone's address book.
-  /// Held in memory only; replaced by `[contact]` wherever they appear.
-  void rememberAddressBookValues(Iterable<String> values) {
-    _addressBook.addAll(values.map((v) => v.trim()).where((v) => v.length >= 2));
-  }
-
-  void forgetAddressBookValues() => _addressBook.clear();
-
   void clearSecrets() => _secrets.clear();
 
+  /// Names, numbers and other values read from the phone's address book, held
+  /// in memory only. Each value and each of its words of 3 or more characters
+  /// is replaced by `[contact]` wherever it appears as a whole word.
+  void rememberAddressBookValues(Iterable<String> values) {
+    for (final v in values) {
+      final value = v.trim().replaceAll(RegExp(r'\s+'), ' ');
+      if (value.length >= 3) _addressBook.add(value);
+      for (final part in value.split(' ')) {
+        if (part.length >= 3) _addressBook.add(part);
+      }
+    }
+    _rebuildAddressBookPattern();
+  }
+
+  void forgetAddressBookValues() {
+    _addressBook.clear();
+    _addressBookPattern = null;
+  }
+
+  void _rebuildAddressBookPattern() {
+    if (_addressBook.isEmpty) {
+      _addressBookPattern = null;
+      return;
+    }
+    final alternatives = (_addressBook.toList()..sort((a, b) => b.length.compareTo(a.length)))
+        .map((v) => v.split(' ').map(RegExp.escape).join(r'\s+'))
+        .join('|');
+    _addressBookPattern = RegExp(
+      r'(?<![\p{L}\p{N}_])(?:' + alternatives + r')(?![\p{L}\p{N}_])',
+      caseSensitive: false,
+      unicode: true,
+    );
+  }
+
+  static const _value = r'''("[^"]*"|'[^']*'|[^\s,;&>"'}]+)''';
+
   static final List<(RegExp, String Function(Match))> _rules = [
-    // SIP digest headers: the whole value goes.
-    (RegExp(r'\b((?:Proxy-)?Authorization\s*:)[^\r\n]*', caseSensitive: false), (m) => '${m[1]} $redacted'),
+    // Header values: the whole value goes.
     (
-      RegExp(r'\b(response|rspauth|nextnonce|cnonce|nonce|opaque|nc)\s*=\s*("[^"]*"|[^,\s;>]+)', caseSensitive: false),
+      RegExp(r'''\b((?:Proxy-)?Authorization|Set-Cookie|Cookie|X-Api-Key)(["']?\s*:)[^\r\n]*''', caseSensitive: false),
+      (m) => '${m[1]}${m[2]} $redacted',
+    ),
+    (
+      RegExp(r'''\b(response|rspauth|nextnonce|cnonce|nonce|opaque|nc)\s*=\s*("[^"]*"|'[^']*'|[^,\s;>]+)''', caseSensitive: false),
       (m) => '${m[1]}=$redacted',
     ),
-    // Password-like pairs, also as JSON keys.
+    // Password, secret and token pairs, with plain or quoted keys and values.
     (
-      RegExp(
-        r'\b(password|passwd|pass|pwd|ha1|secret|request_?secret|sip_?password)("?\s*[=:]\s*)("[^"]*"|[^\s,;&>"}]+)',
-        caseSensitive: false,
-      ),
-      (m) => '${m[1]}${m[2]}$redacted',
-    ),
-    // Token-like pairs: token, access_token, refreshToken, linkToken, pn-prid ...
-    (
-      RegExp(r'\b(pn-prid|prid|\w*token)("?\s*[=:]\s*)("[^"]*"|[^;,\s>&"}]+)', caseSensitive: false),
+      RegExp(r'''\b(\w*(?:password|passwd|secret|token)|pass|pwd|ha1|pn-prid|prid)(["']?\s*[=:]\s*)''' + _value, caseSensitive: false),
       (m) => '${m[1]}${m[2]}$redacted',
     ),
     (RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false), (_) => 'Bearer $redacted'),
     // App Link, QR and media tokens.
-    (RegExp(r'(/app/signin/)[^\s/?#"' "'" r'<>]+(?:/[^\s/?#"' "'" r'<>]+)?'), (m) => '${m[1]}$redacted'),
-    (RegExp(r'(vpapp://signin/)[^\s?#"' "'" r'<>]+', caseSensitive: false), (m) => '${m[1]}$redacted'),
-    (RegExp(r'(/app/v1/media/)[^\s/?#"' "'" r'<>]+'), (m) => '${m[1]}$redacted'),
+    (RegExp(r'''(/app/signin/)[^\s/?#"'<>]+(?:/[^\s/?#"'<>]+)?'''), (m) => '${m[1]}$redacted'),
+    (RegExp(r'''(vpapp://signin/)[^\s?#"'<>]+''', caseSensitive: false), (m) => '${m[1]}$redacted'),
+    (RegExp(r'''(/app/v1/media/)[^\s/?#"'<>]+'''), (m) => '${m[1]}$redacted'),
     (
-      RegExp(r'([?&](?:code|sig|signature|key|secret|X-Amz-[\w-]+)=)[^&#\s"' "'" r'<>]+', caseSensitive: false),
+      RegExp(r'''([?&](?:code|sig|signature|key|secret|X-Amz-[\w-]+)=)[^&#\s"'<>]+''', caseSensitive: false),
       (m) => '${m[1]}$redacted',
     ),
     // Email addresses; SIP and tel URIs are kept.
@@ -98,18 +126,17 @@ final class DiagnosticsScrubber {
 
   // Long opaque values: 32+ base64url/hex characters holding letters and digits.
   static final _opaque = RegExp(r'(?<![A-Za-z0-9_-])(?=[A-Za-z_-]*\d)(?=[\d_-]*[A-Za-z])[A-Za-z0-9_-]{32,}={0,2}');
-  static final _digits = RegExp(r'\+?\d(?:[ ()\-./]{0,2}\d){5,}');
+  static final _digits = RegExp(r'\+?\d(?:[ ()\-./]{0,3}\d){5,}');
   static final _ipv4 = RegExp(r'^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$');
 
   /// Scrubs free text.
   String scrub(String text) {
     var out = text;
-    for (final s in _sortedLongestFirst(_secrets)) {
+    for (final s in _secrets.toList()..sort((a, b) => b.length.compareTo(a.length))) {
       out = out.replaceAll(s, redacted);
     }
-    for (final v in _sortedLongestFirst(_addressBook)) {
-      out = out.replaceAll(RegExp(RegExp.escape(v), caseSensitive: false), contact);
-    }
+    final book = _addressBookPattern;
+    if (book != null) out = out.replaceAll(book, contact);
     for (final (regex, replace) in _rules) {
       out = out.replaceAllMapped(regex, replace);
     }
@@ -118,22 +145,20 @@ final class DiagnosticsScrubber {
     return out.replaceAllMapped(_digits, (m) => _ipv4.hasMatch(m[0]!) ? m[0]! : number);
   }
 
-  static List<String> _sortedLongestFirst(Set<String> s) => s.toList()..sort((a, b) => b.length.compareTo(a.length));
-
   /// A key naming the phone's address book or its contacts (APP12).
   static final addressBookKey = RegExp(r'contact|address[\s_-]?book|phone[\s_-]?book|vcard', caseSensitive: false);
 
   // Keys whose value is always secret, whatever it looks like.
   static final _secretKey = RegExp(
-    r'^(?:(?:proxy-)?authorization|cookie|set-cookie|x-api-key|password|passwd|pwd|ha1|secret|request_?secret|sip_?password|.*token|pn-prid|prid)$',
+    r'^(?:(?:proxy-)?authorization|cookie|set-cookie|x-api-key|[\w-]*(?:password|passwd|secret|token)|pass|pwd|ha1|pn-prid|prid)$',
     caseSensitive: false,
   );
 
   static final _codeKey = RegExp(r'^(?:\w*_)?(?:code|otp|pin)$', caseSensitive: false);
 
-  // SDK structural fields kept as they are (no user data; scrubbing would
-  // mangle them, for example timestamps into `[n]`).
-  static const _keepValue = {
+  // SDK fields kept as they are, only at these places in an event (scrubbing
+  // would mangle them, for example timestamps into `[n]`).
+  static const _keepTopLevel = {
     'event_id',
     'timestamp',
     'start_timestamp',
@@ -144,23 +169,21 @@ final class DiagnosticsScrubber {
     'level',
     'logger',
     'type',
-    'mechanism',
     'sdk',
     'debug_meta',
     'modules',
-    'stacktrace',
     'threads',
-    'trace_id',
-    'span_id',
-    'parent_span_id',
   };
+  static const _keepInException = {'type', 'module', 'mechanism', 'stacktrace', 'thread_id'};
+  static const _keepInBreadcrumb = {'timestamp', 'level', 'type'};
 
   // Standard contexts filled by the SDK from the device; kept except for the
   // device's own name, which a user may have set to their name.
   static const _sdkContexts = {'os', 'device', 'app', 'runtime', 'runtimes', 'culture', 'trace', 'flutter_context', 'dart_context'};
 
-  /// Scrubs a JSON-like value (maps, lists, strings).
-  Object? scrubJson(Object? value) {
+  /// Scrubs a JSON-like value (maps, lists, strings). Keys in [keep] at this
+  /// level only are copied as they are.
+  Object? scrubJson(Object? value, {Set<String> keep = const {}}) {
     if (value is String) return scrub(value);
     if (value is List) return [for (final v in value) scrubJson(v)];
     if (value is Map) {
@@ -168,7 +191,7 @@ final class DiagnosticsScrubber {
       value.forEach((k, v) {
         final key = '$k';
         if (addressBookKey.hasMatch(key)) return;
-        if (_keepValue.contains(key)) {
+        if (keep.contains(key)) {
           out[key] = v;
         } else if (_secretKey.hasMatch(key) && (v is String || v is num)) {
           out[key] = redacted;
@@ -192,7 +215,18 @@ final class DiagnosticsScrubber {
       ..remove('server_name');
     final contexts = e.remove('contexts');
     final request = e.remove('request');
-    final out = (scrubJson(e) as Map).cast<String, dynamic>();
+    final exception = e.remove('exception');
+    final breadcrumbs = e.remove('breadcrumbs');
+    final out = (scrubJson(e, keep: _keepTopLevel) as Map).cast<String, dynamic>();
+
+    if (exception is Map) {
+      final x = (scrubJson(Map<String, dynamic>.from(exception)..remove('values')) as Map).cast<String, dynamic>();
+      final values = exception['values'];
+      if (values is List) {
+        x['values'] = [for (final v in values) v is Map ? scrubJson(v, keep: _keepInException) : scrubJson(v)];
+      }
+      out['exception'] = x;
+    }
     if (contexts is Map) {
       final c = <String, dynamic>{};
       contexts.forEach((k, v) {
@@ -207,22 +241,16 @@ final class DiagnosticsScrubber {
       out['contexts'] = c;
     }
     if (request is Map) {
-      final r = (scrubJson(Map<String, dynamic>.from(request)..remove('cookies')) as Map).cast<String, dynamic>();
-      out['request'] = r;
+      out['request'] = (scrubJson(Map<String, dynamic>.from(request)..remove('cookies')) as Map).cast<String, dynamic>();
     }
-    if (out['breadcrumbs'] is List) {
-      out['breadcrumbs'] = [
-        for (final b in out['breadcrumbs'] as List)
-          if (b is Map && !isAddressBookBreadcrumb(b)) b,
-      ];
-    } else if (out['breadcrumbs'] is Map && (out['breadcrumbs'] as Map)['values'] is List) {
-      final values = (out['breadcrumbs'] as Map)['values'] as List;
-      out['breadcrumbs'] = {
-        'values': [
-          for (final b in values)
-            if (b is Map && !isAddressBookBreadcrumb(b)) b,
-        ],
-      };
+    List<Object?> crumbs(List<Object?> list) => [
+      for (final b in list)
+        if (b is Map && !isAddressBookBreadcrumb(b)) scrubJson(b, keep: _keepInBreadcrumb),
+    ];
+    if (breadcrumbs is List) {
+      out['breadcrumbs'] = crumbs(breadcrumbs);
+    } else if (breadcrumbs is Map && breadcrumbs['values'] is List) {
+      out['breadcrumbs'] = {'values': crumbs(breadcrumbs['values'] as List)};
     }
     return out;
   }
@@ -234,7 +262,7 @@ final class DiagnosticsScrubber {
   /// Scrubs a serialised breadcrumb; null means drop it.
   Map<String, dynamic>? scrubBreadcrumbJson(Map<String, dynamic> b) {
     if (isAddressBookBreadcrumb(b)) return null;
-    return (scrubJson(b) as Map).cast<String, dynamic>();
+    return (scrubJson(b, keep: _keepInBreadcrumb) as Map).cast<String, dynamic>();
   }
 
   /// Attachments: text (logs, JSON) is scrubbed as text; anything else is

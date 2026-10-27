@@ -86,7 +86,13 @@ void main() {
     for (final secret in [password, token, code, email, contactName, 'ab12', '0491', '570 737']) {
       expect(wire, isNot(contains(secret)), reason: secret);
     }
-    // No 6-digit run in any text: SDK numbers (memory sizes), hex ids and\n    // timestamps aside.\n    final text = wire\n        .replaceAll(RegExp(r':-?\d+(\.\d+)?(?=[,}\]])'), ':0')\n        .replaceAll(RegExp(r'"[0-9a-f]{16,32}"'), '"id"')\n        .replaceAll(RegExp(r'\d{4}-\d\d-\d\dT[\d:.]+Z?'), 'time');\n    expect(RegExp(r'\d(?:[ ()\-./]{0,2}\d){5,}').firstMatch(text)?[0], isNull);
+    // No 6-digit run in any text: SDK numbers (memory sizes), hex ids and
+    // timestamps aside.
+    final text = wire
+        .replaceAll(RegExp(r':-?\d+(\.\d+)?(?=[,}\]])'), ':0')
+        .replaceAll(RegExp(r'"[0-9a-f]{16,32}"'), '"id"')
+        .replaceAll(RegExp(r'\d{4}-\d\d-\d\dT[\d:.]+Z?'), 'time');
+    expect(RegExp(r'\d(?:[ ()\-./]{0,3}\d){5,}').firstMatch(text)?[0], isNull);
     expect(wire, contains('engine.log'));
     expect(wire, isNot(contains('screen.png')));
     expect(wire, isNot(contains('"user"')));

@@ -104,6 +104,98 @@ void main() {
     });
   });
 
+  group('review fixes', () {
+    late DiagnosticsScrubber s;
+    setUp(() => s = DiagnosticsScrubber());
+
+    test('compound password, secret and token keys, in text and as keys', () {
+      for (final key in ['newPassword', 'confirm_password', 'userPassword', 'client_secret', 'clientSecret', 'idToken']) {
+        expect(s.scrub('$key=abc def'), '$key=[scrubbed] def', reason: key);
+        expect(s.scrub('{"$key":"abc"}'), '{"$key":[scrubbed]}', reason: key);
+        expect(s.scrubJson({key: 'abc'}), {key: '[scrubbed]'}, reason: key);
+      }
+      expect(s.scrubJson({'x-client-secret': 'abc'}), {'x-client-secret': '[scrubbed]'});
+    });
+
+    test('Cookie, Set-Cookie and X-Api-Key headers', () {
+      expect(s.scrub('Cookie: sid=abc; theme=dark\r\nAccept: */*'), 'Cookie: [scrubbed]\r\nAccept: */*');
+      expect(s.scrub('Set-Cookie: sid=abc; HttpOnly'), 'Set-Cookie: [scrubbed]');
+      expect(s.scrub('X-Api-Key: k-123'), 'X-Api-Key: [scrubbed]');
+    });
+
+    test('single-quoted keys and values', () {
+      expect(s.scrub("{'password': 'hunter2 hunter'}"), "{'password': [scrubbed]}");
+      expect(s.scrub("{'token':'abc def'}"), "{'token':[scrubbed]}");
+      expect(s.scrub("password='p w' next"), 'password=[scrubbed] next');
+      expect(s.scrub("nonce='n 1', qop=auth"), 'nonce=[scrubbed], qop=auth');
+    });
+
+    test('SDK field names are kept only at their known event paths', () {
+      final out = s.scrubEventJson({
+        'level': 'error',
+        'extra': {
+          'type': 'ava@example.com',
+          'level': '0491 570 737',
+          'logger': 'password=x',
+          'mechanism': 'Bearer abc',
+          'threads': ['ava@example.com'],
+          'release': 'a@example.com',
+          'timestamp': '0491570737',
+        },
+        'exception': {
+          'values': [
+            {
+              'type': 'StateError',
+              'value': 'x',
+              'mechanism': {'type': 'generic'},
+              'data': {'type': 'ava@example.com'},
+            },
+          ],
+        },
+        'breadcrumbs': [
+          {
+            'timestamp': '2026-10-28T01:02:03.000Z',
+            'type': 'default',
+            'data': {'timestamp': '0491570737', 'type': 'ava@example.com'},
+          },
+        ],
+      });
+      expect(out['level'], 'error');
+      expect(out['extra'], {
+        'type': '[email]',
+        'level': '[n]',
+        'logger': 'password=[scrubbed]',
+        'mechanism': 'Bearer [scrubbed]',
+        'threads': ['[email]'],
+        'release': '[email]',
+        'timestamp': '[n]',
+      });
+      final ex = ((out['exception'] as Map)['values'] as List).single as Map;
+      expect(ex['type'], 'StateError');
+      expect(ex['mechanism'], {'type': 'generic'});
+      expect(ex['data'], {'type': '[email]'});
+      final crumb = (out['breadcrumbs'] as List).single as Map;
+      expect(crumb['timestamp'], '2026-10-28T01:02:03.000Z');
+      expect(crumb['data'], {'timestamp': '[n]', 'type': '[email]'});
+    });
+
+    test('address book: whole words, any case and spacing, name parts', () {
+      s.rememberAddressBookValues(['Mia  Thompson', 'Al Li', 'Plumber Joe']);
+      expect(s.scrub('ringing from MIA\tthompson'), 'ringing from [contact]');
+      expect(s.scrub('Thompson called; mia too'), '[contact] called; [contact] too');
+      expect(s.scrub('Miami and Thompsonville'), 'Miami and Thompsonville');
+      expect(s.scrub('Al went to Li'), 'Al went to Li');
+      expect(s.scrub('Al Li rang'), '[contact] rang');
+      expect(s.scrub('joe'), '[contact]');
+    });
+
+    test('phone numbers with up to three separator characters', () {
+      expect(s.scrub('call 555 - 123 - 4567 now'), 'call [n] now');
+      expect(s.scrub('call 03 - 9555 - 0123'), 'call [n]');
+      expect(s.scrub('call +61 / 3 / 9555 / 0123'), 'call [n]');
+    });
+  });
+
   group('structured data', () {
     final s = DiagnosticsScrubber();
 

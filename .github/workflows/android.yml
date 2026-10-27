@@ -112,14 +112,27 @@ jobs:
       - name: Release App Bundle (unsigned in CI)
         # No upload key is given to this job, so the bundle is unsigned. Only
         # the play-internal job below signs, with the key from secrets.
-        # Release builds only get the GlitchTip DSN (repo secret SENTRY_DSN);
-        # without it Sentry is off. Debug builds never get it.
+        # Release builds on push get the GlitchTip DSN (repo secret SENTRY_DSN)
+        # and VP_ENV=prod; pull request builds and debug builds never do, so
+        # Sentry is off there. Without the secret Sentry is off too.
         env:
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_DSN: ${{ github.event_name != 'pull_request' && secrets.SENTRY_DSN || '' }}
+          VP_ENV: ${{ github.event_name != 'pull_request' && 'prod' || 'dev' }}
         run: |
-          if [ -n "$SENTRY_DSN" ]; then echo "Sentry: on (DSN from secret)"; else echo "::notice::Sentry: off (no SENTRY_DSN secret)"; fi
+          if [ -n "$SENTRY_DSN" ]; then echo "Sentry: on (DSN from secret), VP_ENV=$VP_ENV"; else echo "::notice::Sentry: off (no DSN for this build), VP_ENV=$VP_ENV"; fi
           flutter build appbundle --release --build-number=${{ github.run_number }} \
-            --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=VP_ENV=prod
+            --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=VP_ENV="$VP_ENV"
+      - name: Sentry NDK crash capture is off in the merged manifest
+        # Native (NDK) events would bypass the Dart scrubber (APP9).
+        run: |
+          set -euo pipefail
+          mapfile -t manifests < <(find build/app/intermediates -path '*release*' -name AndroidManifest.xml | grep -i merged || true)
+          [ "${#manifests[@]}" -gt 0 ] || { echo "::error::no merged release manifest found"; exit 1; }
+          for m in "${manifests[@]}"; do
+            echo "checking $m"
+            tr -d '\n' < "$m" | grep -Eq '<meta-data[^>]*android:name="io\.sentry\.ndk\.enable"[^>]*android:value="false"' \
+              || { echo "::error::$m: io.sentry.ndk.enable is not false"; exit 1; }
+          done
       - name: Report signing state
         run: |
           aab=build/app/outputs/bundle/release/app-release.aab

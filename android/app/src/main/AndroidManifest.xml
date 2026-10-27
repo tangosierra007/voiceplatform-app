@@ -61,6 +61,12 @@
         <meta-data
             android:name="flutter_deeplinking_enabled"
             android:value="false" />
+        <!-- Sentry: no native (NDK) crash capture. Native events would bypass
+             the Dart scrubber (lib/diagnostics). Checked in CI on the merged
+             manifest and by test/diagnostics/android_manifest_test.dart. -->
+        <meta-data
+            android:name="io.sentry.ndk.enable"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
