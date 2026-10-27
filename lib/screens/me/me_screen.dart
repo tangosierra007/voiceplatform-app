@@ -140,18 +140,17 @@ class MeScreen extends ConsumerWidget {
             subtitle: settings == null ? null : callSettingsSummary(settings),
             onTap: () => context.push(callSettingsPath),
           ),
-          if (hours != null)
+          // Only with permissions.officeHours: the row and its fetch.
+          if (canHours && hours != null)
             _MeRow(
               icon: VpIcon.update,
               title: 'Office hours',
               subtitle:
                   hours.summary ?? (hours.openNow ? 'Open now' : 'Closed now'),
-              trailing: canHours
-                  ? _Chip(
-                      'Change',
-                      onTap: () => _changeHours(context, ref, hours),
-                    )
-                  : null,
+              trailing: _Chip(
+                'Change',
+                onTap: () => _changeHours(context, ref, hours),
+              ),
             ),
           if (canRecordings)
             _MeRow(

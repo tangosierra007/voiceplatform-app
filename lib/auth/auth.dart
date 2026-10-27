@@ -6,11 +6,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../calls/directory.dart';
 import '../diagnostics/scrubber.dart';
 import '../net/api.dart';
 import '../platform/device_keys.dart';
 import '../theme/theme_preference.dart';
 import 'app_lock.dart';
+import 'local_wipe.dart';
 import 'session_store.dart';
 import 'version.dart';
 
@@ -98,7 +100,14 @@ final localDataWipersProvider = Provider<List<Future<void> Function()>>(
       ref.invalidate(themePreferenceProvider);
       ref.invalidate(biometricUnlockProvider);
     },
-    () async => DiagnosticsScrubber.instance.forgetAddressBookValues(),
+    // The address-book values held for the scrubber, and the contacts read:
+    // signed in again, they are read and registered afresh.
+    () async {
+      DiagnosticsScrubber.instance.forgetAddressBookValues();
+      ref.invalidate(phoneContactsProvider);
+    },
+    // Crash-report scope and the on-disk outbox.
+    clearDiagnosticsOnDevice,
   ],
 );
 

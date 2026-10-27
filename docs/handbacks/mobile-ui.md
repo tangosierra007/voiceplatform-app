@@ -342,3 +342,13 @@ Stacked on part A (base `feat/app-features`); retarget to `main` once #19 merges
 ### Tests
 
 Messages and Thread behaviour and SMS part counting; Send body; `message` and `signed_out` pushes; Me rows, DND until, office hours, pages, battery card shown and not, dark mode, call logs, sign out; AppSignedOut copy, gate and wipe of every store; labelled 48 px targets and 200 % text on every new screen. Goldens `messages_*`, `thread_*`, `me_*`, `signed_out_light`, side by side in `test/goldens/compare/me_messages_side_by_side.png`.
+
+### WS6 review on the A53 (part B)
+
+- Sign-out always clears the engine's stored SIP account: `down()` calls `unregister()` (which clears the native credential store) even when the engine never started in this process, as on a cold start that refreshes into `device_revoked`; tested in `engine_session_test.dart`.
+- Rings switches only for app and desktop devices (Android, iOS, Windows, macOS); desk phones and other admin-managed kinds show without one.
+- The wipers invalidate `phoneContactsProvider` after forgetting the scrubber's address-book values, so the next sign-in reads and registers them again; tested.
+- The wipers clear Sentry's scope and delete sentry-android's cache folder (`<cacheDir>/sentry`, outbox and unsent envelopes); the folder removal is tested, the scope call is tested only to not throw without a DSN.
+- One owner at a time for the shared player (`mediaOwnerProvider`): opening a recording or a greeting resets the voicemail card, and leaving Recordings stops its recording.
+- SMS parts are packed part by part: a GSM-7 extension character or a surrogate pair never straddles two parts (152 a + € + 152 a and 66 a + 😀 + 66 a are 3 parts); the 10-part limit is tested at its edges.
+- Office hours: the row and its fetch need `permissions.officeHours`.

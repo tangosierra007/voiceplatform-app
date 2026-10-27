@@ -49,8 +49,11 @@ final callSettingsSaveProvider = Provider<CallSettingsSave>((ref) {
 });
 
 /// The office-hours schedule this user may change (the first one).
+/// Only fetched with `permissions.officeHours`.
 final officeHoursProvider = FutureProvider<OfficeHours?>((ref) async {
   if (ref.watch(accessTokenProvider) == null) return null;
+  final me = await ref.watch(meProvider.future);
+  if (me == null || !me.permissions.officeHours) return null;
   final list = await ref.watch(appApiProvider).me.getMeOfficeHours();
   return list.firstOrNull;
 });

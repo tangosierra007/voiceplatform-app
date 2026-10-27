@@ -1,12 +1,20 @@
 // AppMe, its pages, and AppSignedOut.
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
+import 'package:voiceplatform_app/auth/local_wipe.dart';
+import 'package:voiceplatform_app/calls/directory.dart';
+import 'package:voiceplatform_app/features/recents/media_player.dart';
+import 'package:voiceplatform_app/features/recents/voicemail_actions.dart';
 import 'package:voiceplatform_app/auth/session_store.dart';
 import 'package:voiceplatform_app/engine/phone_extras.dart';
+import 'package:voiceplatform_app/features/me/me_data.dart';
 import 'package:voiceplatform_app/engine/push_handler.dart';
 import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/net/live_events.dart';
@@ -33,6 +41,13 @@ Future<void> _back(WidgetTester t) async {
       .pop();
   await _settle(t);
 }
+
+/// The page's own list, not a sideways chip row.
+final _vertical = find
+    .byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+    )
+    .first;
 
 Finder _tab(String label) =>
     find.descendant(of: find.byType(VpTabBar), matching: find.text(label));
@@ -86,7 +101,11 @@ void main() {
     ]) {
       expect(find.text(t), findsOneWidget, reason: t);
     }
-    await tester.scrollUntilVisible(find.text('Version 1.0.3 · '), 200);
+    await tester.scrollUntilVisible(
+      find.text('Version 1.0.3 · '),
+      200,
+      scrollable: _vertical,
+    );
     expect(find.bySemanticsLabel('Open source licences'), findsOneWidget);
     expect(find.bySemanticsLabel('Sign out'), findsOneWidget);
   });
@@ -121,6 +140,45 @@ void main() {
     expect(find.text('Closed until changed back'), findsOneWidget);
   });
 
+  test('office hours are not even fetched without the permission', () async {
+    final api = FakeApi({
+      'GET /me/office-hours': (_) => [fx.officeHours('schedule')],
+    });
+    Future<ProviderContainer> make(bool allowed) async {
+      final me = {
+        ...fx.me(status: 'available'),
+        'permissions': {
+          'recordings': true,
+          'officeHours': allowed,
+          'messages': true,
+          'sharedVoicemail': true,
+        },
+      };
+      final c = ProviderContainer(
+        overrides: [
+          dioProvider.overrideWithValue(
+            Dio(BaseOptions(baseUrl: 'http://127.0.0.1:9/app/v1'))
+              ..httpClientAdapter = api,
+          ),
+          accessTokenProvider.overrideWith(_Token.new),
+          meProvider.overrideWith((ref) async => Me.fromJson(me)),
+        ],
+      );
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    final no = await make(false);
+    expect(await no.read(officeHoursProvider.future), isNull);
+    expect(api.requests, isEmpty);
+    final yes = await make(true);
+    expect(
+      (await yes.read(officeHoursProvider.future))?.name,
+      'Business hours',
+    );
+    expect(api.requests.single.path, '/me/office-hours');
+  });
+
   testWidgets('pages: call settings, recordings, devices', (tester) async {
     usePhone(tester);
     await tester.pumpWidget(await appUnderTest(clock: () => _now));
@@ -140,7 +198,9 @@ void main() {
     await _settle(tester);
     expect(find.text('Pixel 8 (this phone)'), findsOneWidget);
     expect(find.text('Windows PC'), findsOneWidget);
-    expect(find.byType(Switch), findsNWidgets(3));
+    // Rings for the phone and the PC; the desk phone is set by the admin.
+    expect(find.byType(Switch), findsNWidgets(2));
+    expect(find.text('Desk phone GRP2616'), findsOneWidget);
     // Only the PC can be signed out from here.
     expect(find.bySemanticsLabel('Sign out'), findsOneWidget);
   });
@@ -196,7 +256,11 @@ void main() {
     await _settle(tester);
     expect(sent, 'VP-7Q2K');
     expect(find.text('Sent. Quote VP-7Q2K to support.'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Dark'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Dark'),
+      200,
+      scrollable: _vertical,
+    );
     await tester.tap(find.text('Dark'));
     await _settle(tester);
     expect(
@@ -262,7 +326,11 @@ void main() {
     );
     await _settle(tester);
     await openMe(tester);
-    await tester.scrollUntilVisible(find.bySemanticsLabel('Sign out'), 200);
+    await tester.scrollUntilVisible(
+      find.bySemanticsLabel('Sign out'),
+      200,
+      scrollable: _vertical,
+    );
     await tester.tap(find.bySemanticsLabel('Sign out'));
     await _settle(tester);
     expect(find.text('Sign out of this phone?'), findsOneWidget);
@@ -349,21 +417,70 @@ void main() {
       final store = MemorySessionStore()
         ..session = const StoredSession(deviceId: 'd', refreshToken: 'r');
       final keys = FakeDeviceKeys();
+      final contacts = FixedPhoneContacts(const [
+        PhoneContact('Kim Bell', ['03 5550 1142']),
+      ]);
+      final registered = <List<String>>[];
       final c = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(sp),
           sessionStoreProvider.overrideWithValue(store),
           deviceKeysProvider.overrideWithValue(keys),
+          phoneContactsSourceProvider.overrideWithValue(contacts),
+          addressBookScrubberProvider.overrideWithValue(
+            (v) => registered.add([...v]),
+          ),
         ],
       );
       addTearDown(c.dispose);
+      final sub = c.listen(phoneContactsProvider, (_, _) {});
+      addTearDown(sub.close);
+      await c.read(phoneContactsProvider.future);
       c.read(accessTokenProvider.notifier).set('tok');
       await c.read(authProvider.notifier).signOutLocally();
+      // The contacts are read again, and their values registered with the
+      // scrubber again, for whoever signs in next.
+      await c.read(phoneContactsProvider.future);
+      expect(contacts.reads, 2);
+      expect(registered, hasLength(2));
+      expect(registered.last, contains('Kim Bell'));
       expect(store.session, isNull);
       expect(keys.deletes, 1);
       expect(c.read(accessTokenProvider), isNull);
       expect(sp.getKeys(), isEmpty);
       expect(c.read(themePreferenceProvider), ThemePreference.system);
     });
+
+    test('the crash-report outbox on disk goes too', () async {
+      final dir = Directory.systemTemp.createTempSync('cache');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final outbox = Directory('${dir.path}/sentry/outbox')
+        ..createSync(recursive: true);
+      File('${outbox.path}/envelope').writeAsStringSync('x');
+      File('${dir.path}/other').writeAsStringSync('kept');
+      // Sentry isn't initialised here: clearing the scope must not throw.
+      await clearDiagnosticsOnDevice(cacheDir: dir);
+      expect(Directory('${dir.path}/sentry').existsSync(), isFalse);
+      expect(File('${dir.path}/other').existsSync(), isTrue);
+    });
+
+    test('another screen taking the player resets the voicemail card', () {
+      final c = ProviderContainer(
+        overrides: [mediaPlayerProvider.overrideWithValue(FakeMediaPlayer())],
+      );
+      addTearDown(c.dispose);
+      final vm = c.read(voicemailPlayerProvider.notifier);
+      c.listen(voicemailPlayerProvider, (_, _) {});
+      vm.debugLoad('v1');
+      c.read(mediaOwnerProvider.notifier).set('voicemail:v1');
+      expect(c.read(voicemailPlayerProvider).loadedId, 'v1');
+      c.read(mediaOwnerProvider.notifier).set('recording:r1');
+      expect(c.read(voicemailPlayerProvider).loadedId, isNull);
+    });
   });
+}
+
+class _Token extends AccessTokenNotifier {
+  @override
+  String? build() => 'tok';
 }

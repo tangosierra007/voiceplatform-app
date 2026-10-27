@@ -256,12 +256,35 @@ class RecordingsScreen extends ConsumerStatefulWidget {
 }
 
 class _RecordingsState extends ConsumerState<RecordingsScreen> {
-  String? _playing;
-  late final MediaPlayer _player = ref.read(mediaPlayerProvider);
+  String? get _playing {
+    final o = ref.read(mediaOwnerProvider);
+    return o != null && o.startsWith('recording:') ? o.substring(10) : null;
+  }
+
+  late final MediaPlayer _player;
+  late final MediaOwnerNotifier _owner;
+
+  @override
+  void initState() {
+    super.initState();
+    _player = ref.read(mediaPlayerProvider);
+    _owner = ref.read(mediaOwnerProvider.notifier);
+  }
 
   @override
   void dispose() {
-    if (_playing != null) unawaited(_player.stop().catchError((_) {}));
+    // Leaving Recordings stops a recording it was playing.
+    final o = _owner.owner;
+    if (o != null && o.startsWith('recording:')) {
+      unawaited(_player.stop().catchError((_) {}));
+      // After the frame: providers can't change while the tree unmounts.
+      final owner = _owner;
+      Future.microtask(() {
+        try {
+          owner.set(null);
+        } catch (_) {}
+      });
+    }
     super.dispose();
   }
 
@@ -282,7 +305,7 @@ class _RecordingsState extends ConsumerState<RecordingsScreen> {
       );
       await _player.open(url, headers);
       await _player.setSpeaker(true);
-      setState(() => _playing = r.id);
+      ref.read(mediaOwnerProvider.notifier).set('recording:${r.id}');
       unawaited(_player.play());
     } catch (_) {
       if (mounted) _say(context, "This recording didn't play. Try again.");
@@ -293,6 +316,7 @@ class _RecordingsState extends ConsumerState<RecordingsScreen> {
   Widget build(BuildContext context) {
     final c = context.vp;
     final list = ref.watch(recordingsProvider);
+    ref.watch(mediaOwnerProvider);
     final playback = ref.watch(playbackProvider).value;
     final now = ref.watch(clockProvider)();
     final items = list.value;
@@ -339,6 +363,14 @@ class _RecordingsState extends ConsumerState<RecordingsScreen> {
     );
   }
 }
+
+/// The kinds this user switches on and off here: the apps and desktops.
+bool _userDevice(DeviceSummary d) => const {
+  DeviceSummaryKind.android,
+  DeviceSummaryKind.ios,
+  DeviceSummaryKind.windows,
+  DeviceSummaryKind.macos,
+}.contains(d.kind);
 
 /// Signed-in devices: which ring, and signing others out.
 class DevicesScreen extends ConsumerWidget {
@@ -424,11 +456,15 @@ class DevicesScreen extends ConsumerWidget {
                               : 'Last used ${recentsWhen(d.lastSeenAt!, now)}',
                         ),
                       ),
-                      Text(
-                        'Rings',
-                        style: VpType.caption.copyWith(color: c.textMuted),
-                      ),
-                      Switch(value: d.rings, onChanged: (on) => rings(d, on)),
+                      // Apps and desktops only: desk phones and other
+                      // admin-managed devices are set in the portal.
+                      if (_userDevice(d)) ...[
+                        Text(
+                          'Rings',
+                          style: VpType.caption.copyWith(color: c.textMuted),
+                        ),
+                        Switch(value: d.rings, onChanged: (on) => rings(d, on)),
+                      ],
                     ],
                   ),
                 ),

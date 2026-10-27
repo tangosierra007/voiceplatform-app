@@ -53,6 +53,21 @@ void main() {
       expect(smsCount('😀').unicode, isTrue);
     });
 
+    test('packed part by part: no character split across parts (WS6)', () {
+      // 306 septets would be 2 parts, but the euro sign can't straddle.
+      expect(smsCount('${'a' * 152}€${'a' * 152}').parts, 3);
+      // 134 code units would be 2 parts, but the surrogate pair can't.
+      expect(smsCount('${'a' * 66}😀${'a' * 66}').parts, 3);
+      // At the limit: ten parts of 76 euros (152 septets) send; one more euro
+      // needs an eleventh. 33 emoji fill a UCS-2 part.
+      expect(smsCount('€' * 760).parts, 10);
+      expect(smsCount('€' * 760).tooLong, isFalse);
+      expect(smsCount('${'€' * 760}a').parts, 10);
+      expect(smsCount('€' * 761).tooLong, isTrue);
+      expect(smsCount('😀' * 330).parts, 10);
+      expect(smsCount('😀' * 331).tooLong, isTrue);
+    });
+
     test('more than 10 parts is refused', () {
       expect(smsCount('a' * (153 * 10)).tooLong, isFalse);
       expect(smsCount('a' * (153 * 10 + 1)).tooLong, isTrue);

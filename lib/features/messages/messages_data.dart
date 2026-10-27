@@ -122,47 +122,48 @@ class SmsCount {
 }
 
 /// GSM-7: 160 in one part, 153 a part when split; anything outside it makes
-/// the whole text UCS-2: 70, then 67 a part.
+/// the whole text UCS-2: 70, then 67 a part. Split texts are packed part by
+/// part as phones send them: an extension character's two septets (an
+/// escape and the character) and a surrogate pair's two code units never
+/// straddle two parts, so they start the next one.
 SmsCount smsCount(String text) {
-  var septets = 0;
+  final gsmCosts = <int>[];
   var gsm = true;
   for (final ch in text.runes) {
     final s = String.fromCharCode(ch);
     if (_gsm7.contains(s)) {
-      septets += 1;
+      gsmCosts.add(1);
     } else if (_gsm7Ext.contains(s)) {
-      septets += 2;
+      gsmCosts.add(2);
     } else {
       gsm = false;
       break;
     }
   }
-  if (gsm) {
-    if (septets <= 160) {
-      return SmsCount(
-        units: septets,
-        parts: septets == 0 ? 0 : 1,
-        perPart: 160,
-        unicode: false,
-      );
-    }
+  final costs = gsm
+      ? gsmCosts
+      : [for (final ch in text.runes) ch > 0xFFFF ? 2 : 1];
+  final single = gsm ? 160 : 70;
+  final split = gsm ? 153 : 67;
+  final units = costs.fold(0, (a, b) => a + b);
+  if (units <= single) {
     return SmsCount(
-      units: septets,
-      parts: (septets / 153).ceil(),
-      perPart: 153,
-      unicode: false,
+      units: units,
+      parts: units == 0 ? 0 : 1,
+      perPart: single,
+      unicode: !gsm,
     );
   }
-  final units = text.length; // UTF-16 code units
-  if (units <= 70) {
-    return SmsCount(units: units, parts: 1, perPart: 70, unicode: true);
+  var parts = 1, used = 0;
+  for (final c in costs) {
+    if (used + c > split) {
+      parts++;
+      used = c;
+    } else {
+      used += c;
+    }
   }
-  return SmsCount(
-    units: units,
-    parts: (units / 67).ceil(),
-    perPart: 67,
-    unicode: true,
-  );
+  return SmsCount(units: units, parts: parts, perPart: split, unicode: !gsm);
 }
 
 /// "42 / 160", "200 / 306 · 2 parts".

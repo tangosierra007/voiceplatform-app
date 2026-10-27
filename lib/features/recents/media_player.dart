@@ -208,6 +208,20 @@ final mediaPlayerProvider = Provider<MediaPlayer>((ref) {
   return p;
 });
 
+/// Who has the shared player loaded: `voicemail:<id>`, `recording:<id>`,
+/// `greeting:<kind>`, or null. Each screen shows its controls as loaded only
+/// while it is the owner, so opening one elsewhere resets the others.
+final mediaOwnerProvider = NotifierProvider<MediaOwnerNotifier, String?>(
+  MediaOwnerNotifier.new,
+);
+
+class MediaOwnerNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? owner) => state = owner;
+  String? get owner => state;
+}
+
 final playbackProvider = StreamProvider<PlaybackState>((ref) {
   final p = ref.watch(mediaPlayerProvider);
   return p.states;
