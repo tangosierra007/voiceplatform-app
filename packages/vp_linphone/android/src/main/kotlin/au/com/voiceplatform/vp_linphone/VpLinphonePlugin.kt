@@ -29,7 +29,6 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
     private var scope: CoroutineScope? = null
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
-    private var pendingUi: UiRequestMsg? = null
 
     private val listener = object : LinphoneEngine.Listener {
         override fun onRegistration(event: RegistrationMsg) = send { it.onRegistration(event) }
@@ -75,12 +74,14 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         LinphoneEngine.addListener(listener)
         VpPush.addAppListener(pushListener)
         TelecomBridge.uiListener = uiListener
+        PendingUiRequest.listener = { request -> send { it.onUiRequest(request) } }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         LinphoneEngine.removeListener(listener)
         VpPush.removeAppListener(pushListener)
         if (TelecomBridge.uiListener === uiListener) TelecomBridge.uiListener = null
+        PendingUiRequest.listener = null
         VpLinphoneHostApi.setUp(binding.binaryMessenger, null)
         events = null
         scope?.cancel()
@@ -105,26 +106,16 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         activity = null
     }
 
+    /**
+     * The launcher activity is exported, so its intent extras are never
+     * trusted: the only input is the request [CallActionActivity] (not
+     * exported, token-checked) left in process memory. Over the lock screen
+     * only while that call is still ringing.
+     */
+    @Suppress("UNUSED_PARAMETER")
     private fun handleIntent(intent: Intent?) {
-        intent ?: return
-        val action = intent.getStringExtra(IncomingCallNotifier.EXTRA_ACTION) ?: return
-        val callId = intent.getStringExtra(TelecomBridge.EXTRA_CALL_ID) ?: return
-        // Once only: a re-created activity must not answer again.
-        intent.removeExtra(IncomingCallNotifier.EXTRA_ACTION)
-        val request = when (action) {
-            IncomingCallNotifier.ACTION_ANSWER -> {
-                TelecomBridge.answerFromNotification(context, callId)
-                UiRequestMsg(UiRequestKindMsg.SHOW_CALL, callId)
-            }
-            IncomingCallNotifier.ACTION_SHOW_INCOMING -> {
-                showOverLock(true)
-                UiRequestMsg(UiRequestKindMsg.SHOW_INCOMING, callId)
-            }
-            IncomingCallNotifier.ACTION_SHOW_CALL -> UiRequestMsg(UiRequestKindMsg.SHOW_CALL, callId)
-            else -> return
-        }
-        pendingUi = request
-        send { it.onUiRequest(request) }
+        val request = PendingUiRequest.peek() ?: return
+        if (request.kind == UiRequestKindMsg.SHOW_INCOMING && TelecomBridge.isRinging(request.callId)) showOverLock(true)
     }
 
     /** The incoming screen over the lock screen, and the screen on, while a call rings. */
@@ -194,7 +185,7 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
 
     override fun syncState() = LinphoneEngine.syncState()
     override fun takePendingPushes(): List<PushMsg> = VpPush.takePending(context)
-    override fun takeUiRequest(): UiRequestMsg? = pendingUi.also { pendingUi = null }
+    override fun takeUiRequest(): UiRequestMsg? = PendingUiRequest.take()
     override fun batteryStatus(): BatteryMsg = VpPush.battery(context)
     override fun openBatteryOptimizationSettings() = VpPush.openBatterySettings(context)
     override fun canUseFullScreenIntent(): Boolean = IncomingCallNotifier.canUseFullScreenIntent(context)

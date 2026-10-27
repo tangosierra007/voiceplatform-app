@@ -22,6 +22,8 @@ fun interface Scheduler {
  * - `call_cancelled`: end the wake at once (well inside the 2 s budget)
  *   unless a call is up.
  * - No INVITE within [IDLE_WAKE_MS] of the wake: back to sleep.
+ * - `signed_out`: forget the stored account and stop the engine natively,
+ *   then hand it to the app like the others.
  * - `voicemail`, `message`, `signed_out`, `config`: handed to the app.
  * - Duplicates (same pushId) are dropped.
  */
@@ -39,6 +41,9 @@ class PushHandler(
         /** Stop the engine if nothing but a push wake keeps it running. */
         fun sleep()
         fun hasLiveCall(): Boolean
+
+        /** `signed_out`: forget the stored account and stop the engine. */
+        fun signOut()
         fun deliver(push: PushData)
     }
 
@@ -64,6 +69,13 @@ class PushHandler(
         when (type) {
             PushTypeMsg.INCOMING_CALL -> onIncomingCall(id, data["sentAt"])
             PushTypeMsg.CALL_CANCELLED -> onCallCancelled()
+            PushTypeMsg.SIGNED_OUT -> {
+                // Natively first, so a revoked device stops even with no Flutter running.
+                wake?.idle?.cancel()
+                wake = null
+                actions.signOut()
+                actions.deliver(PushData(type, id, data["sentAt"]))
+            }
             else -> actions.deliver(PushData(type, id, data["sentAt"]))
         }
         return true

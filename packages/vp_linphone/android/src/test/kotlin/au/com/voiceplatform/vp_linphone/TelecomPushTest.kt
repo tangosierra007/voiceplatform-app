@@ -107,7 +107,11 @@ class PushHandlerTest {
                 calls += "sleep"
             }
             override fun hasLiveCall() = liveCall
+            override fun signOut() {
+                calls += "signOut"
+            }
             override fun deliver(push: PushHandler.PushData) {
+                calls += "deliver ${push.type}"
                 delivered += push
             }
         },
@@ -209,7 +213,7 @@ class PushHandlerTest {
         )
         assertFalse(handler.onMessage(msg("something_else", "y")))
         assertFalse(handler.onMessage(mapOf("type" to "voicemail")))
-        assertTrue(calls.isEmpty())
+        assertEquals(listOf("signOut"), calls.filter { !it.startsWith("deliver") })
     }
 
     @Test
@@ -225,8 +229,150 @@ class PushHandlerTest {
         log.recordLate(WakeLog.WEEK_MS + 10, 9_000, null)
         assertEquals(1, log.lateInLastWeek(WakeLog.WEEK_MS + 20))
     }
+
+    @Test
+    fun signedOutForgetsTheAccountNativelyThenTellsTheApp() {
+        handler.onMessage(msg("incoming_call", "p1"))
+        handler.onMessage(msg("signed_out", "p2"))
+        assertEquals(listOf("wake", "signOut", "deliver SIGNED_OUT"), calls)
+        assertFalse(handler.wakeInProgress)
+        advance(PushHandler.IDLE_WAKE_MS) // no stray sleep after
+        assertEquals(listOf("wake", "signOut", "deliver SIGNED_OUT"), calls)
+    }
 }
 
+/** The push handler driving the engine lifecycle, with a fake clock. */
+class CancelDuringStartTest {
+    private var now = 0L
+    private val timers = mutableListOf<Pair<Long, () -> Unit>>()
+    private val log = mutableListOf<String>()
+    private lateinit var handler: PushHandler
+
+    private val lifecycle = EngineLifecycle(
+        startService = { log += "startService" },
+        stopService = { log += "stopService" },
+    )
+
+    private fun advance(ms: Long) {
+        now += ms
+        val due = timers.filter { it.first <= now }
+        timers.removeAll(due)
+        due.forEach { it.second() }
+    }
+
+    private fun setUp() {
+        handler = PushHandler(
+            clock = { now },
+            wallClock = { now },
+            scheduler = { delay, task ->
+                val e = (now + delay) to task
+                timers += e
+                Cancellable { timers.remove(e) }
+            },
+            actions = object : PushHandler.Actions {
+                override fun wakeAndRegister() {
+                    // As LinphoneEngine.wakeForPush: register only if the wake is still wanted.
+                    lifecycle.requestStart(byApp = false) { error ->
+                        if (error == null && (lifecycle.startedByApp || handler.wakeInProgress)) log += "register"
+                        else log += "no register (${error?.javaClass?.simpleName ?: "not wanted"})"
+                    }
+                }
+                override fun sleep() {
+                    if (!lifecycle.startedByApp) lifecycle.requestStop { log += "stopped" }
+                }
+                override fun hasLiveCall() = false
+                override fun signOut() {}
+                override fun deliver(push: PushHandler.PushData) {}
+            },
+            wakeLog = WakeLog(object : WakeLog.Store {
+                override fun load() = emptyList<Long>()
+                override fun save(times: List<Long>) {}
+            }),
+        )
+    }
+
+    @Test
+    fun cancelWhileTheServiceIsStartingStopsItAndNeverRegisters() {
+        setUp()
+        handler.onMessage(mapOf("type" to "incoming_call", "pushId" to "p1"))
+        assertEquals(EngineLifecycle.State.STARTING, lifecycle.state)
+        advance(300)
+        handler.onMessage(mapOf("type" to "call_cancelled", "pushId" to "p2"))
+        assertEquals(listOf("startService"), log) // stop is held until the service is up
+        advance(400)
+        // The service reaches the foreground: it must not start the Core.
+        assertFalse(lifecycle.onServiceCreated())
+        assertEquals(listOf("startService", "no register (StartCancelled)", "stopService"), log)
+        lifecycle.onServiceDestroyed()
+        assertEquals("stopped", log.last())
+        assertEquals(EngineLifecycle.State.STOPPED, lifecycle.state)
+    }
+
+    @Test
+    fun aNormalWakeRegisters() {
+        setUp()
+        handler.onMessage(mapOf("type" to "incoming_call", "pushId" to "p1"))
+        advance(500)
+        assertTrue(lifecycle.onServiceCreated())
+        lifecycle.onCoreStarted()
+        assertEquals(listOf("startService", "register"), log)
+    }
+
+    @Test
+    fun theAppStartingMeanwhileWinsOverAPendingStop() {
+        setUp()
+        handler.onMessage(mapOf("type" to "incoming_call", "pushId" to "p1"))
+        handler.onMessage(mapOf("type" to "call_cancelled", "pushId" to "p2"))
+        lifecycle.requestStart(byApp = true) { log += "app started ${it?.javaClass?.simpleName ?: "ok"}" }
+        assertTrue(lifecycle.onServiceCreated())
+        lifecycle.onCoreStarted()
+        assertEquals(EngineLifecycle.State.RUNNING, lifecycle.state)
+        assertTrue("app started ok" in log)
+        assertFalse("stopService" in log)
+    }
+}
+
+class CallActionGateTest {
+    @Test
+    fun onlyTheNotificationsTokenActsAndAnswerUsesItUp() {
+        var n = 0
+        val gate = CallActionGate(random = { "token-${++n}" })
+        val t = gate.issue("call-abc")
+        assertTrue(gate.authorise(CallActionGate.Action.SHOW_INCOMING, "call-abc", t))
+        assertTrue(gate.authorise(CallActionGate.Action.SHOW_INCOMING, "call-abc", t)) // showing again is fine
+        assertTrue(gate.authorise(CallActionGate.Action.ANSWER, "call-abc", t))
+        assertFalse(gate.authorise(CallActionGate.Action.ANSWER, "call-abc", t)) // once
+    }
+
+    @Test
+    fun anExternalIntentWithAValidLookingIdDoesNothing() {
+        val gate = CallActionGate()
+        val t = gate.issue("call-abc")
+        assertFalse(gate.authorise(CallActionGate.Action.ANSWER, "call-abc", null))
+        assertFalse(gate.authorise(CallActionGate.Action.ANSWER, "call-abc", "guess"))
+        assertFalse(gate.authorise(CallActionGate.Action.DECLINE, "call-abc", t.reversed()))
+        assertFalse(gate.authorise(CallActionGate.Action.SHOW_INCOMING, "call-xyz", t))
+        assertFalse(gate.authorise(CallActionGate.Action.ANSWER, null, t))
+        // The real token still works afterwards: failed guesses don't burn it.
+        assertTrue(gate.authorise(CallActionGate.Action.DECLINE, "call-abc", t))
+    }
+
+    @Test
+    fun forgottenCallsHaveNoToken() {
+        val gate = CallActionGate()
+        val t = gate.issue("call-abc")
+        gate.forget("call-abc")
+        assertFalse(gate.authorise(CallActionGate.Action.ANSWER, "call-abc", t))
+    }
+
+    @Test
+    fun callIdsAndTokensAreRandom() {
+        val ids = List(200) { CallActionGate.randomCallId() }.toSet()
+        assertEquals(200, ids.size)
+        assertTrue(ids.all { Regex("^call-[0-9a-f]{16}$").matches(it) })
+        assertEquals(32, CallActionGate.randomToken().length)
+    }
+}
 class AccountRecordTest {
     @Test
     fun roundTripsWithAndWithoutPush() {

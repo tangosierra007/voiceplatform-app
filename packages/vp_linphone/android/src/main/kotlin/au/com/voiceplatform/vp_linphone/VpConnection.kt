@@ -132,8 +132,10 @@ class VpConnection(private val context: Context, val info: TelecomBridge.CallInf
 
     fun requestRoute(route: AudioRouteMsg): Boolean {
         if (Build.VERSION.SDK_INT >= 34) {
+            // A car kit is a Bluetooth endpoint: asked for Bluetooth with only a car
+            // there, use the car.
             val target = endpoints.firstOrNull { routeOf(it) == route }
-                ?: if (route == AudioRouteMsg.CAR) null else endpoints.firstOrNull { routeOf(it) == route }
+                ?: if (route == AudioRouteMsg.BLUETOOTH) endpoints.firstOrNull { routeOf(it) == AudioRouteMsg.CAR } else null
             target ?: return false
             requestCallEndpointChange(
                 target,

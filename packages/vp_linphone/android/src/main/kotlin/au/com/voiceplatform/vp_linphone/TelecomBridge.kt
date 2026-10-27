@@ -52,6 +52,8 @@ object TelecomBridge {
 
     fun connection(callId: String): VpConnection? = connections[callId]
 
+    fun isRinging(callId: String): Boolean = connections[callId]?.machine?.state == TelecomState.RINGING
+
     private fun log(message: String) = LinphoneEngine.logLine("TELECOM", message)
 
     fun handle(context: Context): PhoneAccountHandle =

@@ -68,6 +68,7 @@ object VpPush {
                 override fun wakeAndRegister() = LinphoneEngine.wakeForPush(app)
                 override fun sleep() = LinphoneEngine.sleepAfterPush(app)
                 override fun hasLiveCall() = LinphoneEngine.hasLiveCall
+                override fun signOut() = LinphoneEngine.signOutFromPush(app)
                 override fun deliver(push: PushHandler.PushData) {
                     val msg = PushMsg(push.type, push.pushId, push.sentAt)
                     if (appListeners.isEmpty()) addPending(app, msg) else appListeners.forEach { it.onPush(msg) }

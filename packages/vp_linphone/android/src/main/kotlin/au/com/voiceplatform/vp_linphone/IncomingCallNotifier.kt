@@ -29,7 +29,10 @@ object IncomingCallNotifier {
     const val EXTRA_ACTION = "au.com.voiceplatform.vp_linphone.ACTION"
     const val ACTION_SHOW_INCOMING = "show_incoming"
     const val ACTION_ANSWER = "answer"
-    const val ACTION_SHOW_CALL = "show_call"
+    const val EXTRA_TOKEN = "au.com.voiceplatform.vp_linphone.TOKEN"
+
+    /** Tokens for this process's notifications (see [CallActionGate]). */
+    val gate = CallActionGate()
 
     fun canUseFullScreenIntent(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < 34) return true
@@ -54,11 +57,13 @@ object IncomingCallNotifier {
         nm.createNotificationChannels(listOf(ring, silent))
     }
 
-    fun activityIntent(context: Context, action: String, callId: String): PendingIntent? {
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        launch.putExtra(EXTRA_ACTION, action)
-        launch.putExtra(TelecomBridge.EXTRA_CALL_ID, callId)
+    /** To the non-exported [CallActionActivity], with the call's token. */
+    private fun activityIntent(context: Context, action: String, callId: String, token: String): PendingIntent {
+        val launch = Intent(context, CallActionActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            .putExtra(EXTRA_ACTION, action)
+            .putExtra(TelecomBridge.EXTRA_CALL_ID, callId)
+            .putExtra(EXTRA_TOKEN, token)
         return PendingIntent.getActivity(
             context,
             requestCode(callId, action),
@@ -71,14 +76,16 @@ object IncomingCallNotifier {
         channels(context)
         val title = info.name ?: info.number
         val person = Person.Builder().setName(title).setImportant(true).build()
-        val content = activityIntent(context, ACTION_SHOW_INCOMING, info.callId) ?: return
-        val answer = activityIntent(context, ACTION_ANSWER, info.callId) ?: return
+        val token = gate.issue(info.callId)
+        val content = activityIntent(context, ACTION_SHOW_INCOMING, info.callId, token)
+        val answer = activityIntent(context, ACTION_ANSWER, info.callId, token)
         val decline = PendingIntent.getBroadcast(
             context,
             requestCode(info.callId, "decline"),
             Intent(context, CallActionReceiver::class.java)
                 .setAction(CallActionReceiver.ACTION_DECLINE)
-                .putExtra(TelecomBridge.EXTRA_CALL_ID, info.callId),
+                .putExtra(TelecomBridge.EXTRA_CALL_ID, info.callId)
+                .putExtra(EXTRA_TOKEN, token),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val fullScreen = canUseFullScreenIntent(context)
@@ -122,6 +129,7 @@ object IncomingCallNotifier {
     fun silence(context: Context, info: TelecomBridge.CallInfo) = show(context, info, silent = true)
 
     fun cancel(context: Context, callId: String) {
+        gate.forget(callId)
         NotificationManagerCompat.from(context).cancel(notificationId(callId))
     }
 
@@ -133,7 +141,13 @@ object IncomingCallNotifier {
 class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val callId = intent.getStringExtra(TelecomBridge.EXTRA_CALL_ID) ?: return
-        if (intent.action == ACTION_DECLINE) TelecomBridge.declineFromNotification(context, callId)
+        val token = intent.getStringExtra(IncomingCallNotifier.EXTRA_TOKEN)
+        if (intent.action != ACTION_DECLINE) return
+        if (!IncomingCallNotifier.gate.authorise(CallActionGate.Action.DECLINE, callId, token)) {
+            LinphoneEngine.logLine("TELECOM", "decline refused: bad or used token")
+            return
+        }
+        TelecomBridge.declineFromNotification(context, callId)
     }
 
     companion object {

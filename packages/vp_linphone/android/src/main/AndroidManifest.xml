@@ -57,6 +57,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- The incoming-call notification's target (full-screen intent, tap,
+             Answer). Not exported: other apps can't answer calls through it. -->
+        <activity
+            android:name=".CallActionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:turnScreenOn="true" />
+
         <receiver
             android:name=".CallActionReceiver"
             android:exported="false" />

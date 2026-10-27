@@ -61,8 +61,6 @@ object LinphoneEngine {
     private var domain: String? = null
     private var service: EngineService? = null
 
-    private val startWaiters = mutableListOf<(Throwable?) -> Unit>()
-    private val stopWaiters = mutableListOf<() -> Unit>()
     private var pendingUnregister: (() -> Unit)? = null
 
     private class Tracked(val id: String, val call: Call, val incoming: Boolean, val startedAt: Long) {
@@ -80,7 +78,6 @@ object LinphoneEngine {
 
     private val calls = LinkedHashMap<String, Tracked>()
     private val idByPointer = HashMap<Long, String>()
-    private var nextId = 1
 
     fun addListener(l: Listener) = listeners.add(l)
     fun removeListener(l: Listener) = listeners.remove(l)
@@ -136,56 +133,52 @@ object LinphoneEngine {
 
     // ---------------------------------------------------------------- service lifecycle
 
-    /** True when CallEngine.start() asked for the engine; a push wake alone leaves it false. */
-    private var startedByApp = false
     private var appContext: Context? = null
+
+    private val lifecycle = EngineLifecycle(
+        startService = {
+            val ctx = appContext ?: throw IllegalStateException("no context")
+            ContextCompat.startForegroundService(ctx, Intent(ctx, EngineService::class.java))
+        },
+        stopService = {
+            appContext?.let { it.stopService(Intent(it, EngineService::class.java)) }
+        },
+    )
+
+    /** True when CallEngine.start() asked for the engine; a push wake alone leaves it false. */
+    private val startedByApp: Boolean get() = lifecycle.startedByApp
 
     fun requestStart(context: Context, byApp: Boolean = true, done: (Throwable?) -> Unit) {
         appContext = context.applicationContext
-        if (byApp) startedByApp = true
-        if (core != null) return done(null)
-        startWaiters += done
-        if (startWaiters.size > 1) return
-        try {
-            ContextCompat.startForegroundService(context, Intent(context, EngineService::class.java))
-        } catch (e: Exception) {
-            finishStart(e)
-        }
+        lifecycle.requestStart(byApp, done)
     }
 
     fun requestStop(context: Context, done: () -> Unit) {
-        startedByApp = false
-        if (core == null && service == null) return done()
-        stopWaiters += done
-        context.stopService(Intent(context, EngineService::class.java))
+        appContext = context.applicationContext
+        lifecycle.requestStop(done)
     }
 
-    /** Called by [EngineService.onCreate] once it is in the foreground. */
     /** Called by [EngineService] once it is in the foreground; throws if the Core can't start. */
     internal fun onServiceCreated(svc: EngineService) {
         service = svc
+        if (!lifecycle.onServiceCreated()) {
+            log("engine stop requested while starting: stopping")
+            return
+        }
         startCore(svc.applicationContext)
-        finishStart(null)
+        lifecycle.onCoreStarted()
     }
 
     /** The service's start failed (foreground refused, or the Core); it stops itself next. */
     internal fun onServiceStartFailed(error: Throwable) {
         log("engine start failed: ${error.javaClass.simpleName}")
-        finishStart(error)
+        lifecycle.onStartFailed(error)
     }
 
     internal fun onServiceDestroyed() {
         stopCore()
         service = null
-        val waiters = stopWaiters.toList()
-        stopWaiters.clear()
-        waiters.forEach { it() }
-    }
-
-    private fun finishStart(error: Throwable?) {
-        val waiters = startWaiters.toList()
-        startWaiters.clear()
-        waiters.forEach { it(error) }
+        lifecycle.onServiceDestroyed()
     }
 
     /**
@@ -750,6 +743,11 @@ object LinphoneEngine {
                 log("push wake failed: ${error.javaClass.simpleName}")
                 return@requestStart
             }
+            // call_cancelled may have come while the service was starting.
+            if (!startedByApp && !VpPush.get(context).wakeInProgress) {
+                log("push wake no longer wanted")
+                return@requestStart
+            }
             val acc = account
             if (acc != null) {
                 acc.refreshRegister()
@@ -771,6 +769,21 @@ object LinphoneEngine {
                 log("push wake: register refused ${e.code}")
             }
         }
+    }
+
+    /**
+     * A `signed_out` push (device revoked): forget the account and its stored
+     * copy and stop, natively, whether or not Flutter is running. The app
+     * still gets the push and shows AppSignedOut.
+     */
+    fun signOutFromPush(context: Context) {
+        CredentialStore(context).clear()
+        core?.let { dropAccount(it) }
+        account = null
+        domain = null
+        scrubber.clearSecrets()
+        log("signed out by push: account forgotten, engine stops")
+        if (!hasLiveCall) requestStop(context) {}
     }
 
     /** After a push wake that brought no call (or `call_cancelled`): stop unless the app started us. */
@@ -804,7 +817,7 @@ object LinphoneEngine {
     private fun track(call: Call): Tracked {
         val ptr = call.nativePointer
         idByPointer[ptr]?.let { id -> calls[id]?.let { return it } }
-        val id = "call-${nextId++}"
+        val id = CallActionGate.randomCallId()
         val t = Tracked(id, call, call.dir == Call.Dir.Incoming, System.currentTimeMillis())
         calls[id] = t
         idByPointer[ptr] = id

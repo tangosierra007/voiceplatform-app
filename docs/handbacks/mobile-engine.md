@@ -182,7 +182,7 @@ Branch `feat/telecom-fcm` from `main` at `89752d3`. One PR, not merged.
 
 - `flutter analyze` (package, example, root app): clean.
 - `flutter test` (package): 70 pass. The new `android_extras_test.dart` covers the push, UI-request and full-screen-intent streams, pending pushes, battery, and `VpPushTokens` with a fake token source.
-- Kotlin JVM tests: 55 pass, including:
+- Kotlin JVM tests: 63 pass (after the review fixes below), including:
   - `ConnectionMachineTest`: the state machine, system events and disconnect causes.
   - `PushHandlerTest`: dedupe, wake, late registration counted from receipt and from `sentAt`, cancel, the idle timeout and delivery, with a fake clock and scheduler.
   - `AccountRecordTest`.
@@ -219,3 +219,15 @@ Not verified: a real SIP INVITE or FCM message, Bluetooth or car routes (none pa
 2. Microphone from the lock screen. Answering from Telecom or a headset while the app is in the background adds the `microphone` foreground-service type when the call connects; Android may refuse that from the background, and the code then falls back to `phoneCall` only. This needs a live call test. If capture is silent, the fix is to open the activity on answer, as the notification's Answer button does.
 3. The root app must depend on vp_linphone and call `VpLinphoneEngine`, `VpPushTokens.start()` and `addVpLinphoneLicenses()` (4.2). The Firebase Android SDK's Apache-2.0 texts are not in Flutter's LicenseRegistry; they would need an oss-licenses step.
 4. `POST_NOTIFICATIONS` and `BLUETOOTH_CONNECT` are runtime permissions WS4 must ask for. Without the first, Telecom still has the call but no notification shows.
+
+### Review fixes (WS6 on PR #15)
+
+1. **Answering from another app.** The notification's full-screen intent, tap and Answer now go to `CallActionActivity`, which is not exported. Each notification carries a random token per call (`CallActionGate`): Answer and Decline need it and use it once, and failed guesses don't burn it.
+   - The launcher activity's intent extras are no longer read at all. The UI request reaches the plugin in process memory (`PendingUiRequest`), and the lock-screen flag is set only while that call is ringing.
+   - The Decline receiver checks the token too. Call ids are random (`call-` and 16 hex characters).
+   - Verified on the A53 while a call rang. None of these changed the call: an external intent to the launcher with `answer` and a valid-looking id; a shell start of the trampoline (a SecurityException, since it isn't exported); a shell Decline broadcast without a token. The notification's own Answer still worked, and so did the full-screen intent over the lock screen.
+   - JVM tests: `CallActionGateTest`.
+2. **`call_cancelled` during start-up.** `EngineLifecycle` (pure) holds a stop that arrives while the service is starting. The service is stopped as soon as it is in the foreground, and the start callbacks get `StartCancelled`. `wakeForPush` also re-checks that a wake is still wanted before registering. A start from the app meanwhile wins over the pending stop.
+   - JVM tests with a fake clock: `CancelDuringStartTest`.
+3. **`signed_out`** clears `CredentialStore`, forgets the account and stops the engine natively (no Flutter needed), then delivers the push to Dart. Tested in `PushHandlerTest`.
+4. **Route fallback:** asking for Bluetooth when the only Bluetooth endpoint is a car kit uses the car endpoint.
