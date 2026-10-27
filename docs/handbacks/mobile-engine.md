@@ -231,3 +231,45 @@ Not verified: a real SIP INVITE or FCM message, Bluetooth or car routes (none pa
    - JVM tests with a fake clock: `CancelDuringStartTest`.
 3. **`signed_out`** clears `CredentialStore`, forgets the account and stops the engine natively (no Flutter needed), then delivers the push to Dart. Tested in `PushHandlerTest`.
 4. **Route fallback:** asking for Bluetooth when the only Bluetooth endpoint is a car kit uses the car endpoint.
+
+## 3.4 `feat/engine-diagnostics`
+
+Branch `feat/engine-diagnostics` from `main` at `dedc9f8`. One PR, not merged.
+
+### What's built
+
+- **Rotating per-call logs** (`CallLogFile`):
+  - Each call's log is in segments of at most 1 MB, `calls/<start>-<n>.log` in `noBackupFilesDir/vp_linphone/` (app-private, excluded from backup).
+  - Kept: the last 5 calls or 10 MB in all, whichever comes first. The oldest segments go first, so a very long call loses its start, and its export begins with a "rotated out" marker.
+  - A 200-line in-memory lead-in (the REGISTER before the call) starts each call's log.
+  - The scrubbing sink is still the only writer. liblinphone's logcat output stays off in every build. A JVM test fails on any `Log.*`, `println` or `printStackTrace` in the plugin's Kotlin.
+  - 3.1's single-file log is deleted on first use.
+- **Export:** `exportLastCallLog()` returns the last call's log **gzipped**, at most 2 MB.
+  - It is scrubbed as written, again in Kotlin on export, and again in Dart (`LogScrubber`).
+  - If it doesn't fit, the oldest lines are cut at a line boundary and `callLogTruncatedMarker` goes first. It is empty when no call has been logged.
+- **Shared scrub table:** `packages/vp_linphone/test/shared_scrub_cases.dart` is a copy of WS5's `test/diagnostics/shared_scrub_cases.dart`. A test checks the two tables are equal and runs every case through vp_linphone's scrubber; all pass.
+- **`CallDiagnostics`** (for the Me screen, 4.4):
+  - `lastCallLog()` returns the gzipped bytes.
+  - `sendCallLogs()` uploads them through a `CallLogUploader` and returns the reference (`LOG-...`). It throws `NoCallLog` when there is nothing to send.
+  - The uploader is injected: the app passes its generated API client's `POST /app/v1/diagnostics/call-logs` call (`application/gzip`), which adds the bearer token and `X-VP-App`.
+- **MOS hooks (v1.x):** `VpLinphoneEngine.callQuality` gives a sample every 2 s per connected call, from liblinphone's RTCP statistics:
+  - liblinphone's 0..5 quality estimate;
+  - jitter (ms, as the far end reported it);
+  - local and remote loss (%);
+  - round trip (ms).
+  - It is optional, and nothing sends it.
+
+### Tests
+
+- `flutter analyze` (whole tree): clean.
+- Root `flutter test`: 217 pass.
+- vp_linphone `flutter test`: 105 pass, including `diagnostics_test.dart`: the shared table, gzip export, the 2 MB truncation with marker, `CallDiagnostics` and the quality stream.
+- Kotlin JVM tests: 67 pass, including `CallLogFileTest`: last 5 calls, the total-size limit oldest-first, a long call's rotated start, export, legacy cleanup, and no logcat.
+- Example and root debug APKs build.
+- Not run on the A53: no fake engine path writes call logs (they need a real Core call). Rotation and export are covered by the JVM tests.
+
+### Deviations and open questions
+
+1. `CallEngine.exportLastCallLog()` now returns **gzip** (the contract's doc says "the rotating log"; the API takes `application/gzip`). If WS4 reads it as text anywhere, it must gunzip it. Should the contract doc say gzip?
+2. The upload is a hook, not an HTTP call in the plugin: vp_linphone has no API client, and the app's generated one adds the auth and version headers.
+3. Quality units follow liblinphone: jitter is the far end's RTCP report, and the 0..5 estimate is not a calibrated MOS.

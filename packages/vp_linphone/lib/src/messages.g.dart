@@ -426,6 +426,78 @@ class UiRequestMsg {
   }
 }
 
+/// Per-call audio quality from liblinphone's RTCP statistics (MOS hooks for
+/// v1.x; nothing sends them yet).
+class QualityMsg {
+  QualityMsg({
+    required this.callId,
+    required this.quality,
+    required this.jitterMs,
+    required this.localLossPercent,
+    required this.remoteLossPercent,
+    required this.roundTripMs,
+  });
+
+  String callId;
+
+  /// liblinphone's quality estimate, 0 (worst) to 5 (best), MOS-like.
+  double quality;
+
+  double jitterMs;
+
+  double localLossPercent;
+
+  double remoteLossPercent;
+
+  double roundTripMs;
+
+  List<Object?> _toList() {
+    return <Object?>[callId, quality, jitterMs, localLossPercent, remoteLossPercent, roundTripMs];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static QualityMsg decode(Object result) {
+    result as List<Object?>;
+    return QualityMsg(
+      callId: result[0]! as String,
+      quality: result[1]! as double,
+      jitterMs: result[2]! as double,
+      localLossPercent: result[3]! as double,
+      remoteLossPercent: result[4]! as double,
+      roundTripMs: result[5]! as double,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! QualityMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(callId, other.callId) &&
+        _deepEquals(quality, other.quality) &&
+        _deepEquals(jitterMs, other.jitterMs) &&
+        _deepEquals(localLossPercent, other.localLossPercent) &&
+        _deepEquals(remoteLossPercent, other.remoteLossPercent) &&
+        _deepEquals(roundTripMs, other.roundTripMs);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'QualityMsg(callId: $callId, quality: $quality, jitterMs: $jitterMs, localLossPercent: $localLossPercent, remoteLossPercent: $remoteLossPercent, roundTripMs: $roundTripMs)';
+  }
+}
+
 class BatteryMsg {
   BatteryMsg({required this.ignoringOptimizations, required this.lateWakesLastWeek, required this.manufacturer});
 
@@ -519,8 +591,11 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is UiRequestMsg) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    } else if (value is BatteryMsg) {
+    } else if (value is QualityMsg) {
       buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    } else if (value is BatteryMsg) {
+      buffer.putUint8(142);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -562,6 +637,8 @@ class _PigeonCodec extends StandardMessageCodec {
       case 140:
         return UiRequestMsg.decode(readValue(buffer)!);
       case 141:
+        return QualityMsg.decode(readValue(buffer)!);
+      case 142:
         return BatteryMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1029,6 +1106,9 @@ abstract class VpLinphoneEventsApi {
   /// full-screen intent is not allowed (Android 14+).
   void onFullScreenIntentDenied(String callId);
 
+  /// Every 2 s while a call is connected.
+  void onCallQuality(QualityMsg quality);
+
   static void setUp(VpLinphoneEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -1195,6 +1275,31 @@ abstract class VpLinphoneEventsApi {
           final String arg_callId = args[0]! as String;
           try {
             api.onFullScreenIntentDenied(arg_callId);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onCallQuality$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final QualityMsg arg_quality = args[0]! as QualityMsg;
+          try {
+            api.onCallQuality(arg_quality);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

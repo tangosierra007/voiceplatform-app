@@ -60,3 +60,30 @@ final class VpBatteryStatus {
   /// `Build.MANUFACTURER`, for the list of makers known to delay FCM.
   final String manufacturer;
 }
+
+/// One sample of a connected call's audio quality from liblinphone's RTCP
+/// statistics (MOS hooks for v1.x).
+final class VpCallQuality {
+  const VpCallQuality({
+    required this.callId,
+    required this.quality,
+    required this.jitterMs,
+    required this.localLossPercent,
+    required this.remoteLossPercent,
+    required this.roundTripMs,
+  });
+  final String callId;
+
+  /// liblinphone's estimate, 0 (worst) to 5 (best), on a MOS-like scale.
+  final double quality;
+
+  /// Interarrival jitter the far end reported, in milliseconds.
+  final double jitterMs;
+
+  /// Packets lost on the way to us, and as the far end reported, in percent.
+  final double localLossPercent;
+  final double remoteLossPercent;
+
+  /// RTCP round trip, in milliseconds.
+  final double roundTripMs;
+}

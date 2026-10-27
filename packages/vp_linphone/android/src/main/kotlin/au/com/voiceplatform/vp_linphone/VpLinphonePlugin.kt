@@ -38,6 +38,7 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         }
         override fun onAudio(audio: AudioMsg) = send { it.onAudio(audio) }
         override fun onInputLevel(dbm0: Double) = send { it.onInputLevel(dbm0) }
+        override fun onCallQuality(quality: QualityMsg) = send { it.onCallQuality(quality) }
     }
 
     private val pushListener = object : VpPush.AppListener {

@@ -91,6 +91,27 @@ class UiRequestMsg {
   String callId;
 }
 
+/// Per-call audio quality from liblinphone's RTCP statistics (MOS hooks for
+/// v1.x; nothing sends them yet).
+class QualityMsg {
+  QualityMsg({
+    required this.callId,
+    required this.quality,
+    required this.jitterMs,
+    required this.localLossPercent,
+    required this.remoteLossPercent,
+    required this.roundTripMs,
+  });
+  String callId;
+
+  /// liblinphone's quality estimate, 0 (worst) to 5 (best), MOS-like.
+  double quality;
+  double jitterMs;
+  double localLossPercent;
+  double remoteLossPercent;
+  double roundTripMs;
+}
+
 class BatteryMsg {
   BatteryMsg({required this.ignoringOptimizations, required this.lateWakesLastWeek, required this.manufacturer});
   bool ignoringOptimizations;
@@ -180,4 +201,7 @@ abstract class VpLinphoneEventsApi {
   /// An incoming call was shown as a heads-up notification because the
   /// full-screen intent is not allowed (Android 14+).
   void onFullScreenIntentDenied(String callId);
+
+  /// Every 2 s while a call is connected.
+  void onCallQuality(QualityMsg quality);
 }

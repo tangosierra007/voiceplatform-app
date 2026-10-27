@@ -42,12 +42,14 @@ object LinphoneEngine {
         fun onCall(call: CallMsg)
         fun onAudio(audio: AudioMsg)
         fun onInputLevel(dbm0: Double)
+        fun onCallQuality(quality: QualityMsg) {}
     }
 
     const val USER_AGENT = "VoicePlatform-app"
     const val VERSION = "0.1.0"
     private const val LEVEL_INTERVAL_MS = 50L
     private const val SILENCE_DBM0 = -130.0
+    private const val QUALITY_EVERY_TICKS = 40 // 2 s at 50 ms
     private const val UNREGISTER_TIMEOUT_MS = 5000L
 
     private val main = Handler(Looper.getMainLooper())
@@ -683,6 +685,8 @@ object LinphoneEngine {
         listeners.forEach { it.onAudio(msg) }
     }
 
+    private var ticks = 0
+
     private val levelTick = object : Runnable {
         override fun run() {
             val c = core ?: return
@@ -691,6 +695,7 @@ object LinphoneEngine {
                 val level = if (c.isMicEnabled) call.recordVolume.toDouble() else SILENCE_DBM0
                 listeners.forEach { it.onInputLevel(level) }
             }
+            if (++ticks % QUALITY_EVERY_TICKS == 0) emitQuality()
             main.postDelayed(this, LEVEL_INTERVAL_MS)
         }
     }
@@ -806,6 +811,27 @@ object LinphoneEngine {
         emitRegistration(currentRegistration())
         calls.values.filter { it.state != CallStateMsg.ENDED }.forEach { emitCall(it) }
         emitAudio()
+    }
+
+    /**
+     * MOS hooks (v1.x): liblinphone's RTCP statistics for each connected call.
+     * Jitter is the far end's report (ms), loss rates in percent, round trip
+     * from RTCP (ms), and liblinphone's 0..5 quality estimate. Not sent anywhere.
+     */
+    private fun emitQuality() {
+        for (t in calls.values) {
+            if (t.state != CallStateMsg.CONNECTED) continue
+            val stats = runCatching { t.call.audioStats }.getOrNull() ?: continue
+            val msg = QualityMsg(
+                callId = t.id,
+                quality = t.call.currentQuality.toDouble().takeIf { it >= 0 } ?: 0.0,
+                jitterMs = stats.receiverInterarrivalJitter.toDouble(),
+                localLossPercent = stats.localLossRate.toDouble(),
+                remoteLossPercent = stats.receiverLossRate.toDouble(),
+                roundTripMs = stats.roundTripDelay.toDouble() * 1000,
+            )
+            listeners.forEach { it.onCallQuality(msg) }
+        }
     }
 
     // ---------------------------------------------------------------- log export

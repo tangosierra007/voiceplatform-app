@@ -5,6 +5,7 @@ import 'package:call_engine/call_engine.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'call_diagnostics.dart';
 import 'incoming_headers.dart';
 import 'log_scrubber.dart';
 import 'messages.g.dart';
@@ -47,6 +48,7 @@ final class VpLinphoneEngine implements CallEngine {
   final _pushes = StreamController<VpPushMessage>.broadcast();
   final _ui = StreamController<VpUiRequest>.broadcast();
   final _fsiDenied = StreamController<String>.broadcast();
+  final _quality = StreamController<VpCallQuality>.broadcast();
   final Map<String, CallSnapshot> _active = {};
 
   /// The receiving end of the Kotlin events, for tests that play the platform.
@@ -154,12 +156,15 @@ final class VpLinphoneEngine implements CallEngine {
   @override
   Stream<double> get inputLevel => _level.stream;
 
+  /// The last call's log, gzipped, at most 2 MB (oldest lines cut first, with
+  /// a marker). Scrubbed as written, again on the platform side, and again
+  /// here; empty when no call has been logged. See [CallDiagnostics].
   @override
   Future<Uint8List> exportLastCallLog() async {
     final bytes = await _guard(_host.exportLastCallLog);
-    // Already scrubbed line by line on the platform side; scrubbed again here.
+    if (bytes.isEmpty) return Uint8List(0);
     final text = utf8.decode(bytes, allowMalformed: true);
-    return Uint8List.fromList(utf8.encode(LogScrubber().scrub(text)));
+    return packCallLog(LogScrubber().scrub(text));
   }
 
   // ------------------------------------------------------------ plumbing
@@ -257,6 +262,10 @@ final class VpLinphoneEngine implements CallEngine {
 
   // ------------------------------------------------------------ Android extras (WS4)
 
+  /// Audio quality of each connected call every 2 s (MOS hooks for v1.x;
+  /// optional, nothing sends it).
+  Stream<VpCallQuality> get callQuality => _quality.stream;
+
   /// Pushes for the app (`voicemail`, `message`, `signed_out`, `config`) while it runs.
   Stream<VpPushMessage> get pushMessages => _pushes.stream;
 
@@ -322,4 +331,16 @@ final class _Events implements VpLinphoneEventsApi {
 
   @override
   void onFullScreenIntentDenied(String callId) => _engine._fsiDenied.add(callId);
+
+  @override
+  void onCallQuality(QualityMsg quality) => _engine._quality.add(
+    VpCallQuality(
+      callId: quality.callId,
+      quality: quality.quality,
+      jitterMs: quality.jitterMs,
+      localLossPercent: quality.localLossPercent,
+      remoteLossPercent: quality.remoteLossPercent,
+      roundTripMs: quality.roundTripMs,
+    ),
+  );
 }

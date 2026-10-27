@@ -8,36 +8,53 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * The rotating file log for the most recent call ("Send call logs to support").
+ * The engine's rotating per-call logs ("Send call logs to support"; spec 22
+ * Diagnostics, decision 140; APP9).
  *
- * Every line is scrubbed before it reaches memory or disk. Lines outside a
- * call go to a small in-memory ring only (the lead-in: the REGISTER and setup
- * just before the call). When the first call starts the file is restarted with
- * that lead-in; lines are written until [endCall]. The file rotates once at
- * [maxBytes] (`lastcall.log` -> `lastcall.log.1`), so at most twice that is
- * kept. [export] returns both parts, oldest first.
+ * - Every line is scrubbed ([LogScrubber]) before it reaches memory or disk;
+ *   this is the only writer.
+ * - Lines outside a call go to a small in-memory ring (the lead-in: REGISTER
+ *   and set-up just before the call). [beginCall] starts the call's files with
+ *   that lead-in; lines go to them until [endCall].
+ * - A call's log is a series of segments `calls/<start>-<n>.log` of at most
+ *   [segmentBytes]. The logs of the last [maxCalls] calls are kept, within
+ *   [maxTotalBytes] in all, whichever limit comes first; the oldest segments
+ *   go first, so a very long call loses its beginning (the export says so).
+ * - The directory is app-private and excluded from backup (noBackupFilesDir).
  */
 class CallLogFile(
-    private val dir: File,
+    dir: File,
     private val scrubber: LogScrubber,
-    private val maxBytes: Long = 512 * 1024,
+    private val segmentBytes: Long = 1024 * 1024,
+    private val maxCalls: Int = 5,
+    private val maxTotalBytes: Long = 10L * 1024 * 1024,
     private val leadInLines: Int = 200,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val current = File(dir, "lastcall.log")
-    private val previous = File(dir, "lastcall.log.1")
+    private val callsDir = File(dir, "calls")
     private val ring = ArrayDeque<String>()
-    private var inCall = false
+    private var currentCall: String? = null
+    private var segment = 0
+    private var currentFile: File? = null
+
     // "2026 Oct 27 03:15:00.123Z": no run of 6 digits, so scrubbing the whole
     // line again (on export, and in Dart) leaves the timestamp intact.
     private val format = SimpleDateFormat("yyyy MMM dd HH:mm:ss.SSS'Z'", Locale.ROOT).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
 
+    init {
+        // 3.1's single-file log.
+        File(dir, "lastcall.log").delete()
+        File(dir, "lastcall.log.1").delete()
+    }
+
+    val inCall: Boolean @Synchronized get() = currentCall != null
+
     @Synchronized
     fun write(level: String, message: String) {
         val line = "${format.format(Date(clock()))} $level ${scrubber.scrub(message)}"
-        if (inCall) {
+        if (currentCall != null) {
             append(line)
         } else {
             ring.addLast(line)
@@ -47,40 +64,93 @@ class CallLogFile(
 
     @Synchronized
     fun beginCall() {
-        if (inCall) return
-        inCall = true
-        dir.mkdirs()
-        previous.delete()
-        current.writeText("")
+        if (currentCall != null) return
+        callsDir.mkdirs()
+        currentCall = "%013d".format(clock())
+        segment = 0
+        currentFile = segmentFile(currentCall!!, 0).also { it.writeText("") }
         for (line in ring) append(line)
         ring.clear()
+        enforceLimits()
     }
 
     @Synchronized
     fun endCall() {
-        inCall = false
+        currentCall = null
+        currentFile = null
     }
 
+    /**
+     * The last call's log as plain text, scrubbed again. Starts with a marker
+     * when rotation removed its beginning. Empty when no call has been logged.
+     */
     @Synchronized
     fun export(): ByteArray {
-        val parts = listOf(previous, current).filter { it.exists() }
-        // Scrubbed again on the way out: a rule added later still applies.
-        val text = parts.joinToString("") { it.readText() }
-        return text.lineSequence().joinToString("\n") { scrubber.scrub(it) }.toByteArray(Charsets.UTF_8)
+        val calls = callKeys()
+        val key = currentCall ?: calls.lastOrNull() ?: return ByteArray(0)
+        val parts = segments(key)
+        if (parts.isEmpty()) return ByteArray(0)
+        val sb = StringBuilder()
+        if (seqOf(parts.first()) > 0) sb.append(ROTATED_MARKER).append('\n')
+        for (f in parts) {
+            for (line in f.readLines()) sb.append(scrubber.scrub(line)).append('\n')
+        }
+        return sb.toString().toByteArray(Charsets.UTF_8)
     }
 
     @Synchronized
     fun clear() {
         ring.clear()
-        previous.delete()
-        current.delete()
+        callsDir.listFiles()?.forEach { it.delete() }
     }
 
+    /** For tests: the files kept, oldest first. */
+    @Synchronized
+    fun keptFiles(): List<File> = allSegments()
+
     private fun append(line: String) {
-        if (current.exists() && current.length() + line.length + 1 > maxBytes) {
-            previous.delete()
-            current.renameTo(previous)
+        var f = currentFile ?: return
+        val bytes = line.toByteArray(Charsets.UTF_8).size + 1
+        if (f.length() > 0 && f.length() + bytes > segmentBytes) {
+            segment++
+            f = segmentFile(currentCall!!, segment)
+            currentFile = f
+            f.writeText("")
+            enforceLimits()
         }
-        current.appendText(line + "\n")
+        f.appendText(line + "\n")
+    }
+
+    private fun enforceLimits() {
+        var calls = callKeys()
+        while (calls.size > maxCalls) {
+            segments(calls.first()).forEach { it.delete() }
+            calls = callKeys()
+        }
+        var files = allSegments()
+        var total = files.sumOf { it.length() }
+        // Oldest first; never the segment being written.
+        for (f in files) {
+            if (total <= maxTotalBytes) break
+            if (f == currentFile) continue
+            total -= f.length()
+            f.delete()
+        }
+    }
+
+    private fun segmentFile(key: String, seq: Int) = File(callsDir, "$key-${"%04d".format(seq)}.log")
+
+    private fun allSegments(): List<File> =
+        callsDir.listFiles { f -> NAME.matches(f.name) }.orEmpty().sortedBy { it.name }
+
+    private fun callKeys(): List<String> = allSegments().map { it.name.substringBefore('-') }.distinct()
+
+    private fun segments(key: String): List<File> = allSegments().filter { it.name.startsWith("$key-") }
+
+    private fun seqOf(f: File): Int = f.name.substringAfter('-').substringBefore('.').toInt()
+
+    companion object {
+        const val ROTATED_MARKER = "[vp_linphone: the start of this call's log was rotated out]"
+        private val NAME = Regex("""^\d{13}-\d{4}\.log$""")
     }
 }

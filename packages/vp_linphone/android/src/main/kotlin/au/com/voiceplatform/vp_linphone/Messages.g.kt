@@ -586,6 +586,69 @@ data class UiRequestMsg (
   }
 }
 
+/**
+ * Per-call audio quality from liblinphone's RTCP statistics (MOS hooks for
+ * v1.x; nothing sends them yet).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class QualityMsg (
+  val callId: String,
+  /** liblinphone's quality estimate, 0 (worst) to 5 (best), MOS-like. */
+  val quality: Double,
+  val jitterMs: Double,
+  val localLossPercent: Double,
+  val remoteLossPercent: Double,
+  val roundTripMs: Double
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): QualityMsg {
+      val callId = pigeonVar_list[0] as String
+      val quality = pigeonVar_list[1] as Double
+      val jitterMs = pigeonVar_list[2] as Double
+      val localLossPercent = pigeonVar_list[3] as Double
+      val remoteLossPercent = pigeonVar_list[4] as Double
+      val roundTripMs = pigeonVar_list[5] as Double
+      return QualityMsg(callId, quality, jitterMs, localLossPercent, remoteLossPercent, roundTripMs)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      callId,
+      quality,
+      jitterMs,
+      localLossPercent,
+      remoteLossPercent,
+      roundTripMs,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as QualityMsg
+    return MessagesPigeonUtils.deepEquals(this.callId, other.callId) && MessagesPigeonUtils.deepEquals(this.quality, other.quality) && MessagesPigeonUtils.deepEquals(this.jitterMs, other.jitterMs) && MessagesPigeonUtils.deepEquals(this.localLossPercent, other.localLossPercent) && MessagesPigeonUtils.deepEquals(this.remoteLossPercent, other.remoteLossPercent) && MessagesPigeonUtils.deepEquals(this.roundTripMs, other.roundTripMs)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.callId)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.quality)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.jitterMs)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.localLossPercent)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.remoteLossPercent)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.roundTripMs)
+    return result
+  }
+  override fun toString(): String {
+    return "QualityMsg(callId=$callId, quality=$quality, jitterMs=$jitterMs, localLossPercent=$localLossPercent, remoteLossPercent=$remoteLossPercent, roundTripMs=$roundTripMs)"
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class BatteryMsg (
   val ignoringOptimizations: Boolean,
@@ -695,6 +758,11 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          QualityMsg.fromList(it)
+        }
+      }
+      142.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           BatteryMsg.fromList(it)
         }
       }
@@ -751,8 +819,12 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is BatteryMsg -> {
+      is QualityMsg -> {
         stream.write(141)
+        writeValue(stream, value.toList())
+      }
+      is BatteryMsg -> {
+        stream.write(142)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1419,6 +1491,26 @@ class VpLinphoneEventsApi(private val binaryMessenger: BinaryMessenger, private 
       val channelName = "dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onFullScreenIntentDenied$separatedMessageChannelSuffix"
       val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
       channel.send(listOf(callIdArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(VpFlutterError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(MessagesPigeonUtils.createConnectionError(channelName))
+        } 
+      }
+    }
+  }
+  /** Every 2 s while a call is connected. */
+  suspend fun onCallQuality(qualityArg: QualityMsg)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.vp_linphone.VpLinphoneEventsApi.onCallQuality$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(qualityArg)) {
         if (it is List<*>) {
           if (it.size > 1) {
             continuation.resumeWithException(VpFlutterError(it[0] as String, it[1] as String, it[2] as String?))

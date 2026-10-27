@@ -373,7 +373,7 @@ void main() {
 
   test('the exported log is scrubbed again on the Dart side', () async {
     host.log = Uint8List.fromList(utf8.encode('2026 Oct 27 03:15:00.123Z ENGINE dial 0491570737\nok'));
-    final out = utf8.decode(await engine.exportLastCallLog());
+    final out = utf8.decode(gzip.decode(await engine.exportLastCallLog()));
     expect(out, '2026 Oct 27 03:15:00.123Z ENGINE dial [n]\nok');
   });
 }
