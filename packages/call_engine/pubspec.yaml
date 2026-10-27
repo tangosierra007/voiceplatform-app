@@ -1,0 +1,10 @@
+name: call_engine
+description: The CallEngine interface between the VoicePlatform app's UI and its SIP engine. Owned by mobile-lead; mirrors contracts/call_engine.dart.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.7
+
+dev_dependencies:
+  test: any

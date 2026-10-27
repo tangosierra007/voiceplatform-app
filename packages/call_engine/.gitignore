@@ -1,0 +1,3 @@
+
+# Library packages don't commit lock files
+packages/*/pubspec.lock
