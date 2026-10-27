@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "474300472071",
+    "project_id": "voiceplatform-app",
+    "storage_bucket": "voiceplatform-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:474300472071:android:7a8c23811df575fc5603a2",
+        "android_client_info": {
+          "package_name": "au.com.voiceplatform.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBT2KvkVIOHFFShI2CvfHny6gG6ayrCFJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,9 @@
+# The default rules, plus one exception: google-services.json is not a
+# secret (spec 22, decision 134). Its Firebase API key is restricted to this
+# app's package and signing certificates in Google Cloud.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Firebase Android config, public by design"
+paths = ['''^android/app/google-services\.json$''']
