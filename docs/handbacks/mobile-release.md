@@ -114,3 +114,16 @@ The guard is defence in depth; the `play-internal` environment is the real contr
 - **Outside `lib/diagnostics/`:** one added call to `Diagnostics.init` in `lib/main.dart`, and the NDK meta-data in `android/app/src/main/AndroidManifest.xml`.
 - **GlitchTip side (5.2 main repo):** the project should also discard client IPs (no IP stored), since the server can see them on upload.
 - The release bundle is about 11 MB larger (Sentry's native libraries).
+
+## 5.4 `docs/store-listing`: store drafts (no uploads)
+
+`docs/store/`: `listing.md`, `privacy-policy.md`, `data-safety.md`, `declarations.md`, `reviewer-notes.md`, `release-checklist.md`. Nothing uploaded, no Play Console changes, no tags.
+
+Open for mobile-lead or TJ:
+
+- Where the privacy policy is published (a public page) and the support email for the listing.
+- Data deletion answer: accounts come from the workplace administrator; proposed "yes, through the administrator or support", with a page saying so.
+- Call audio in the data safety form: proposed not declared as collected (transmitted live, never recorded or stored by the app). Voicemail greetings are declared as voice recordings.
+- GlitchTip retention for crash reports: proposed 90 days (the privacy policy says so in brackets).
+- The foreground service video (TJ records it on the handset).
+- `USE_FULL_SCREEN_INTENT` and `READ_CONTACTS` aren't in the manifests yet. The declarations cover them for when WS3 and WS4 add them.
