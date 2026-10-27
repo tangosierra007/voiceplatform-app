@@ -10,7 +10,7 @@
 | --- | --- |
 | Analyze and test | Flutter 3.47.8 (pinned, checked), `flutter analyze` over the whole tree, `flutter test` for the app, then every `packages/*/` with a `test/` folder: `flutter test` if its pubspec depends on the Flutter SDK, `dart test` otherwise. New packages are picked up without editing the workflow. |
 | Build | Temurin JDK 17, Android platform 36, build-tools 36.0.0, NDK 28.2.13676358; debug APK and release App Bundle. The release bundle is **unsigned** here (this job gets no key) and the job says so in a notice and the run summary. Both files are kept as a run artifact for 14 days. |
-| Play track guard | `.github/scripts/play-track-guard.sh` over every tracked text file except Markdown (`*.md`); `docs/` is scanned too, and so is the script itself. Fails on: any track setting (plain or quoted key, `track:`, `tracks:`, `track =`, `track_promote_to:`, `--track`, `--track=`) whose value isn't the literal `internal`; `promote`, `rollout`, `userFraction`, `promote_track` or `track_promote` anywhere; `production` in CI, fastlane, Gradle or script files; fastlane files outside `android/fastlane/`; a Play upload tool anywhere but `android.yml` and `android/fastlane/`; the Gradle Play Publisher plugin or a `play { }` block; a workflow or script running a `.md` file or naming a fixtures folder; any `uses:` other than the exact actions already in use (owner/repo@sha, plus `actions/checkout@v4` from `secret-scan.yml`) or a `./` path. The self-test (`play-track-guard-test.sh`) writes its fixtures from heredocs into `$RUNNER_TEMP`, outside the tree: 19 bad cases, each expecting its refusal message, and a good set expecting a pass. This guard is defence in depth; the real control is the `play-internal` environment. |
+| Play track guard | `.github/scripts/play-track-guard.sh` over every tracked text file except Markdown (`*.md`); `docs/` is scanned too, and so is the script itself. Fails on: any track setting (plain or quoted key, `track:`, `tracks:`, `track =`, `track_promote_to:`, `--track`, `--track=`) whose value isn't the literal `internal`; `promote`, `rollout`, `userFraction`, `promote_track` or `track_promote` anywhere; `production` in CI, fastlane, Gradle or script files; fastlane files outside `android/fastlane/`; a Play upload tool anywhere but `android.yml` and `android/fastlane/`; the Gradle Play Publisher plugin or a `play { }` block; a workflow or script running a `.md` file or naming a fixtures folder; any `uses:` other than the exact actions already in use (owner/repo@sha, plus `actions/checkout@v4` from `secret-scan.yml`) or a `./` path. The self-test (`play-track-guard-test.sh`) writes its fixtures from heredocs into `$RUNNER_TEMP`, outside the tree: 20 bad cases, each expecting its refusal message, and a good set expecting a pass. This guard is defence in depth; the real control is the `play-internal` environment. |
 | Upload to Play internal testing | Only on manual dispatch from `main` or a `v*` tag; needs the three jobs above. Skips with a notice when no upload secret is set, fails if only some are set. Builds a bundle signed with the upload key, refuses it if unsigned or debug-signed, and uploads to the **internal** track with `r0adkll/upload-google-play` v1.1.5 (pinned by commit). |
 
 Caching: the Flutter SDK and pub cache (flutter-action), Gradle (setup-java). Every action is pinned to a full commit SHA with its tag in a comment. Permissions are empty at the top and `contents: read` per job. `secret-scan.yml` is unchanged.
@@ -77,6 +77,13 @@ SHA-256: `E0:C6:75:63:BE:C0:2A:6F:42:7A:18:7E:15:DE:25:98:66:30:47:48:94:14:A2:A
 
 - Play may refuse API uploads until a first bundle has been uploaded by hand in Play Console. If so, TJ uploads the signed bundle kept by that run (artifact `android-signed-<run>`, 7 days) by hand once; after that CI uploads.
 - Play App Signing's SHA-256 (after the first upload) is needed for `assetlinks.json` (WS1 1.4) alongside the upload key's above.
+
+### Accepted residual risks (track guard)
+
+The guard is defence in depth; the `play-internal` environment is the real control. Accepted by mobile-review (WS6):
+
+- A `.md` file fed to a shell on stdin (`bash < x.md`) or through a pipe (`cat x.md | sh`) is not detected.
+- Names built from pieces at run time (split strings, variables, encoded text) are not detected.
 
 ### Deviations
 

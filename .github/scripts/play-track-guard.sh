@@ -118,7 +118,7 @@ if [ "${#yml[@]}" -gt 0 ]; then
     ok=0
     for a in "${allowed_uses[@]}"; do [ "$v" = "$a" ] && ok=1 && break; done
     [ "$ok" -eq 1 ] || err "action not on the allow-list: $line"
-  done < <(grep -HnoP -- "\\buses\\s*:\\s*\\K${q}?[^\\s\"'#]+" "${yml[@]}" || true)
+  done < <(grep -HnoP -- "\\buses${q}?\\s*:\\s*\\K${q}?[^\\s\"'#]+" "${yml[@]}" || true)
 fi
 
 if [ "$fail" -ne 0 ]; then exit 1; fi
