@@ -17,6 +17,7 @@ import 'package:voiceplatform_app/screens/signin/signed_out_screen.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
+import '../../tool/mock_server/fixtures.dart' as fx;
 import '../support/app_harness.dart';
 import '../support/phone.dart';
 
@@ -202,6 +203,55 @@ void main() {
       Theme.of(tester.element(find.text('Dark'))).brightness,
       Brightness.dark,
     );
+  });
+
+  testWidgets('call logs go through CallDiagnostics to the API', (
+    tester,
+  ) async {
+    usePhone(tester);
+    final api = FakeApi({
+      'POST /diagnostics/call-logs': (_) => (201, {'reference': 'LOG-7F3K9Q'}),
+    });
+    await tester.pumpWidget(
+      await appUnderTest(clock: () => _now, api: api, accessToken: 'tok'),
+    );
+    await _settle(tester);
+    await openMe(tester);
+    await tester.tap(find.text('Send call logs to support'));
+    await _settle(tester);
+    expect(find.text('Sent. Quote LOG-7F3K9Q to support.'), findsOneWidget);
+    final r = api.requests.singleWhere(
+      (r) => r.path == '/diagnostics/call-logs',
+    );
+    expect(r.headers['content-type'], 'application/gzip');
+    expect(r.headers['Authorization'], 'Bearer tok');
+  });
+
+  testWidgets('clearing a number sends null, never an empty string', (
+    tester,
+  ) async {
+    usePhone(tester);
+    final api = FakeApi({'PATCH /me/call-settings': (r) => fx.callSettings});
+    await tester.pumpWidget(await appUnderTest(clock: () => _now, api: api));
+    await _settle(tester);
+    await openMe(tester);
+    await tester.tap(find.text("When I don't answer"));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField).first, '0491 570 156');
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField).first, '');
+    await _settle(tester);
+    await tester.ensureVisible(find.bySemanticsLabel('Save'));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Save'));
+    await _settle(tester);
+    final body = api.requests
+        .singleWhere((r) => r.path == '/me/call-settings')
+        .body
+        .replaceAll(' ', '');
+    expect(body, contains('"followMeTo":null'));
+    expect(body, contains('"forwardAlwaysTo":null'));
+    expect(body, isNot(contains('""')));
   });
 
   testWidgets('Sign out asks first', (tester) async {

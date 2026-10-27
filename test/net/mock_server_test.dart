@@ -5,7 +5,9 @@ import 'dart:async';
 import 'dart:io' show HttpOverrides;
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voiceplatform_app/features/me/me_data.dart';
 import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/net/events.dart';
 import 'package:voiceplatform_app/net/live_events.dart';
@@ -442,5 +444,59 @@ void main() {
         expect(s.me.name, 'Ava Nguyen');
       },
     );
+  });
+
+  group('call settings', () {
+    test('null clears a number; an empty string is refused', () async {
+      final c = ProviderContainer(
+        overrides: [dioProvider.overrideWithValue(dio)],
+      );
+      addTearDown(c.dispose);
+      final save = c.read(callSettingsSaveProvider);
+      var s = await save(
+        ringSeconds: 20,
+        followMeTo: '0491 570 156',
+        followMeSeconds: 20,
+        followMeConfirm: true,
+        forwardAlwaysTo: null,
+      );
+      expect(s.followMeTo, '0491570156');
+      expect(s.ringSeconds, 20);
+      // Cleared in the form: sent as null, and the mock drops it.
+      s = await save(
+        ringSeconds: 20,
+        followMeTo: '',
+        followMeSeconds: 20,
+        followMeConfirm: true,
+        forwardAlwaysTo: '  ',
+      );
+      expect(s.followMeTo, isNull);
+      expect(s.forwardAlwaysTo, isNull);
+      await expectLater(
+        dio.patch<Object?>('/me/call-settings', data: {'followMeTo': ''}),
+        throwsA(
+          isA<DioException>().having(
+            (e) => e.response?.statusCode,
+            'status',
+            400,
+          ),
+        ),
+      );
+    });
+
+    test('call logs answer a reference', () async {
+      final r = await dio.post<Map<String, Object?>>(
+        '/diagnostics/call-logs',
+        data: Stream.fromIterable([
+          [31, 139, 8, 0],
+        ]),
+        options: Options(
+          contentType: 'application/gzip',
+          headers: {Headers.contentLengthHeader: 4},
+        ),
+      );
+      expect(r.statusCode, 201);
+      expect(r.data!['reference'], 'LOG-7F3K9Q');
+    });
   });
 }

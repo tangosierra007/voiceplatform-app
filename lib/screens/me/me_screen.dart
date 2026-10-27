@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:vp_linphone/vp_linphone.dart' show CallDiagnostics, NoCallLog;
 
 import '../../auth/app_lock.dart';
 import '../../auth/auth.dart';
 import '../../calls/me_state.dart';
 import '../../calls/numbers.dart';
+import '../../engine/engine_provider.dart';
 import '../../engine/phone_extras.dart';
 import '../../features/me/me_data.dart';
 import '../../net/api.dart';
@@ -17,14 +20,36 @@ import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
 import '../../widgets/vp_list.dart';
 
-/// Sends this phone's last call log to support. WS3's
-/// `CallDiagnostics.sendCallLogs()` (app PR #18) answers with a reference.
-/// TODO(ws4): wire `CallDiagnostics.sendCallLogs()` once app PR #18 merges;
-/// until then this returns null and Me says it is not ready.
-final sendCallLogsProvider = Provider<Future<String?> Function()>(
-  (ref) =>
-      () async => null,
-);
+/// "Send call logs to support": WS3's `CallDiagnostics.sendCallLogs()` with
+/// the last call's scrubbed, gzipped log, uploaded to `POST
+/// /diagnostics/call-logs` (`application/gzip`, with the bearer and
+/// X-VP-App). Answers the reference to quote, or null when no call has been
+/// logged on this phone yet.
+final sendCallLogsProvider = Provider<Future<String?> Function()>((ref) {
+  return () async {
+    final d = CallDiagnostics(
+      engine: ref.read(callEngineProvider),
+      upload: (gz) async {
+        final r = await ref
+            .read(dioProvider)
+            .post<Map<String, Object?>>(
+              '/diagnostics/call-logs',
+              data: Stream.fromIterable([gz]),
+              options: Options(
+                contentType: 'application/gzip',
+                headers: {Headers.contentLengthHeader: gz.length},
+              ),
+            );
+        return PostDiagnosticsCallLogsResponse.fromJson(r.data!).reference;
+      },
+    );
+    try {
+      return await d.sendCallLogs();
+    } on NoCallLog {
+      return null;
+    }
+  };
+});
 
 /// AppMe: status, what happens to calls, recordings, this phone, sign out.
 class MeScreen extends ConsumerWidget {
@@ -250,7 +275,7 @@ class MeScreen extends ConsumerWidget {
       _say(
         context,
         reference == null
-            ? 'Sending call logs comes in the next update.'
+            ? 'There is no call on this phone to send yet.'
             : 'Sent. Quote $reference to support.',
       );
     } catch (_) {

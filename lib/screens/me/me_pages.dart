@@ -109,20 +109,13 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      String? digits(TextEditingController t) =>
-          t.text.trim().isEmpty ? '' : dialDigits(t.text);
-      await ref
-          .read(appApiProvider)
-          .me
-          .patchMeCallSettings(
-            body: CallSettingsPatch(
-              ringSeconds: _ring,
-              followMeTo: digits(_mobile),
-              followMeSeconds: _mobileSeconds,
-              followMeConfirm: _confirm,
-              forwardAlwaysTo: digits(_forward),
-            ),
-          );
+      await ref.read(callSettingsSaveProvider)(
+        ringSeconds: _ring ?? 15,
+        followMeTo: _mobile.text,
+        followMeSeconds: _mobileSeconds,
+        followMeConfirm: _confirm,
+        forwardAlwaysTo: _forward.text,
+      );
       ref.invalidate(callSettingsProvider);
       if (mounted) context.pop();
     } catch (_) {

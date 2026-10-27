@@ -322,16 +322,22 @@ Stacked on part A (base `feat/app-features`); retarget to `main` once #19 merges
 - **Thread** (full screen): back, initials, "Texting Sales mobile", call button; day labels; out bubbles with "Ava · 2:16 pm · Delivered" (Sending / Sent / Not delivered), in bubbles with time; picture messages say "Picture message (not shown yet)". Reply box: "From Sales mobile 0491 571 266", the counter ("42 / 160", "200 / 306 · 2 parts"), GSM-7 160/153 and UCS-2 70/67 (extension characters count two, emoji two units), and past 10 parts "11 parts, up to 10. Shorten to send." with Send disabled. Opening an unread thread posts `read`. The tab stays hidden with no SMS line (from 4.1).
 - **Pushes** (`lib/engine/push_handler.dart`, `lib/engine/phone_extras.dart`): WS3's `pushMessages` and `takePendingPushes`. `message` refetches threads, the open thread and the badge; `voicemail` refetches voicemail, Recents and the badge; `signed_out` runs a refresh (the push carries nothing, APP5) so the server's `device_revoked` answer says who and when; `config` re-checks versions.
 - **Me** (`lib/screens/me/`): header (initials, name, "202 · Demo Co · Advanced"); status Available / Do not disturb / Away, with DND asking how long (1 hour, 2 hours, until 8 am tomorrow, until I change it) and sending `dndUntil`; "When I don't answer" summary from `/me/call-settings` and an editor (ring seconds, then a mobile with seconds and press-1 confirm, or forward all calls; PATCH); Office hours summary with Change only when `permissions.officeHours` (schedule / open / closed override); Recordings only when `permissions.recordings`, streamed like voicemail (APP8); Signed-in devices ("This Pixel 8, Windows PC") with Rings switches and Sign out where `canSignOut`; Send call logs to support; Appearance: dark mode System / Light / Dark and the biometric unlock switch; Sign out (asks, posts `/devices/me/sign-out`, clears the phone); "Version x · Open source licences" (Flutter's licence page, which includes vp_linphone's via `addVpLinphoneLicenses`).
-- **Battery card** on Me when WS3's `batteryStatus()` says the app is not exempt and pushes woke late at least `lateWakesForBatteryCard` times in 7 days. **Proposed number: 2** (no decision exists); the card links to Android's battery settings.
+- **Battery card** on Me when WS3's `batteryStatus()` says the app is not exempt and pushes woke late at least `lateWakesForBatteryCard` times in 7 days: **2** (decided 28 Oct). The card links to Android's battery settings.
 - **AppSignedOut** (`/signed-out`): a refresh answering 401 with a SignedOut body (directly or after a `signed_out` push) clears every local store (session, access token, device key, shared preferences, theme and biometric state, address-book values held for the scrubber; data providers drop with the token) and shows who and when ("Priya Shah, your admin, signed this phone out at 3:12 pm today"), the extension still ringing the desk phone, and "Not expecting this? Ask Priya, or call Demo Telco on 03 5550 4000." Sign in again goes to AppSignIn. Nothing else opens while it shows.
 
 ### Not done / to confirm
 
-- **Send call logs**: app PR #18 (`CallDiagnostics.sendCallLogs()`) is not merged, so `sendCallLogsProvider` is a TODO that says "Sending call logs comes in the next update."; wiring it is one line.
+- **Send call logs** is wired: WS3's `CallDiagnostics.sendCallLogs()` (app PR #18) with an uploader posting the gzipped log to `POST /diagnostics/call-logs` (`application/gzip`, bearer and X-VP-App). Me shows "Sent. Quote LOG-7F3K9Q to support.", or "There is no call on this phone to send yet." on `NoCallLog`. The mock answers 201 until WS1's 1.3b route exists.
 - `refresh_invalid` (reused refresh token) also shows AppSignedOut, without a name, since the platform revokes the device then.
-- Call settings PATCH sends an empty string to clear the mobile or forward number; please confirm that is how WS1 clears them.
+- Call settings PATCH is hand-built so a cleared mobile or forward number goes as an explicit `null` (the contract's `string | null`); a blank field is never sent as an empty string. Everything else keeps `include_if_null: false`. The mock now clears on `null` and refuses `""` with 400 `validation`; tested in `mock_server_test.dart` and `me_test.dart`.
 - Copy not on any artboard: compose page, DND durations, call-settings editor, office-hours sheet, Recordings and Devices pages, battery card ("Calls may ring late on this phone", "N calls this week reached this phone late because Android was saving battery…"), sign-out confirmation, Appearance rows, send-logs messages.
-- Deviations: Me's row icons are the nearest existing icons; the WhatsApp card border is solid (Flutter has no dashed border without a painter); the Appearance section (dark mode, biometric) is added below This phone; dark out-bubbles use charcoal-800 as the dark artboard shows.
+- Deviations: Me's row icons are the nearest existing icons; dark out-bubbles use charcoal-800 as the dark artboard shows.
+
+### Artboard corrections (agreed 28 Oct)
+
+- AppMe: an Appearance section (dark mode System / Light / Dark, biometric unlock) below This phone.
+- AppMessages: the WhatsApp card border is solid, not dashed.
+- AppContacts: the free count is real ("3 free now" on the sample data), not the artboard's 4.
 
 ### Tests
 

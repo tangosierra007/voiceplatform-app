@@ -78,7 +78,7 @@ final phoneExtrasProvider = Provider<PhoneExtras>((ref) {
 });
 
 /// Late push wakes in the last 7 days at which the Me battery card shows.
-/// Proposed (no decision yet): 2, so one slow wake does not nag.
+/// Decided (coordinator, 28 Oct): 2, so one slow wake does not nag.
 const lateWakesForBatteryCard = 2;
 
 /// The Me battery card: shown when Android delayed call pushes this week and

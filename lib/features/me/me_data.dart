@@ -8,6 +8,46 @@ final callSettingsProvider = FutureProvider<CallSettings?>((ref) async {
   return ref.watch(appApiProvider).me.getMeCallSettings();
 });
 
+/// `PATCH /me/call-settings` with a hand-built body: the contract clears a
+/// number with an explicit `null`, which the generated model leaves out
+/// (`include_if_null: false` everywhere else). A blank number is sent as
+/// `null`, never as an empty string.
+typedef CallSettingsSave = Future<CallSettings> Function({
+  required int ringSeconds,
+  required String? followMeTo,
+  required int? followMeSeconds,
+  required bool? followMeConfirm,
+  required String? forwardAlwaysTo,
+});
+
+String? _numberOrNull(String? n) =>
+    n == null || n.trim().isEmpty ? null : dialDigits(n);
+
+final callSettingsSaveProvider = Provider<CallSettingsSave>((ref) {
+  return ({
+    required ringSeconds,
+    required followMeTo,
+    required followMeSeconds,
+    required followMeConfirm,
+    required forwardAlwaysTo,
+  }) async {
+    final mobile = _numberOrNull(followMeTo);
+    final r = await ref
+        .read(dioProvider)
+        .patch<Map<String, Object?>>(
+          '/me/call-settings',
+          data: <String, Object?>{
+            'ringSeconds': ringSeconds,
+            'followMeTo': mobile,
+            if (mobile != null) 'followMeSeconds': followMeSeconds,
+            if (mobile != null) 'followMeConfirm': followMeConfirm,
+            'forwardAlwaysTo': _numberOrNull(forwardAlwaysTo),
+          },
+        );
+    return CallSettings.fromJson(r.data!);
+  };
+});
+
 /// The office-hours schedule this user may change (the first one).
 final officeHoursProvider = FutureProvider<OfficeHours?>((ref) async {
   if (ref.watch(accessTokenProvider) == null) return null;
