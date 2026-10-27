@@ -2,7 +2,7 @@
 
 ## 4.1 `feat/app-shell`
 
-PR: see the PR for branch `feat/app-shell` (opened against `main`, not merged).
+PR: https://github.com/tangosierra007/voiceplatform-app/pull/10 (against `main`, not merged).
 
 ### What is built
 
@@ -38,8 +38,8 @@ The template's `cupertino_icons` is removed. Golden tooling is plain `flutter_te
 ### Artboard mismatches and sample data
 
 - **AppRecents** shows "03 9555 0142", which is not an ACMA fictional number. The fixture uses 03 7010 0142 instead.
-- **AppContacts** lists "Jess Rowe, Reception · 201". In the sample data, 201 is the Reception extension with no person named. Kept as the artboard shows it.
-- **AppContacts** says "22 colleagues · 4 free now", but only 3 of the 7 people shown are free. The fixture keeps the totals and the 7 people.
+- **AppContacts** lists "Jess Rowe, Reception Â· 201". In the sample data, 201 is the Reception extension with no person named. Kept as the artboard shows it.
+- **AppContacts** says "22 colleagues Â· 4 free now", but only 3 of the 7 people shown are free. The fixture keeps the totals and the 7 people.
 - **AppMessages** filter chip says "Service" while the line is "Service mobile". The fixture line label is "Service mobile".
 - **Tab bar labels** are 11 px with the 22 px line height inherited from `.vp-root`. Neither is in the type scale, so the tab bar uses those values directly, as the artboard does.
 - **AppMe** shows "Version 1.0.3", which is sample data. The app is 1.0.0.
