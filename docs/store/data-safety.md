@@ -24,8 +24,7 @@ Draft for task 5.4, following spec 22 (Play data safety) and `privacy-policy.md`
 | App info and performance | Other app performance data | No | | | | |
 | Messages | Other in-app messages (SMS the user sends and reads on the workplace's lines) | Yes | No | Yes (only with an SMS line) | App functionality | No |
 | Messages | Emails, SMS or MMS from the phone | No | | | | |
-| Audio | Voice or sound recordings (voicemail greetings the user records) | Yes | No | Yes | App functionality | No |
-| Audio | Voice or sound recordings (call audio during a call) | Yes | No | No (needed for a call) | App functionality | Yes: it passes through our servers in transit to the other party, isn't end-to-end encrypted, and isn't stored by the app |
+| Audio | Voice or sound recordings (voicemail greetings the user records, and call audio) | Yes | No | No | App functionality | No (greetings are stored). Note: call audio is processed in transit only; it passes through our servers to the other party, isn't end-to-end encrypted, and isn't stored by the app. |
 | Contacts | Contacts (phone address book) | No (read on the device only, APP12) | | | | |
 | Location | Approximate or precise | No | | | | |
 | Photos and videos | Photos | No (QR scan stays on the device) | | | | |
