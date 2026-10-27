@@ -59,11 +59,14 @@ const List<BundledLicence> bundledLicences = [
   BundledLicence('OpenLDAP', ['LICENSE.openldap', 'LICENSE.openldap-copyright']),
   BundledLicence('liboqs (ML-KEM)', ['LICENSE.liboqs']),
   BundledLicence('LLVM libc++', ['LICENSE.libc++']),
-  BundledLicence('aom', [], note: _notObtained),
-  BundledLicence('GSM 06.10', [], note: _notObtained),
+  BundledLicence('aom (AV1)', ['LICENSE.aom', 'LICENSE.aom-patents']),
+  BundledLicence('GSM 06.10', ['LICENSE.gsm']),
+  BundledLicence('decaf (Ed448)', ['LICENSE.decaf']),
+  BundledLicence('WebRTC audio processing (in mswebrtc)', [
+    'LICENSE.mswebrtc-webrtc',
+    'LICENSE.mswebrtc-webrtc-patents',
+  ]),
   BundledLicence('BroadVoice16', [], note: _notObtained),
-  BundledLicence('decaf (Ed448)', [], note: _notObtained),
-  BundledLicence('WebRTC audio processing (in mswebrtc)', [], note: _notObtained),
 ];
 
 /// Adds the native components' licences to Flutter's [LicenseRegistry], so the

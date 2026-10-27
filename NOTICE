@@ -92,8 +92,14 @@ Third-party components are listed below with their licences as they are added.
     It contains third-party code:
     Ooura FFT: packages/vp_linphone/licenses/LICENSE.mswebrtc-ooura
     Abseil, Apache-2.0: packages/vp_linphone/licenses/LICENSE.mswebrtc-abseil
-    WebRTC audio processing itself: upstream licence not established (no
-    WebRTC licence file in mswebrtc's tree at 5.5.39).
+    WebRTC audio processing itself (AEC3 and VAD, vendored in mswebrtc's
+    tree): WebRTC at commit ca932cbe20e11eca8f29b48ba4e4967a9c4d556a (exact;
+    mswebrtc's README.md and CHANGELOG.md at linphone-sdk 5.5.39 name it).
+    BSD-3-Clause with Google's patent grant.
+    packages/vp_linphone/licenses/LICENSE.mswebrtc-webrtc, from
+    https://webrtc.googlesource.com/src/+/ca932cbe20e11eca8f29b48ba4e4967a9c4d556a/LICENSE
+    packages/vp_linphone/licenses/LICENSE.mswebrtc-webrtc-patents, from
+    https://webrtc.googlesource.com/src/+/ca932cbe20e11eca8f29b48ba4e4967a9c4d556a/PATENTS
 
   - CodeSynthesis XSD runtime (libxsd), linked into liblinphone.so
     (xsd::cxx::tree symbols); Belledonne's copy in liblinphone/libxsd at
@@ -161,9 +167,42 @@ Third-party components are listed below with their licences as they are added.
   - LLVM libc++ (libc++_shared.so): Android NDK; the NDK version Belledonne
     built with is not stated. Apache-2.0 WITH LLVM-exception.
     packages/vp_linphone/licenses/LICENSE.libc++ (from NDK r28c's NOTICE)
-  - aom (AV1), GSM 06.10, BroadVoice16 and decaf (Ed448): upstream licence
-    not established. Their sources (Belledonne's forks) could not be reached
-    and no canonical upstream copy was available here.
+  - aom (AV1), Alliance for Open Media: linphone-sdk 5.5.39 pins
+    external/aom at 65ad4cd63cbe7f10eaa4b4af7f55fd540617516a. That commit is
+    Belledonne's (it is not in aomedia.googlesource.com/aom), and the binary
+    reports "AOMedia Project AV1 Encoder 3.6.1-1836-g65ad4cd63", that is 1836
+    commits after upstream tag v3.6.1. The upstream commit the fork is based
+    on is not pinned: the fork could not be read. BSD-2-Clause with the
+    Alliance for Open Media Patent License 1.0. The texts are from tag v3.6.1
+    and are byte-for-byte the same as aom's main branch on 28 Oct 2026.
+    packages/vp_linphone/licenses/LICENSE.aom, from
+    https://aomedia.googlesource.com/aom/+/refs/tags/v3.6.1/LICENSE
+    packages/vp_linphone/licenses/LICENSE.aom-patents, from
+    https://aomedia.googlesource.com/aom/+/refs/tags/v3.6.1/PATENTS
+  - GSM 06.10, Jutta Degener and Carsten Bormann, Technische Universitaet
+    Berlin: linphone-sdk 5.5.39 pins external/gsm at
+    ff67768db9e49fc749920422ea4061b7f8f01b3f (Belledonne's fork). The release
+    (patchlevel) it is based on is not pinned: the fork could not be read and
+    the binary names no version. Licence: the release's COPYRIGHT notice
+    (permissive, dated Berlin, 28.11.1994). The text is from the TU Berlin
+    release's home page (moved from kbs.cs.tu-berlin.de to quut.com), whose
+    URL names no patchlevel:
+    packages/vp_linphone/licenses/LICENSE.gsm, from
+    https://www.quut.com/berlin/gsm/COPYRIGHT
+  - decaf (Ed448-Goldilocks), Cryptography Research, Inc. and Mike Hamburg:
+    v1.0.3 (exact; linphone-sdk 5.5.39 pins external/decaf at
+    e5cc6240690d3ffdfcbdb1e4e851954b789cd5d9, which is upstream's v1.0.3
+    commit). MIT for the library; the Python bindings it mentions are not
+    built. packages/vp_linphone/licenses/LICENSE.decaf, from
+    https://sourceforge.net/p/ed448goldilocks/code/ci/e5cc6240690d3ffdfcbdb1e4e851954b789cd5d9/tree/LICENSE.txt
+    (git.code.sf.net/p/ed448goldilocks/code)
+  - BroadVoice16, Broadcom: linphone-sdk 5.5.39 pins
+    external/bv16-floatingpoint at c4a341a3277e8adcc42427c4fd80a457fe934f2a
+    (Belledonne's fork). Not pinned and no licence text: the fork could not
+    be read, the binary names no version or licence, and Broadcom's release
+    page (broadcom.com/broadvoice) now redirects to Broadcom's product list,
+    so the release's own licence text could not be obtained from Broadcom.
+    The in-app list says so.
 - AndroidX Core (androidx.core:core-ktx 1.16.0), The Android Open Source
   Project. Apache-2.0. Used by packages/vp_linphone.
 

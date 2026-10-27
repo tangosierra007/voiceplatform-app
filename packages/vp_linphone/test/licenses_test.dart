@@ -63,7 +63,17 @@ void main() {
     expect(entries.length, bundledLicences.length);
     final opus = entries.firstWhere((e) => e.packages.first.startsWith('opus'));
     expect(opus.paragraphs.map((p) => p.text).join(' '), contains('Redistribution and use in source and binary forms'));
-    final gsm = entries.firstWhere((e) => e.packages.first.startsWith('GSM'));
-    expect(gsm.paragraphs.map((p) => p.text).join(' '), contains('could not be obtained'));
+    String text(String prefix) =>
+        entries.firstWhere((e) => e.packages.first.startsWith(prefix)).paragraphs.map((p) => p.text).join(' ');
+    expect(text('GSM'), contains('Technische Universitaet Berlin'));
+    expect(text('aom'), contains('Alliance for Open Media Patent License 1.0'));
+    expect(text('decaf'), contains('The MIT License (MIT)'));
+    expect(text('WebRTC'), contains('The WebRTC project authors'));
+    expect(text('WebRTC'), contains('Additional IP Rights Grant (Patents)'));
+    expect(text('BroadVoice16'), contains('could not be obtained'));
+  });
+
+  test('only BroadVoice16 is still without a licence text', () {
+    expect([for (final l in bundledLicences.where((l) => l.files.isEmpty)) l.name], ['BroadVoice16']);
   });
 }

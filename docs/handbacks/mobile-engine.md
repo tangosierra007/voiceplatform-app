@@ -96,7 +96,7 @@ So the release says GPL-3.0 in its metadata and AGPL-3.0-or-later / GPL-2.0-or-l
   - at the version the binary reports: opus 1.3.1, libvpx 1.9.0 base, libsrtp 2.7.0, zlib 1.2.8, SQLite 3.46.0, libjpeg-turbo 3.0.3;
   - at a stated nearby version or the default branch where the binary names none: speex, Mbed TLS 3.6.2, dav1d, jsoncpp, ZXing-C++, xerces-c, SOCI, libxml2, OpenLDAP, liboqs.
 - **libc++:** the text is from the local NDK r28c NOTICE.
-- **Upstream licence not established:** aom, GSM 06.10, BroadVoice16, decaf (Ed448), WebRTC audio processing inside mswebrtc, and liboqs's third-party subfolder licences (the ML-KEM code may sit there). NOTICE says so, and the in-app list shows "could not be obtained" for each.
+- **Upstream licence not established:** aom, GSM 06.10, BroadVoice16, decaf (Ed448), WebRTC audio processing inside mswebrtc, and liboqs's third-party subfolder licences (the ML-KEM code may sit there). NOTICE says so, and the in-app list shows "could not be obtained" for each. *(Superseded for four of the five codecs by "Codec licences" below.)*
 - **In the APK:** the texts ship as plugin assets (35 files, checked in the example APK). `addVpLinphoneLicenses()` adds them to Flutter's `LicenseRegistry`. **WS4 must call `addVpLinphoneLicenses()` once at app start** (the example does, in `main`). Flutter's licence page then lists them.
 ### Header formats assumed (WS2 emits these on INVITEs to app contacts)
 
@@ -134,8 +134,36 @@ Answered by mobile-lead (27 Oct): the contract gained `instanceId` (used for `+s
 
 1. **Call history on the device.** liblinphone keeps its own call-log database by default; it is not exported or uploaded. Should it be turned off?
 2. **Release date.** 5.5.39 was published to Belledonne's repository on 27 Oct. It is pinned as specified. Belledonne's release notes for it were not reviewed.
-3. **Licences still open:** aom, GSM 06.10, BroadVoice16, decaf, WebRTC and liboqs's third-party parts have no established upstream licence, and versions are not confirmed for most third-party components (texts and versions from Belledonne's forks need gitlab.linphone.org access). mswebrtc is settled: GPL-2.0-or-later by its source headers. Previously: native licences are not stated in the SDK (see NOTICE): about 28 components, ML-KEM and libxml2 among them. For distribution, their licence texts have to come from somewhere: the linphone-sdk 5.5.39 source tag, or Belledonne directly. That is a call for you and TJ; nothing in this branch infers them.
+3. **Licences still open** *(updated by "Codec licences" below: only BroadVoice16 and liboqs's third-party parts remain without a text)*: aom, GSM 06.10, BroadVoice16, decaf, WebRTC and liboqs's third-party parts have no established upstream licence, and versions are not confirmed for most third-party components (texts and versions from Belledonne's forks need gitlab.linphone.org access). mswebrtc is settled: GPL-2.0-or-later by its source headers. Previously: native licences are not stated in the SDK (see NOTICE): about 28 components, ML-KEM and libxml2 among them. For distribution, their licence texts have to come from somewhere: the linphone-sdk 5.5.39 source tag, or Belledonne directly. That is a call for you and TJ; nothing in this branch infers them.
 4. **The root app** needs, in 3.2, its merged manifest checked against the spec's permission list. Nothing in `lib/`, the root `pubspec.yaml` or the root `android/` was touched.
+
+## Codec licences (TJ decision) `docs/codec-licences`
+
+Branch `docs/codec-licences` from `main` at `cbce9a0`. One PR, not merged.
+
+The five native components NOTICE marked "licence not established". Pins are linphone-sdk 5.5.39's `external/` submodule commits, read from Belledonne's GitHub mirror of linphone-sdk at tag `5.5.39` (gitlab.linphone.org still refuses connections from this PC: `ECONNREFUSED` on 443). Versions the binary reports are strings in `jni/arm64-v8a/*.so` from the 5.5.39 AAR. Texts are fetched as raw files from the upstream projects only; nothing was downloaded as an archive or run.
+
+| Component | Pin in linphone-sdk 5.5.39 | Upstream version | Licence | Text from |
+|---|---|---|---|---|
+| WebRTC (AEC3, VAD in mswebrtc) | vendored in `mswebrtc/` | commit `ca932cbe20e11eca8f29b48ba4e4967a9c4d556a` (**exact**, named in mswebrtc's README and CHANGELOG) | BSD-3-Clause + Google patent grant | `webrtc.googlesource.com/src/+/ca932cbe.../LICENSE` and `PATENTS` |
+| decaf (Ed448) | `external/decaf` `e5cc624` | **v1.0.3, exact**: the pin is upstream's v1.0.3 commit on SourceForge | MIT | `sourceforge.net/p/ed448goldilocks/code/ci/e5cc624.../tree/LICENSE.txt` |
+| aom (AV1) | `external/aom` `65ad4cd` | **not pinned**: Belledonne's commit, not in aomedia.googlesource.com. Binary: `3.6.1-1836-g65ad4cd63` (1836 commits after v3.6.1) | BSD-2-Clause + AOM Patent License 1.0 | `aomedia.googlesource.com/aom/+/refs/tags/v3.6.1/LICENSE` and `PATENTS` (identical to `main` today) |
+| GSM 06.10 | `external/gsm` `ff67768` | **not pinned**: fork unreadable, no version in the binary | TU Berlin COPYRIGHT notice (permissive) | `www.quut.com/berlin/gsm/COPYRIGHT` (the TU Berlin release's current home; the URL names no patchlevel) |
+| BroadVoice16 | `external/bv16-floatingpoint` `c4a341a` | **not pinned** | **no text obtained** | Broadcom's release page now redirects to its product list; the release itself is a zip, not fetched |
+
+- New files: `LICENSE.aom`, `LICENSE.aom-patents`, `LICENSE.gsm`, `LICENSE.decaf`, `LICENSE.mswebrtc-webrtc`, `LICENSE.mswebrtc-webrtc-patents` (46 files in `licenses/` now). `bundledLicences` lists them; BroadVoice16 is the only entry left with the "could not be obtained" note.
+- NOTICE's hand-kept section gives each pin, version, licence and pinned source URL next to its licence file, and says plainly where a version is not pinned.
+- The generated liblinphone section is unchanged: it still records only what the SDK's own files say.
+- Seen in passing, not changed: the binary also reports dav1d as `1.2.1-306-g1fd0bab` (NOTICE says "version not established" for it).
+
+### Tests
+
+See the PR: `flutter analyze` and `flutter test` (root and packages). `licenses_test.dart` now also checks the new texts reach the LicenseRegistry and that BroadVoice16 is the only component without a text.
+
+### Open
+
+1. **BroadVoice16:** needs either gitlab.linphone.org access (the fork's own COPYING) or a copy of Broadcom's release from TJ. Distribution question for TJ: ship with BV16 as is, or have it disabled (it is already a disabled payload type; the code is still in `libmediastreamer2.so`).
+2. **aom and GSM versions** need the forks (gitlab.linphone.org) to pin exactly.
 
 ## 3.2 (Android) `feat/telecom-fcm`
 
