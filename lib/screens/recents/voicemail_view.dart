@@ -329,56 +329,61 @@ class VoicemailPlayerCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: VpButton(
-                    label: 'Call back',
-                    icon: VpIcon.phone,
-                    large: false,
-                    dense: true,
-                    height: 40,
-                    onPressed: number == null
-                        ? null
-                        : () => dialNumber(context, ref, number),
+            // Large text wraps a label and the button grows; its neighbour
+            // grows with it.
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: VpButton(
+                      label: 'Call back',
+                      icon: VpIcon.phone,
+                      large: false,
+                      dense: true,
+                      height: 40,
+                      onPressed: number == null
+                          ? null
+                          : () => dialNumber(context, ref, number),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: VpButton(
-                    label: 'Speaker',
-                    icon: VpIcon.speaker,
-                    kind: VpButtonKind.outline,
-                    large: false,
-                    dense: true,
-                    height: 40,
-                    toggled: player.speaker,
-                    onPressed: () => actions.setSpeaker(!player.speaker),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: VpButton(
+                      label: 'Speaker',
+                      icon: VpIcon.speaker,
+                      kind: VpButtonKind.outline,
+                      large: false,
+                      dense: true,
+                      height: 40,
+                      toggled: player.speaker,
+                      onPressed: () => actions.setSpeaker(!player.speaker),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Semantics(
-                  button: true,
-                  label: 'Delete',
-                  excludeSemantics: true,
-                  onTap: () => _delete(context, actions, m, title),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(VpRadius.md),
+                  const SizedBox(width: 8),
+                  Semantics(
+                    button: true,
+                    label: 'Delete',
+                    excludeSemantics: true,
                     onTap: () => _delete(context, actions, m, title),
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Center(
-                        child: VpSvgIcon(
-                          VpIcon.trash,
-                          size: 18,
-                          colour: c.statusBad,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(VpRadius.md),
+                      onTap: () => _delete(context, actions, m, title),
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: VpSvgIcon(
+                            VpIcon.trash,
+                            size: 18,
+                            colour: c.statusBad,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

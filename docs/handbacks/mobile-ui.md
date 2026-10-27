@@ -305,3 +305,9 @@ just_audio 0.10 and audio_session 0.2 (MIT), record 7.1 (BSD-3-Clause), path_pro
 - Not on any artboard, please confirm: the details sheet ("To the Sales line", "Play voicemail"); delete confirmation ("Delete this voicemail?", "The message from X goes for everyone who shares the Sales box." / "goes for good."); legal hold "This voicemail is kept on hold, so it can't be deleted."; the Greeting screen copy; the Phone contacts refusal line; "Shared phonebook", "On this phone", "In the apps" tag; "Outgoing · No answer", "· Busy", "· Didn't connect"; empty and failed-load lines.
 - Mark heard / mark as new is a long press and a screen-reader action, as the artboard has no control for it.
 - Earpiece by default for voicemail; Speaker uses Android's communication mode, restored on stop.
+
+### WS6 review on the A53
+
+- A failed greeting upload keeps the recording, so Save can be retried; the sheet deletes it on Cancel, Record again or close.
+- At 384 dp and font scale 1.1: filter and box chips scroll sideways in one row; the voicemail buttons grow together when a label wraps. Goldens `recents_384_110` and `voicemail_384_110`.
+- Debug builds only: `android/app/src/debug/res/xml/network_security_config.xml` allows cleartext to localhost, 127.0.0.1 and 10.0.2.2, so ExoPlayer can stream from the mock. Release builds are unchanged.

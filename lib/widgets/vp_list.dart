@@ -49,20 +49,28 @@ class VpSeg<T> extends StatelessWidget {
       container: true,
       label: label,
       explicitChildNodes: true,
-      child: Wrap(
-        spacing: 6,
-        children: [
-          for (final (v, text) in options)
-            _SegButton(
-              text: text,
-              pressed: v == value,
-              onTap: () => onChanged(v),
-              // Pressed: ink on light, grey-100 on dark (the artboards'
-              // `[aria-pressed=true]`, dark override).
-              pressedBg: dark ? c.grey100 : c.ink900,
-              pressedFg: dark ? c.ink900 : c.grey100,
-            ),
-        ],
+      // One row that scrolls sideways when it doesn't fit (large text,
+      // narrow phones), as a chip row does, rather than wrapping.
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (i, (v, text)) in options.indexed) ...[
+              if (i > 0) const SizedBox(width: 6),
+              _SegButton(
+                text: text,
+                pressed: v == value,
+                onTap: () => onChanged(v),
+                // Pressed: ink on light, grey-100 on dark (the artboards'
+                // `[aria-pressed=true]`, dark override).
+                pressedBg: dark ? c.grey100 : c.ink900,
+                pressedFg: dark ? c.ink900 : c.grey100,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

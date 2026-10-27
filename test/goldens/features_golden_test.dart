@@ -108,4 +108,31 @@ void main() {
     await _settle(tester);
     await _shot(tester, 'greeting_light.png');
   });
+
+  // The A53 as WS6 tested it: 384 dp wide, default font scale 1.1.
+  for (final screen in ['recents', 'voicemail']) {
+    testWidgets('$screen at 384 dp and 110 %', (tester) async {
+      usePhone(tester);
+      tester.view.physicalSize = const Size(384 * 2, 854 * 2);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.1;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final player = FakeMediaPlayer();
+      await tester.pumpWidget(
+        await appUnderTest(
+          theme: ThemePreference.light,
+          clock: () => _now,
+          player: player,
+        ),
+      );
+      await _settle(tester);
+      await tester.tap(_tab('Recents'));
+      await _settle(tester);
+      if (screen == 'voicemail') {
+        await tester.tap(find.text('Voicemail 2'));
+        await _settle(tester);
+      }
+      expect(tester.takeException(), isNull);
+      await _shot(tester, '${screen}_384_110.png');
+    });
+  }
 }

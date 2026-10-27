@@ -1,7 +1,13 @@
 // AppRecents and AppVoicemail on the canvas sample data.
+import 'dart:io';
+
 import 'package:call_engine/call_engine.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voiceplatform_app/features/recents/greetings.dart';
+import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/calls/directory.dart';
 import 'package:voiceplatform_app/engine/fake_call_engine.dart';
 import 'package:voiceplatform_app/screens/recents/greeting_screen.dart';
@@ -324,5 +330,37 @@ void main() {
     expect(find.text('Your recording · 0:02'), findsOneWidget);
     // The tab bar stays: Greeting is inside Recents.
     expect(find.byType(VpTabBar), findsOneWidget);
+  });
+
+  test('a failed greeting upload keeps the recording for a retry', () async {
+    final dir = Directory.systemTemp.createTempSync('greeting');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}/g.m4a')..writeAsBytesSync([1, 2, 3]);
+    var fail = true;
+    final api = FakeApi({
+      'PUT /voicemail/greetings/busy': (_) => fail
+          ? (500, {'error': 'x', 'message': 'x'})
+          : {'kind': 'busy', 'isCustom': true, 'durationSeconds': 3},
+    });
+    final c = ProviderContainer(
+      overrides: [
+        dioProvider.overrideWithValue(
+          Dio(BaseOptions(baseUrl: 'http://127.0.0.1:9/app/v1'))
+            ..httpClientAdapter = api,
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    final upload = c.read(greetingUploadProvider);
+    await expectLater(
+      upload(GreetingKind.busy, file),
+      throwsA(isA<DioException>()),
+    );
+    expect(file.existsSync(), isTrue);
+    fail = false;
+    final g = await upload(GreetingKind.busy, file);
+    expect(g.isCustom, isTrue);
+    expect(file.existsSync(), isFalse);
+    expect(api.requests.last.headers['content-type'], 'audio/mp4');
   });
 }

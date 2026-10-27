@@ -72,28 +72,29 @@ final greetingRecorderProvider = Provider.autoDispose<GreetingRecorder>((ref) {
 });
 
 /// Uploads a recording as the greeting of [kind] (`PUT
-/// /voicemail/greetings/{kind}`, `audio/mp4`), then deletes the local file.
+/// /voicemail/greetings/{kind}`, `audio/mp4`), then deletes the local file;
+/// on failure the file stays for a retry.
 typedef GreetingUpload = Future<Greeting> Function(GreetingKind kind, File f);
 
 final greetingUploadProvider = Provider<GreetingUpload>((ref) {
   return (kind, file) async {
+    final bytes = await file.readAsBytes();
+    final r = await ref
+        .read(dioProvider)
+        .put<Map<String, Object?>>(
+          '/voicemail/greetings/${kind.json}',
+          data: Stream.fromIterable([bytes]),
+          options: Options(
+            contentType: 'audio/mp4',
+            headers: {Headers.contentLengthHeader: bytes.length},
+          ),
+        );
+    final g = Greeting.fromJson(r.data!);
+    // Only once it is stored: a failed upload keeps the file so Save can be
+    // tried again; the sheet deletes it on Cancel, Record again or close.
     try {
-      final bytes = await file.readAsBytes();
-      final r = await ref
-          .read(dioProvider)
-          .put<Map<String, Object?>>(
-            '/voicemail/greetings/${kind.json}',
-            data: Stream.fromIterable([bytes]),
-            options: Options(
-              contentType: 'audio/mp4',
-              headers: {Headers.contentLengthHeader: bytes.length},
-            ),
-          );
-      return Greeting.fromJson(r.data!);
-    } finally {
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
+      await file.delete();
+    } catch (_) {}
+    return g;
   };
 });
