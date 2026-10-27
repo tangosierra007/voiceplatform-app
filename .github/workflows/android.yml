@@ -112,7 +112,14 @@ jobs:
       - name: Release App Bundle (unsigned in CI)
         # No upload key is given to this job, so the bundle is unsigned. Only
         # the play-internal job below signs, with the key from secrets.
-        run: flutter build appbundle --release --build-number=${{ github.run_number }}
+        # Release builds only get the GlitchTip DSN (repo secret SENTRY_DSN);
+        # without it Sentry is off. Debug builds never get it.
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          if [ -n "$SENTRY_DSN" ]; then echo "Sentry: on (DSN from secret)"; else echo "::notice::Sentry: off (no SENTRY_DSN secret)"; fi
+          flutter build appbundle --release --build-number=${{ github.run_number }} \
+            --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=VP_ENV=prod
       - name: Report signing state
         run: |
           aab=build/app/outputs/bundle/release/app-release.aab
@@ -228,9 +235,12 @@ jobs:
           VP_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
           VP_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           VP_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
+          if [ -n "$SENTRY_DSN" ]; then echo "Sentry: on (DSN from secret)"; else echo "::notice::Sentry: off (no SENTRY_DSN secret)"; fi
           flutter pub get
-          flutter build appbundle --release --build-number=${{ github.run_number }}
+          flutter build appbundle --release --build-number=${{ github.run_number }} \
+            --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=VP_ENV=prod
       - name: Refuse an unsigned or debug-signed bundle
         if: steps.secrets.outputs.configured == 'true'
         run: |

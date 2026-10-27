@@ -189,6 +189,10 @@ Dart and Flutter packages in the app (pub.dev):
 - json_annotation 4.12, BSD-3-Clause (the Dart project authors)
 - package_info_plus 10.2, BSD-3-Clause (The Chromium Authors)
 - retrofit 4.10, MIT (Trevor Wang)
+- sentry 10.2, BSD-3-Clause (the package's LICENSE names The Chromium Authors)
+- sentry_flutter 10.2.0, MIT (Sentry); bundles the Android SDK
+  io.sentry:sentry-android 8.61.1, MIT (Sentry), with its NDK part
+  (sentry-native, MIT, Sentry)
 - shared_preferences 2.5, BSD-3-Clause (The Flutter Authors)
 - flutter_secure_storage 11.2, BSD-3-Clause (German Saprykin)
 - local_auth 3.0, BSD-3-Clause (The Flutter Authors)

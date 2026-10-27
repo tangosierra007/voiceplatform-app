@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vp_linphone/vp_linphone.dart';
 
 import 'app.dart';
+import 'diagnostics/diagnostics.dart';
 import 'net/api.dart';
 import 'theme/theme_preference.dart';
 
@@ -19,6 +20,8 @@ Future<void> main() async {
   final prefs = await SharedPreferences.getInstance();
   final info = await PackageInfo.fromPlatform();
   final model = await _deviceModel();
+  // GlitchTip; off unless the build has a SENTRY_DSN (release builds in CI).
+  await Diagnostics.init(versionName: info.version, versionCode: info.buildNumber);
   runApp(
     ProviderScope(
       overrides: [

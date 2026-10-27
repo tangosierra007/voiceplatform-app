@@ -88,3 +88,29 @@ The guard is defence in depth; the `play-internal` environment is the real contr
 ### Deviations
 
 - None from the brief. `docs/handbacks/` is created by this task.
+
+## 5.2 `feat/sentry`: GlitchTip through sentry_flutter (app repo part)
+
+### What is built
+
+- `sentry_flutter` 10.2.0, pinned exactly (with `sentry` 10.2.0); licences in `NOTICE`.
+- `lib/diagnostics/diagnostics.dart`: `Diagnostics.init` from `main.dart`. Off unless the build has `--dart-define=SENTRY_DSN=...`; debug and test builds have none. Release `voiceplatform-app@<versionName>+<versionCode>`, `dist` = versionCode, environment from `--dart-define=VP_ENV` (`prod`, anything else is `dev`).
+- No PII defaults: `sendDefaultPii` off, no screenshots, no view hierarchy, no user-interaction or native breadcrumbs, no user object, no server name, no device name, no cookies. Transactions, feedback and logs are dropped.
+- Scrubbed twice: in `beforeSend` and `beforeBreadcrumb`, then again on the finished envelope in `ScrubbingTransport`, the last gate before the SDK's transport. That gate also covers scope attachments, which the SDK adds after `beforeSend`. Text attachments are scrubbed; binary ones and any other item type are dropped. Anything that can't be scrubbed is dropped (fails closed).
+- `lib/diagnostics/scrubber.dart`: the rules listed in its header (SIP digest headers and parameters, passwords, tokens, request secrets, App Link, QR and media tokens, secret query parameters, emails, long opaque strings, 6+ digit runs with separators). Address-book keys, breadcrumbs and files are dropped. Address-book values registered in memory become `[contact]`.
+- Queued events: the native Android SDK's on-disk queue holds envelopes only after `ScrubbingTransport`, so nothing unscrubbed is stored.
+- CI: `android.yml` passes the repo secret `SENTRY_DSN` and `VP_ENV=prod` to the two release bundle builds only; with no secret, Sentry is off (notice, no failure). The debug APK never gets it.
+
+### Tests (for the APP9 and APP12 rows)
+
+- APP9: `test/scrubber_test.dart` (every rule; the table shared with vp_linphone in `test/diagnostics/shared_scrub_cases.dart`), `test/diagnostics/crash_reaches_transport_scrubbed_test.dart` (a crash with a fake password, token, code, email, phone number and contact goes through the real SDK pipeline; the bytes reaching the transport hold none of them, and no binary attachment).
+- APP12: `test/scrubber_test.dart` groups "APP12: address-book data is dropped entirely" and "APP12: an address-book breadcrumb is dropped", plus the contact in the transport test.
+
+### Deviations and follow-ups
+
+- **Native crash capture is off** (Kotlin and C crashes, ANR, native breadcrumbs, NDK scope sync, sessions). Those events are built by the native SDK and would bypass the Dart scrubber. Proposed follow-up: a native `beforeSend` in Kotlin reusing vp_linphone's Kotlin `LogScrubber`, then turn native capture back on.
+- **Shared rules with vp_linphone:** not a shared package, as vp_linphone (PR #5) wasn't merged and `packages/` isn't mine. The app scrubber keeps vp_linphone's rules, placeholders and digit rule and adds the app-specific ones. `shared_scrub_cases.dart` is the table both must pass. Proposed: WS3 copies it into `packages/vp_linphone/test/` after #5 merges.
+- **Contacts:** the scrubber drops address-book data by key and category and replaces registered values. WS4's contacts feature must call `DiagnosticsScrubber.instance.rememberAddressBookValues(...)` when it loads contacts. A free-text name that was never registered can't be recognised.
+- **`lib/main.dart`:** one added call to `Diagnostics.init` (outside `lib/diagnostics/`).
+- **GlitchTip side (5.2 main repo):** the project should also discard client IPs (no IP stored), since the server can see them on upload.
+- The release bundle is about 11 MB larger (Sentry's native libraries).
