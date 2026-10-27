@@ -51,7 +51,12 @@ paths:
       summary: Minimum and recommended app versions (AppUpdate)
       security: []
       parameters:
-        - { name: platform, in: query, required: true, schema: { $ref: "#/components/schemas/Platform" } }
+        - {
+            name: platform,
+            in: query,
+            required: true,
+            schema: { $ref: "#/components/schemas/Platform" },
+          }
       responses:
         "200":
           description: Version rules for the platform
@@ -432,7 +437,8 @@ paths:
               schema:
                 type: object
                 required: [deskPhone]
-                properties: { deskPhone: { type: string, description: "For example `Desk phone 202`" } }
+                properties:
+                  { deskPhone: { type: string, description: "For example `Desk phone 202`" } }
         "409": { description: "`no_desk_phone`: no registered desk phone" }
         "422": { description: "`number_barred`" }
 
@@ -577,7 +583,11 @@ paths:
       summary: Messages, newest first
       parameters:
         - { name: boxId, in: query, schema: { type: string, format: uuid } }
-        - { name: status, in: query, schema: { type: string, enum: [new, heard, all], default: all } }
+        - {
+            name: status,
+            in: query,
+            schema: { type: string, enum: [new, heard, all], default: all },
+          }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Before" }
       responses:
@@ -639,7 +649,12 @@ paths:
       tags: [voicemail]
       summary: Upload a greeting recorded in the app (WAV or M4A, up to 2 minutes, 5 MB)
       parameters:
-        - { name: kind, in: path, required: true, schema: { type: string, enum: [unavailable, busy, name] } }
+        - {
+            name: kind,
+            in: path,
+            required: true,
+            schema: { type: string, enum: [unavailable, busy, name] },
+          }
       requestBody:
         required: true
         content:
@@ -656,7 +671,12 @@ paths:
       tags: [voicemail]
       summary: Back to the default greeting
       parameters:
-        - { name: kind, in: path, required: true, schema: { type: string, enum: [unavailable, busy, name] } }
+        - {
+            name: kind,
+            in: path,
+            required: true,
+            schema: { type: string, enum: [unavailable, busy, name] },
+          }
       responses:
         "204": { description: Removed }
 
@@ -665,7 +685,12 @@ paths:
       tags: [voicemail]
       summary: Signed URL to play my greeting back
       parameters:
-        - { name: kind, in: path, required: true, schema: { type: string, enum: [unavailable, busy, name] } }
+        - {
+            name: kind,
+            in: path,
+            required: true,
+            schema: { type: string, enum: [unavailable, busy, name] },
+          }
       responses:
         "200": { $ref: "#/components/responses/MediaUrl" }
 
@@ -828,7 +853,8 @@ components:
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
     RequestId: { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
-    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+    Limit:
+      { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
     Before: { name: before, in: query, schema: { type: string } }
 
   responses:
@@ -879,7 +905,11 @@ components:
         platform: { $ref: "#/components/schemas/Platform" }
         minimumVersion: { type: string, examples: ["1.0.2"] }
         recommendedVersion: { type: string, examples: ["1.0.3"] }
-        storeUrl: { type: string, examples: ["https://play.google.com/store/apps/details?id=au.com.voiceplatform.app"] }
+        storeUrl:
+          {
+            type: string,
+            examples: ["https://play.google.com/store/apps/details?id=au.com.voiceplatform.app"],
+          }
 
     DeviceInfo:
       type: object
@@ -895,7 +925,8 @@ components:
       required: [email, requestSecret, device]
       properties:
         email: { type: string, format: email, maxLength: 254 }
-        requestSecret: { type: string, description: "32 random bytes, base64url; only its SHA-256 is stored" }
+        requestSecret:
+          { type: string, description: "32 random bytes, base64url; only its SHA-256 is stored" }
         device: { $ref: "#/components/schemas/DeviceInfo" }
 
     EmailRequestAccepted:
@@ -912,8 +943,16 @@ components:
       properties:
         requestSecret: { type: string }
         code: { type: string, pattern: "^[0-9]{6}$" }
-        linkToken: { type: string, description: "From the App Link `https://<portal host>/app/signin/<requestId>/<linkToken>`" }
-        devicePublicKey: { type: string, description: "SPKI DER, base64url, P-256 from Android Keystore (Secure Enclave on iOS)" }
+        linkToken:
+          {
+            type: string,
+            description: "From the App Link `https://<portal host>/app/signin/<requestId>/<linkToken>`",
+          }
+        devicePublicKey:
+          {
+            type: string,
+            description: "SPKI DER, base64url, P-256 from Android Keystore (Secure Enclave on iOS)",
+          }
         device: { $ref: "#/components/schemas/DeviceInfo" }
       oneOf:
         - required: [code]
@@ -933,8 +972,13 @@ components:
       properties:
         deviceId: { type: string, format: uuid }
         refreshToken: { type: string }
-        timestamp: { type: string, format: date-time, description: "Within 2 minutes of server time" }
-        signature: { type: string, description: "ECDSA P-256 SHA-256 over `deviceId.refreshToken.timestamp`, base64url" }
+        timestamp:
+          { type: string, format: date-time, description: "Within 2 minutes of server time" }
+        signature:
+          {
+            type: string,
+            description: "ECDSA P-256 SHA-256 over `deviceId.refreshToken.timestamp`, base64url",
+          }
 
     Tokens:
       type: object
@@ -942,7 +986,8 @@ components:
       properties:
         accessToken: { type: string }
         accessExpiresAt: { type: string, format: date-time }
-        refreshToken: { type: string, description: "Rotates on every refresh; 30 days from last use" }
+        refreshToken:
+          { type: string, description: "Rotates on every refresh; 30 days from last use" }
         refreshExpiresAt: { type: string, format: date-time }
 
     Session:
@@ -970,7 +1015,11 @@ components:
       properties:
         error: { type: string, enum: [device_revoked, refresh_invalid] }
         message: { type: string }
-        revokedBy: { type: string, description: "Name and role as the screen shows, for example `Priya Shah, your admin`" }
+        revokedBy:
+          {
+            type: string,
+            description: "Name and role as the screen shows, for example `Priya Shah, your admin`",
+          }
         revokedAt: { type: string, format: date-time }
         extension: { type: string }
         support: { $ref: "#/components/schemas/Support" }
@@ -1000,7 +1049,11 @@ components:
           required: [recordings, officeHours, messages, sharedVoicemail]
           properties:
             recordings: { type: boolean }
-            officeHours: { type: boolean, description: "At least one time condition grants this user the override (APP11)" }
+            officeHours:
+              {
+                type: boolean,
+                description: "At least one time condition grants this user the override (APP11)",
+              }
             messages: { type: boolean, description: "At least one SMS line" }
             sharedVoicemail: { type: boolean }
         badges:
@@ -1009,14 +1062,23 @@ components:
             recents: { type: integer, description: "New voicemail plus unseen missed calls" }
             messages: { type: integer }
         support: { $ref: "#/components/schemas/Support" }
-        brandingKey: { type: string, description: "Reserved for per-reseller branding later; ignored in Stage A" }
+        brandingKey:
+          {
+            type: string,
+            description: "Reserved for per-reseller branding later; ignored in Stage A",
+          }
 
     StatusInput:
       type: object
       required: [status]
       properties:
         status: { type: string, enum: [available, dnd, away] }
-        dndUntil: { type: string, format: date-time, description: "Only with `dnd`; cleared by itself at that time (A4)" }
+        dndUntil:
+          {
+            type: string,
+            format: date-time,
+            description: "Only with `dnd`; cleared by itself at that time (A4)",
+          }
 
     Status:
       type: object
@@ -1055,7 +1117,8 @@ components:
       required: [value, label, isDefault]
       properties:
         value: { type: string, description: "E.164, or `withheld`" }
-        label: { type: string, examples: ["Main 03 5550 1200", "Sales mobile 0491 571 266", "Withheld"] }
+        label:
+          { type: string, examples: ["Main 03 5550 1200", "Sales mobile 0491 571 266", "Withheld"] }
         isDefault: { type: boolean }
 
     OfficeHours:
@@ -1074,7 +1137,12 @@ components:
       required: [mode]
       properties:
         mode: { type: string, enum: [schedule, open, closed] }
-        until: { type: string, format: date-time, description: "Time-boxed overrides expire by themselves (spec 11)" }
+        until:
+          {
+            type: string,
+            format: date-time,
+            description: "Time-boxed overrides expire by themselves (spec 11)",
+          }
 
     DeviceSummary:
       type: object
@@ -1091,7 +1159,8 @@ components:
 
     SipCredentials:
       type: object
-      required: [authUsername, password, domain, outboundProxy, displayName, expiresSeconds, instanceId]
+      required:
+        [authUsername, password, domain, outboundProxy, displayName, expiresSeconds, instanceId]
       description: Maps one to one onto `SipAccount` in `call_engine.dart`
       properties:
         authUsername: { type: string }
@@ -1101,7 +1170,8 @@ components:
           description: "The contact's `+sip.instance`: `urn:uuid:` and this device's id. The edge refuses any other instance and removes a revoked device's contact by it."
         password: { type: string, writeOnly: false }
         domain: { type: string }
-        outboundProxy: { type: string, examples: ["sip:sip.voiceplatform.com.au:5061;transport=tls"] }
+        outboundProxy:
+          { type: string, examples: ["sip:sip.voiceplatform.com.au:5061;transport=tls"] }
         displayName: { type: string }
         expiresSeconds: { type: integer, examples: [600] }
         pushParam: { type: string, const: voiceplatform-app }
@@ -1131,7 +1201,8 @@ components:
       properties:
         extension: { type: string }
         presence: { $ref: "#/components/schemas/Presence" }
-        since: { type: string, format: date-time, description: "For the call timer, `On a call · 1:37`" }
+        since:
+          { type: string, format: date-time, description: "For the call timer, `On a call · 1:37`" }
         dndUntil: { type: string, format: date-time }
         detail: { type: string, description: "Text the user set, for desktop" }
 
@@ -1189,9 +1260,14 @@ components:
         id: { type: string }
         at: { type: string, format: date-time }
         direction: { type: string, enum: [incoming, outgoing] }
-        outcome: { type: string, enum: [answered, missed, voicemail, answered_elsewhere, busy, failed] }
+        outcome:
+          { type: string, enum: [answered, missed, voicemail, answered_elsewhere, busy, failed] }
         number: { type: string, description: "E.164, or `anonymous` (shown as Private)" }
-        name: { type: string, description: "Colleague or shared contact; the app may overlay a phone contact locally" }
+        name:
+          {
+            type: string,
+            description: "Colleague or shared contact; the app may overlay a phone contact locally",
+          }
         durationSeconds: { type: integer }
         answeredBy: { type: string, description: "`Mia on her desk phone`" }
         line: { type: string, description: "Number or group called, for example `Sales`" }
@@ -1231,8 +1307,18 @@ components:
         name: { type: string }
         durationSeconds: { type: integer }
         heard: { type: boolean }
-        waveform: { type: array, items: { type: number, minimum: 0, maximum: 1 }, maxItems: 64, description: "Peaks for the inline player" }
-        transcript: { type: "null", description: "Reserved; transcripts land later with self-hosted speech to text" }
+        waveform:
+          {
+            type: array,
+            items: { type: number, minimum: 0, maximum: 1 },
+            maxItems: 64,
+            description: "Peaks for the inline player",
+          }
+        transcript:
+          {
+            type: "null",
+            description: "Reserved; transcripts land later with self-hosted speech to text",
+          }
 
     VoicemailPage:
       type: object
@@ -1287,9 +1373,14 @@ components:
         number: { type: string }
         name: { type: string }
         lastAt: { type: string, format: date-time }
-        lastText: { type: string, description: "Prefixed `You: ` when mine; `Sent a picture message (not shown yet)` for MMS" }
+        lastText:
+          {
+            type: string,
+            description: "Prefixed `You: ` when mine; `Sent a picture message (not shown yet)` for MMS",
+          }
         unread: { type: integer }
-        channel: { type: string, enum: [sms], description: "Generic conversations model; whatsapp later" }
+        channel:
+          { type: string, enum: [sms], description: "Generic conversations model; whatsapp later" }
 
     ThreadPage:
       type: object
@@ -1309,7 +1400,11 @@ components:
         at: { type: string, format: date-time }
         kind: { type: string, enum: [text, picture] }
         text: { type: string }
-        senderName: { type: string, description: "Who in the tenant sent it, for `Ava · 2:16 pm · Delivered`" }
+        senderName:
+          {
+            type: string,
+            description: "Who in the tenant sent it, for `Ava · 2:16 pm · Delivered`",
+          }
         status: { type: string, enum: [queued, sent, delivered, failed, received] }
 
     MessagePage:
@@ -1335,6 +1430,11 @@ components:
       type: object
       required: [type, pushId]
       properties:
-        type: { type: string, enum: [incoming_call, call_cancelled, voicemail, message, signed_out, config] }
-        pushId: { type: string, description: "Random per push, for de-duplication and the Homer trace" }
+        type:
+          {
+            type: string,
+            enum: [incoming_call, call_cancelled, voicemail, message, signed_out, config],
+          }
+        pushId:
+          { type: string, description: "Random per push, for de-duplication and the Homer trace" }
         sentAt: { type: string, format: date-time }
