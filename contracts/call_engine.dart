@@ -26,11 +26,16 @@ final class SipAccount {
     required this.outboundProxy,
     required this.displayName,
     required this.expiresSeconds,
+    required this.instanceId,
     this.push,
   });
 
   /// Per-device auth username (spec 22, Device model). Not the extension's.
   final String authUsername;
+
+  /// The contact's `+sip.instance`, `urn:uuid:<device id>`. The edge accepts
+  /// only this device's own id and removes a revoked device's contact by it.
+  final String instanceId;
 
   /// Never logged, never in an event, never returned by any getter.
   final String password;
