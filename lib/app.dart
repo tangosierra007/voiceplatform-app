@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth/app_lock.dart';
 import 'auth/links.dart';
 import 'auth/version.dart';
+import 'engine/engine_provider.dart';
 import 'nav/call_flow.dart';
 import 'nav/routes.dart';
 import 'net/live_events.dart';
@@ -28,6 +29,10 @@ class _VoicePlatformAppState extends ConsumerState<VoicePlatformApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    // Registers the engine while signed in (SIP credentials into register()).
+    ref.watch(engineSessionProvider);
+    // Kept listening, so the audio routes are known when a call screen opens.
+    ref.watch(audioStateProvider);
     final preference = ref.watch(themePreferenceProvider);
     return MaterialApp.router(
       title: 'VoicePlatform',

@@ -192,3 +192,69 @@ Dev only: pigeon 29.0 (BSD-3-Clause).
 - **vp_linphone.** It is a path dependency now that app PR #5 is on `main`, and `main()` calls `addVpLinphoneLicenses()` at start-up.
 - **Pigeon's Dart output** is now `lib/platform/device_keys.pigeon.dart`. build_runner had deleted the earlier `.g.dart` name as a conflicting output.
 - **Root config.** `build.yaml` is a new root file.
+
+## 4.3 `feat/app-calls`
+
+PR: opened from `feat/app-calls` against `main`, not merged.
+
+### What is built
+
+- **AppKeypad and AppOffline** (`lib/screens/keypad/`).
+  - The status chip opens a sheet (Available, Do not disturb, Away; `PUT /me/status` against the mock until WS1 1.3a).
+  - The caller ID chip and picker come from `GET /me/caller-ids`. The default is sent as null (the extension default).
+  - Contact match as you type covers colleagues (extension, shared mobile), shared contacts (number, with the company) and phone contacts. The address book is read only if READ_CONTACTS is already granted, never asked for here, and nothing leaves the device (APP12).
+  - The orange call button has an ink icon. Holding 0 types +; holding delete clears.
+  - Offline shows the banner, the Offline chip, keys and call off, and the 000 note. Offline is the engine's registration failing for the network.
+- **One call path.** `startCall()` (and `dialNumber()`, which now uses it) runs in this order:
+  1. Emergency numbers go to AppEmergency and the phone's dialler, before anything else.
+  2. The microphone is asked for then, and only then. If refused, AppMicrophone opens.
+  3. A connected call is put on hold (Add call).
+  4. The engine places the call with the picked caller ID.
+- **AppIncoming.**
+  - Shows the number or group called ("Called 03 5550 1201 Sales"), who else is ringing, the repeat-caller pill exactly as DESIGN_SYSTEM_app-sections specifies (dark and light variants), and "Last answered by <one person>, <when>".
+  - Decline, To voicemail and Answer; the microphone is checked on Answer.
+  - A phone contact's name shows when the platform sends none.
+  - The route `/incoming/:callId` is ready for WS3's full-screen intent; its hook isn't on `main` yet.
+- **AppInCall.**
+  - Shows the line called, a timer, the Encrypted and HD tags, and a live waveform from `inputLevel`.
+  - Mute, Keypad (DTMF as you press), Speaker (a route sheet when Bluetooth, a headset or a car is present), Hold, Transfer, and Add call (Merge when there are two calls), plus a held-call bar to swap and the red hang up.
+  - Ink background in both themes.
+- **AppTransfer.**
+  - The caller is on hold while the sheet is open; Cancel resumes.
+  - Colleagues show team and live presence (the stream, or polling while Transfer is open). Search covers name, extension or number.
+  - "Talk to <name> first" places a consult call, and its screen offers "Complete transfer" (REFER with Replaces). "Send now" is a blind transfer.
+- **AppMicrophone.** "Open Settings" opens the app's Settings page. Coming back with the permission on starts the call. "Call from my desk phone instead" uses `POST /calls/via-desk-phone` (the mock today; WS1 1.3b).
+- **Engine switch.** `--dart-define=VP_ENGINE=linphone|fake`; debug builds default to the fake, release and profile builds to `VpLinphoneEngine`.
+  - While signed in, `engineSessionProvider` starts the engine and registers it with `POST /devices/me/sip-credentials`, including `instanceId`. Nothing from the credentials is kept or logged. Signing out unregisters it.
+  - In debug builds with the fake engine, holding the caller ID chip rings the phone with the AppIncoming caller, so the call screens can be driven without SIP.
+- **Tests.** Every state the screens go through is tested against a scripted FakeCallEngine, including the emergency-first order. Each screen is checked for tap targets, screen reader labels and 200% text. Goldens cover each screen in light and dark, and `test/goldens/compare/calls_side_by_side.png` puts them beside the artboards.
+
+### New dependencies (in NOTICE)
+
+- **permission_handler 12.0** (MIT): microphone request, the contacts check, and Settings. I chose 12.x because 13 and later compile against Android SDK 37, which neither CI nor this PC installs.
+- **flutter_contacts 2.6** (MIT): reads the address book only when already allowed. It has no network code and declares no permissions itself.
+
+The manifest gains READ_CONTACTS (in spec 22's list; the Contacts tab asks for it in 4.4). RECORD_AUDIO and the call permissions come from vp_linphone.
+
+### Deviations and new copy (please confirm)
+
+- **Colours.** The artboards' call-screen colours use the nearest tokens: #bdb5ad becomes dark text-muted, #d9d3cd grey-200, #2b2622 charcoal-800, #4a433d dark border, and #ffb35c (offline icon) warning-300. The presence dots use status-ok, brand, status-bad and border-strong. The repeat-caller pill keeps the design system's own values, as you asked.
+- **The ENCRYPTED and HD tags** use Manrope 700. JetBrains Mono (the mono token) isn't bundled, and phones have no common monospace.
+- **The offline call button's outline** is solid; the artboard draws it dashed.
+- **Chip tap targets.** The chips are 32 px tall as drawn, with 48 px tap targets, so the chip row sits 2 px lower.
+- **New copy:**
+  - Call states: "Calling", "Ringing", "On hold", "Held by them".
+  - The held-call bar ("… · on hold", "Swap") and the keypad strip ("… · on hold" or "on a call", "Back to call").
+  - "Merge" and "Complete transfer".
+  - "Hide keypad".
+  - The status sheet (reuses AppMe's "Your desk phone shows the same status.").
+  - "Not connected yet. Try again in a moment."
+  - The desk phone confirmation ("Desk phone 202 is ringing. Pick it up to call …") and its failure message.
+  - The outgoing line label (for example "SALES MOBILE · 0491 571 266").
+- **Answering with the microphone refused** keeps the call ringing. AppMicrophone is only for outgoing calls, because "Call from my desk phone instead" makes no sense for an incoming one.
+- **Transfer list order** follows the directory; the artboard lists Mia, Ava, Priya, Liam and Tom.
+
+### Not done or open
+
+- **WS3 3.2 (Telecom and full-screen intent)** isn't on `main`, so there is no hook to consume yet. `/incoming/:callId` is the route it should open.
+- **TJ's A53 (R5CTC0BDW6V)** is locked with a secure lock screen, so I couldn't drive it. The debug APK (fake engine, API through `adb reverse tcp:3000` to the mock server) is installed and waiting.

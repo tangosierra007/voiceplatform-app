@@ -208,6 +208,9 @@ Dart and Flutter packages in the app (pub.dev):
 - app_links 7.2, Apache-2.0 (llfbandit)
 - android_intent_plus 6.1, BSD-3-Clause (The Chromium Authors)
 - device_info_plus 13.3, BSD-3-Clause (The Chromium Authors)
+- permission_handler 12.0, MIT (Baseflow); with permission_handler_android 13.0,
+  MIT (Baseflow)
+- flutter_contacts 2.6, MIT (Quis Technologies, LLC)
 - flutter_zxing 3.1, MIT (Khoren Markosyan); bundles zxing-cpp, Apache-2.0
   (the ZXing authors), and zint, BSD-3-Clause (Robin Stuart and others);
   uses camera 0.12, BSD-3-Clause (The Flutter Authors), image 4, MIT

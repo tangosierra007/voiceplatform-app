@@ -7,6 +7,9 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <!-- Optional biometric unlock (off by default). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- Phone contacts, read on the device only (APP12). The Contacts tab asks
+         for it (4.4); the keypad and call screens only use it if already granted. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <!-- Merged in by the camera plugin (CameraX); the app never reads or
          writes shared storage, so they are removed (spec 22 permission list). -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>

@@ -7,6 +7,9 @@ import 'package:voiceplatform_app/engine/fake_call_engine.dart';
 import 'package:voiceplatform_app/platform/phone.dart';
 import 'package:voiceplatform_app/theme/app_theme.dart';
 
+import 'package:voiceplatform_app/calls/call_actions.dart';
+
+import '../support/call_fakes.dart';
 import '../support/fakes.dart';
 import '../support/phone.dart';
 
@@ -51,6 +54,7 @@ Future<(FakePhone, _SpyEngine)> _pump(
       overrides: [
         phoneLauncherProvider.overrideWithValue(phone),
         callEngineProvider.overrideWithValue(engine),
+        micPermissionProvider.overrideWithValue(FakeMic()),
       ],
       child: MaterialApp(
         theme: theme ?? AppTheme.light(),

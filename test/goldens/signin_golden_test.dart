@@ -13,7 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/emergency/emergency.dart';
 import 'package:voiceplatform_app/nav/routes.dart';
-import 'package:voiceplatform_app/screens/placeholders.dart';
+import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
 import '../support/app_harness.dart';
@@ -102,7 +102,13 @@ void main() {
       usePhone(tester);
       await tester.pumpWidget(await appUnderTest(theme: pref));
       await tester.pumpAndSettle();
-      showEmergencySheet(tester.element(find.byType(TabPlaceholder)), '000');
+      // 000 typed on the keypad, as the artboard shows behind the sheet.
+      final keypad = tester.element(find.byType(KeypadScreen));
+      ProviderScope.containerOf(keypad)
+          .read(dialledProvider.notifier)
+          .set('000');
+      await tester.pump();
+      showEmergencySheet(keypad, '000');
       await tester.pumpAndSettle();
       await _shot(tester, 'emergency_$mode.png');
     });

@@ -35,16 +35,31 @@ class _CallFlowState extends ConsumerState<CallFlow> {
     super.dispose();
   }
 
+  final Map<String, CallState> _last = {};
+
   void _onCall(CallSnapshot c) {
     final router = ref.read(routerProvider);
     final here = router.routerDelegate.currentConfiguration.uri.path;
+    final prev = _last[c.id];
+    _last[c.id] = c.state;
     _returnTo ??= isCallRoute(here) ? null : here;
+    final showing =
+        here.startsWith(Routes.inCall(c.id)) || here == Routes.incoming(c.id);
     switch (c.state) {
       case CallState.incoming:
-        router.go(Routes.incoming(c.id));
-      case CallState.dialling || CallState.connected:
-        if (here != Routes.inCall(c.id)) router.go(Routes.inCall(c.id));
+        if (prev == null) router.go(Routes.incoming(c.id));
+      case CallState.dialling:
+        if (!showing) router.go(Routes.inCall(c.id));
+      case CallState.connected:
+        // Only on the change to connected: a merge or a mute must not move.
+        if (prev != CallState.connected &&
+            prev != CallState.heldByMe &&
+            !here.startsWith(Routes.inCall(c.id))) {
+          router.go(Routes.inCall(c.id));
+        }
       case CallState.ended:
+        _last.remove(c.id);
+        if (!showing && isCallRoute(here)) return;
         final engine = ref.read(callEngineProvider);
         final next = engine.activeCalls.where((o) => o.id != c.id).firstOrNull;
         if (next != null) {

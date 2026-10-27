@@ -44,3 +44,6 @@ play-upload-*.json
 /android/app/release
 *.class
 *.log
+
+# flutter test's golden diff output
+test/goldens/failures/

@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voiceplatform_app/engine/fake_call_engine.dart';
 import 'package:voiceplatform_app/nav/routes.dart';
-import 'package:voiceplatform_app/screens/call_placeholders.dart';
+import 'package:voiceplatform_app/screens/calls/in_call_screen.dart';
+import 'package:voiceplatform_app/screens/calls/incoming_screen.dart';
+import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
 import 'package:voiceplatform_app/screens/placeholders.dart';
 import 'package:voiceplatform_app/screens/signin/sign_in_screen.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
@@ -87,7 +89,7 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       });
       await tester.pumpAndSettle();
-      expect(find.byType(IncomingCallPlaceholder), findsOneWidget);
+      expect(find.byType(IncomingScreen), findsOneWidget);
       expect(find.text('Westgate Supplies'), findsOneWidget);
       expect(find.byType(VpTabBar), findsNothing);
       // Ink in both themes.
@@ -97,12 +99,12 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Answer'));
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pumpAndSettle();
-      expect(find.byType(InCallPlaceholder), findsOneWidget);
+      expect(find.byType(InCallScreen), findsOneWidget);
 
       await tester.tap(find.bySemanticsLabel('Hang up'));
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pumpAndSettle();
-      expect(find.byType(InCallPlaceholder), findsNothing);
+      expect(find.byType(InCallScreen), findsNothing);
       expect(find.byType(VpTabBar), findsOneWidget);
       // Back on the tab the user was on.
       expect(find.byType(TabPlaceholder), findsOneWidget);
@@ -130,13 +132,13 @@ void main() {
       await Future<void>.delayed(Duration.zero);
     });
     await tester.pumpAndSettle();
-    expect(find.byType(IncomingCallPlaceholder), findsOneWidget);
+    expect(find.byType(IncomingScreen), findsOneWidget);
     await tester.runAsync(() async {
       e.simulateAnsweredElsewhere(id);
       await Future<void>.delayed(Duration.zero);
     });
     await tester.pumpAndSettle();
-    expect(find.byType(IncomingCallPlaceholder), findsNothing);
+    expect(find.byType(IncomingScreen), findsNothing);
     expect(find.byType(VpTabBar), findsOneWidget);
     await e.dispose();
   });
@@ -149,12 +151,6 @@ void main() {
     await tester.pumpAndSettle();
     router(tester).go(Routes.messages);
     await tester.pumpAndSettle();
-    expect(
-      find.descendant(
-        of: find.byType(TabPlaceholder),
-        matching: find.text('Keypad'),
-      ),
-      findsOneWidget,
-    );
+    expect(find.byType(KeypadScreen), findsOneWidget);
   });
 }

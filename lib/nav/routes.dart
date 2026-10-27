@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../auth/auth.dart';
 import '../auth/version.dart';
-import '../screens/call_placeholders.dart';
+import '../screens/calls/in_call_screen.dart';
+import '../screens/calls/incoming_screen.dart';
+import '../screens/calls/transfer_screen.dart';
+import '../screens/keypad/keypad_screen.dart';
 import '../screens/placeholders.dart';
 import '../screens/signin/basic_screen.dart';
 import '../screens/signin/code_screen.dart';
@@ -43,11 +46,14 @@ abstract final class Routes {
   /// AppUpdate (blocking).
   static const update = '/update';
 
-  /// AppIncoming (4.3).
+  /// AppIncoming. Also the target of the full-screen incoming intent (WS3).
   static String incoming(String callId) => '/incoming/$callId';
 
-  /// AppInCall (4.3).
+  /// AppInCall.
   static String inCall(String callId) => '/in-call/$callId';
+
+  /// AppTransfer, over the call it transfers.
+  static String transfer(String callId) => '/in-call/$callId/transfer';
 
   static String forTab(AppTab t) => switch (t) {
     AppTab.keypad => keypad,
@@ -115,8 +121,11 @@ final routerProvider = Provider<GoRouter>((ref) {
               routes: [
                 GoRoute(
                   path: Routes.forTab(t),
-                  pageBuilder: (context, state) =>
-                      NoTransitionPage(child: TabPlaceholder(tab: t)),
+                  pageBuilder: (context, state) => NoTransitionPage(
+                    child: t == AppTab.keypad
+                        ? const KeypadScreen()
+                        : TabPlaceholder(tab: t),
+                  ),
                   redirect: t == AppTab.messages
                       ? (context, state) =>
                             ProviderScope.containerOf(context)
@@ -160,12 +169,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/incoming/:callId',
         builder: (context, state) =>
-            IncomingCallPlaceholder(callId: state.pathParameters['callId']!),
+            IncomingScreen(callId: state.pathParameters['callId']!),
       ),
       GoRoute(
         path: '/in-call/:callId',
         builder: (context, state) =>
-            InCallPlaceholder(callId: state.pathParameters['callId']!),
+            InCallScreen(callId: state.pathParameters['callId']!),
+        routes: [
+          GoRoute(
+            path: 'transfer',
+            builder: (context, state) =>
+                TransferScreen(callId: state.pathParameters['callId']!),
+          ),
+        ],
       ),
     ],
   );

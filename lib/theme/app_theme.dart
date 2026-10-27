@@ -171,6 +171,41 @@ abstract final class VpCallColours {
 
   /// Text on the call screens.
   static const text = VpPalette.grey100;
+
+  /// Secondary text (artboard #bdb5ad): the dark theme's text-muted.
+  static final muted = vpDarkColors.textMuted;
+
+  /// The number under the name (artboard #d9d3cd): grey-200.
+  static const soft = VpPalette.grey200;
+
+  /// Avatar ground (artboard #2b2622): charcoal-800.
+  static const avatar = VpPalette.charcoal800;
+
+  /// ENCRYPTED and HD tag outline (artboard #4a433d): the dark theme's border.
+  static final tagBorder = vpDarkColors.border;
+
+  /// Round controls: grey-100 at 12 % (the artboard's rgba(245,242,238,.12)),
+  /// and grey-100 with an ink icon when on.
+  static final control = VpPalette.grey100.withValues(alpha: 0.12);
+  static const controlOn = VpPalette.grey100;
+  static const onControlOn = VpPalette.ink900;
+
+  /// The live waveform: orange-400, the brand as an icon on ink.
+  static const wave = VpPalette.orange400;
+
+  /// Brand rings around the incoming avatar: orange-500 at 14 % and 7 %.
+  static final ringInner = VpPalette.orange500.withValues(alpha: 0.14);
+  static final ringOuter = VpPalette.orange500.withValues(alpha: 0.07);
+}
+
+/// The repeat-caller pill, exactly as DESIGN_SYSTEM_app-sections "Repeat
+/// callers" specifies (these values are the design system's own, by name).
+abstract final class VpRepeatCallerColours {
+  static const lightBorder = Color(0xFFC98A2B);
+  static const lightFill = Color(0xFFFFF4E0);
+  static const lightText = Color(0xFF7A4F00);
+  static const darkText = Color(0xFFE0B25C);
+  static const darkBorder = Color(0xFF5A4A2A);
 }
 
 /// The tab bar's colours, by role, from tokens. The artboards draw the dark

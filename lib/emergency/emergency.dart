@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
-import 'package:call_engine/call_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../engine/engine_provider.dart';
+import '../calls/call_actions.dart';
+import '../net/api.dart';
 import '../platform/phone.dart';
 import '../theme/app_theme.dart';
 import '../widgets/vp_controls.dart';
@@ -19,27 +19,16 @@ String emergencyDialString(String dialled) {
       : digits;
 }
 
-/// The one way any screen (keypad, Recents, contacts, links) places a call.
-/// Emergency numbers never reach the engine: they open AppEmergency, which
-/// hands them to the phone's own dialler (decision 139, amended 27 Oct; APP6).
+/// The one way any screen (keypad, Recents, contacts, links) places a call:
+/// [startCall]. Emergency numbers never reach the engine: they open
+/// AppEmergency, which hands them to the phone's own dialler (decision 139,
+/// amended 27 Oct; APP6), before the microphone or anything else.
 Future<String?> dialNumber(
   BuildContext context,
   WidgetRef ref,
   String number, {
-  String? callerId,
-}) async {
-  if (isEmergencyNumber(number)) {
-    await showEmergencySheet(context, number);
-    return null;
-  }
-  try {
-    return await ref.read(callEngineProvider).call(number, callerId: callerId);
-  } on EmergencyNumberUseDialler {
-    // The engine applies the same rule; never place it, show the sheet.
-    if (context.mounted) await showEmergencySheet(context, number);
-    return null;
-  }
-}
+  CallerId? callerId,
+}) => startCall(context, ref, number, callerId: callerId);
 
 /// AppEmergency, over the screen the number was dialled from.
 Future<void> showEmergencySheet(BuildContext context, String dialled) {

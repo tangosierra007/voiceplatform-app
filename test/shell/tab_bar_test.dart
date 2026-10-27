@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
+import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
 
 import '../support/app_harness.dart';
@@ -79,14 +80,18 @@ void main() {
     for (final label in ['Recents', 'Contacts', 'Messages', 'Me', 'Keypad']) {
       await tester.tap(_tab(label));
       await tester.pumpAndSettle();
-      // The placeholder heading names the tab.
-      expect(
-        find.descendant(
-          of: find.byType(Scaffold).first,
-          matching: find.text(label),
-        ),
-        findsNWidgets(2),
-      );
+      // The placeholder heading names the tab; Keypad is the real screen.
+      if (label == 'Keypad') {
+        expect(find.byType(KeypadScreen), findsOneWidget);
+      } else {
+        expect(
+          find.descendant(
+            of: find.byType(Scaffold).first,
+            matching: find.text(label),
+          ),
+          findsNWidgets(2),
+        );
+      }
       final active = tester
           .widgetList<Semantics>(
             find.descendant(
@@ -109,7 +114,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(_tab('Messages'), findsNothing);
     expect(_tab('Me'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(
+      find.descendant(of: find.byType(VpTabBar), matching: find.text('1')),
+      findsNothing,
+    );
   });
 
   testWidgets('no badge at zero, 99+ above 99', (tester) async {

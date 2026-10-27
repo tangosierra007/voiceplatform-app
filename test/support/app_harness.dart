@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voiceplatform_app/app.dart';
+import 'package:voiceplatform_app/calls/call_actions.dart';
+import 'package:voiceplatform_app/calls/directory.dart';
+import 'package:voiceplatform_app/calls/me_state.dart';
 import 'package:voiceplatform_app/auth/app_lock.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/auth/links.dart';
@@ -20,8 +23,10 @@ import 'package:voiceplatform_app/net/live_events.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
+import 'call_fakes.dart';
 import 'fakes.dart';
 
+export 'call_fakes.dart';
 export 'fakes.dart';
 
 /// The badges and lines the artboards show: Recents 2, Messages 1.
@@ -53,6 +58,11 @@ Future<Widget> appUnderTest({
   Stream<Uri>? links,
   String appVersion = '1.0.0',
   Map<String, Object> prefs = const {},
+  FakeMic? mic,
+  List<PhoneContact> phoneContacts = const [],
+  bool offline = false,
+  DeskPhoneCall? deskPhone,
+  StatusStatus myStatus = StatusStatus.available,
 }) async {
   SharedPreferences.setMockInitialValues({
     if (theme != ThemePreference.system)
@@ -89,6 +99,18 @@ Future<Widget> appUnderTest({
         ),
       ),
       if (clock != null) clockProvider.overrideWithValue(clock),
+      micPermissionProvider.overrideWithValue(mic ?? FakeMic()),
+      deskPhoneCallProvider.overrideWithValue(
+        deskPhone ?? (n, id) async => 'Desk phone 202',
+      ),
+      phoneContactsSourceProvider.overrideWithValue(
+        FixedPhoneContacts(phoneContacts),
+      ),
+      colleaguesProvider.overrideWith((ref) async => fixtureColleagues()),
+      sharedContactsProvider.overrideWith((ref) async => fixtureShared()),
+      callerIdsProvider.overrideWith((ref) async => fixtureCallerIds()),
+      myStatusProvider.overrideWith(() => PresetStatus(myStatus)),
+      if (offline) offlineProvider.overrideWith(PresetOffline.new),
       if (pending != null)
         pendingSignInProvider.overrideWith(() => PresetPending(pending)),
     ],
