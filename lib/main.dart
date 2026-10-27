@@ -12,6 +12,9 @@ import 'theme/theme_preference.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicences();
+  // TODO(4.2): once vp_linphone (app PR #5) is a dependency, call
+  // addVpLinphoneLicenses() here so its native components' licence texts
+  // appear under Open source licences.
   final prefs = await SharedPreferences.getInstance();
   final info = await PackageInfo.fromPlatform();
   runApp(

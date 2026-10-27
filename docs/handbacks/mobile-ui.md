@@ -84,4 +84,5 @@ The last three are for the screens in 4.2 to 4.4. Also noted, with no change: th
 
 - The goldens are drawn on Windows, and the Linux CI `flutter test` will fail on them until WS5 excludes the `golden` tag there (with mobile-lead).
 - The sign-in redirect (no session goes to `/sign-in`) and the token refresh behind `reauth` come in 4.2. For now the app starts on Keypad.
+- For 4.2: once app PR #5 (vp_linphone) merges, `main()` must call `addVpLinphoneLicenses()` at start-up so the 35 native component licence texts appear under Open source licences. A TODO in `lib/main.dart` marks the place; #10 adds no dependency on vp_linphone.
 - pub.dev gave intermittent socket errors on this PC. Use `flutter test --no-pub` once dependencies are fetched.
