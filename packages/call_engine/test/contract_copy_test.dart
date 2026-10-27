@@ -6,7 +6,8 @@ import 'package:test/test.dart';
 void main() {
   test('lib/call_engine.dart matches contracts/call_engine.dart', () {
     final pkg = File('lib/call_engine.dart').readAsStringSync();
-    final contract = File('../../contracts/call_engine.dart').readAsStringSync();
+    final contract = File('../../contracts/call_engine.dart')
+        .readAsStringSync();
     expect(pkg, contract);
   });
 }

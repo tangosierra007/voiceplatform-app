@@ -7,12 +7,13 @@
 // Rules every implementation keeps:
 // - SIP credentials go in through register() and are never readable back,
 //   never logged and never part of any event (APP4).
-// - The UI hands emergency numbers to the phone's dialler first (APP6). call()
-//   never refuses one because of the number: if it gets here it is placed, and
-//   the platform routes it like any emergency call and raises an alert
-//   (CLAUDE.md rule 8, decision 139). With no account held (signed out,
-//   revoked, update required, before start) it throws NotRegistered as for any
-//   call, and the UI opens the phone's dialler instead.
+// - Emergency numbers always go to the phone's own dialler, before any
+//   permission or registration check; the app never places one itself
+//   (decision 139, amended 27 Oct; APP6). isEmergencyNumber() below is the one
+//   rule for the UI and the engine. call() throws EmergencyNumberUseDialler for
+//   any number it matches, ahead of every other check. If one reaches the
+//   platform anyway, the platform still routes it and raises an alert
+//   (CLAUDE.md rule 8).
 // - Nothing here touches the network except SIP and RTP to the platform edge.
 // - Platform-neutral: no Android or iOS type crosses this interface.
 
@@ -61,7 +62,11 @@ final class SipAccount {
 /// RFC 8599 contact parameters. Android: provider `fcm`, prid the FCM token,
 /// param `voiceplatform-app`. iOS later: `apns`.
 final class PushParams {
-  const PushParams({required this.provider, required this.prid, required this.param});
+  const PushParams({
+    required this.provider,
+    required this.prid,
+    required this.param,
+  });
   final String provider;
   final String prid;
   final String param;
@@ -70,7 +75,14 @@ final class PushParams {
 enum RegistrationState { none, progress, ok, cleared, failed }
 
 /// Why registration failed, mapped to what the UI shows.
-enum RegistrationFailure { badCredentials, forbidden, network, tls, timeout, unknown }
+enum RegistrationFailure {
+  badCredentials,
+  forbidden,
+  network,
+  tls,
+  timeout,
+  unknown,
+}
 
 final class RegistrationEvent {
   const RegistrationEvent(this.state, {this.failure, this.sipCode});
@@ -194,6 +206,20 @@ sealed class CallEngineError implements Exception {
   final String message;
 }
 
+/// The number is an emergency number: the UI opens the phone's dialler with it.
+final class EmergencyNumberUseDialler extends CallEngineError {
+  const EmergencyNumberUseDialler()
+    : super('Emergency numbers use the phone dialler');
+}
+
+/// True for 000, 112 and 106, alone or with a leading 0, after removing
+/// spaces and punctuation. The one emergency rule for the UI and the engine.
+bool isEmergencyNumber(String dialled) {
+  final digits = dialled.replaceAll(RegExp(r'[^0-9]'), '');
+  const numbers = {'000', '112', '106', '0000', '0112', '0106'};
+  return numbers.contains(digits);
+}
+
 final class NotRegistered extends CallEngineError {
   const NotRegistered() : super('Not registered');
 }
@@ -228,8 +254,9 @@ abstract interface class CallEngine {
   /// Places a call. [callerId] is an E.164 from GET /app/v1/me/caller-ids or
   /// `withheld`; null uses the extension default. Sent as the X-VP-Caller-Id
   /// header, which the platform checks against the tenant's numbers.
-  /// Never refuses a number for being an emergency number; throws
-  /// [NotRegistered] when no account is held, whatever the number.
+  /// Throws [EmergencyNumberUseDialler] for any number [isEmergencyNumber]
+  /// matches, before any other check; otherwise [NotRegistered] when no
+  /// account is held.
   Future<String> call(String number, {String? callerId});
   Future<void> answer(String callId);
 
