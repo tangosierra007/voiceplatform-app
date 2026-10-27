@@ -86,9 +86,24 @@ void main() {
     for (final secret in [password, token, code, email, contactName, 'ab12', '0491', '570 737']) {
       expect(wire, isNot(contains(secret)), reason: secret);
     }
-    // No 6-digit run in any text: SDK numbers (memory sizes), hex ids and
-    // timestamps aside.
-    final text = wire
+    // No 6-digit run in any text: SDK numbers (memory sizes), hex ids,
+    // timestamps and the SDK's device and OS contexts (kernel versions such
+    // as 6.8.0-1017) aside.
+    const sdkContexts = {'os', 'device', 'app', 'runtime', 'runtimes', 'culture', 'trace', 'flutter_context', 'dart_context'};
+    final withoutSdkContexts = wire
+        .split('\n')
+        .map((line) {
+          try {
+            final json = jsonDecode(line);
+            if (json is Map && json['contexts'] is Map) {
+              (json['contexts'] as Map).removeWhere((k, _) => sdkContexts.contains(k));
+              return jsonEncode(json);
+            }
+          } catch (_) {}
+          return line;
+        })
+        .join('\n');
+    final text = withoutSdkContexts
         .replaceAll(RegExp(r':-?\d+(\.\d+)?(?=[,}\]])'), ':0')
         .replaceAll(RegExp(r'"[0-9a-f]{16,32}"'), '"id"')
         .replaceAll(RegExp(r'\d{4}-\d\d-\d\dT[\d:.]+Z?'), 'time');
