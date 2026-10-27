@@ -75,6 +75,17 @@ enum VpIcon {
   /// AppTransfer search.
   search('<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>'),
 
+  /// AppMessages' WhatsApp card.
+  whatsApp(
+    '<path d="M5 19l1.2-3.5A7.5 7.5 0 1 1 9 18.3z"/><path d="M9.5 9.5c.3 2 2 3.8 4 4.2l1-1.2-1.6-.9-.6.6c-.9-.4-1.5-1-1.9-1.9l.6-.6-.9-1.6z"/>',
+  ),
+
+  /// AppThread send.
+  send('<path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/>'),
+
+  /// AppSignedOut.
+  signOut('<path d="M10 4.5H5.5v15H10"/><path d="M14 8l4 4-4 4M18 12H9"/>'),
+
   /// AppOffline banner.
   wifiOff(
     '<path d="M3 3l18 18"/><path d="M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 4.5-2.4M14.5 10.1A10 10 0 0 1 19 12.5M2 8.8a15 15 0 0 1 4.3-2.5M11 5a15 15 0 0 1 11 3.8"/><circle cx="12" cy="20" r=".8"/>',

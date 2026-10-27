@@ -94,6 +94,7 @@ class _SegButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.vp;
     return Semantics(
+      container: true,
       button: true,
       selected: pressed,
       label: text,
@@ -242,6 +243,7 @@ class VpRoundIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.vp;
     return Semantics(
+      container: true,
       button: true,
       label: label,
       excludeSemantics: true,
@@ -281,6 +283,7 @@ class VpLink extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.vp;
     return Semantics(
+      container: true,
       button: true,
       label: text,
       excludeSemantics: true,

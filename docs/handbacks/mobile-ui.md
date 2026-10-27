@@ -311,3 +311,28 @@ just_audio 0.10 and audio_session 0.2 (MIT), record 7.1 (BSD-3-Clause), path_pro
 - A failed greeting upload keeps the recording, so Save can be retried; the sheet deletes it on Cancel, Record again or close.
 - At 384 dp and font scale 1.1: filter and box chips scroll sideways in one row; the voicemail buttons grow together when a label wraps. Goldens `recents_384_110` and `voicemail_384_110`.
 - Debug builds only: `android/app/src/debug/res/xml/network_security_config.xml` allows cleartext to localhost, 127.0.0.1 and 10.0.2.2, so ExoPlayer can stream from the mock. Release builds are unchanged.
+
+## 4.4 part B `feat/app-me-messages` (Messages, Me, AppSignedOut)
+
+Stacked on part A (base `feat/app-features`); retarget to `main` once #19 merges.
+
+### What is built
+
+- **Messages** (`lib/screens/messages/`, data in `lib/features/messages/`). Line chips All plus each line's label; rows with initials, time, last text (bold when unread, with the dot), the line label; "You:" and "Sent a picture message (not shown yet)" come from the server's `lastText`; the WhatsApp "coming later" card. New message (+) opens a compose page: number, From line chips (lines that can send), counter.
+- **Thread** (full screen): back, initials, "Texting Sales mobile", call button; day labels; out bubbles with "Ava · 2:16 pm · Delivered" (Sending / Sent / Not delivered), in bubbles with time; picture messages say "Picture message (not shown yet)". Reply box: "From Sales mobile 0491 571 266", the counter ("42 / 160", "200 / 306 · 2 parts"), GSM-7 160/153 and UCS-2 70/67 (extension characters count two, emoji two units), and past 10 parts "11 parts, up to 10. Shorten to send." with Send disabled. Opening an unread thread posts `read`. The tab stays hidden with no SMS line (from 4.1).
+- **Pushes** (`lib/engine/push_handler.dart`, `lib/engine/phone_extras.dart`): WS3's `pushMessages` and `takePendingPushes`. `message` refetches threads, the open thread and the badge; `voicemail` refetches voicemail, Recents and the badge; `signed_out` runs a refresh (the push carries nothing, APP5) so the server's `device_revoked` answer says who and when; `config` re-checks versions.
+- **Me** (`lib/screens/me/`): header (initials, name, "202 · Demo Co · Advanced"); status Available / Do not disturb / Away, with DND asking how long (1 hour, 2 hours, until 8 am tomorrow, until I change it) and sending `dndUntil`; "When I don't answer" summary from `/me/call-settings` and an editor (ring seconds, then a mobile with seconds and press-1 confirm, or forward all calls; PATCH); Office hours summary with Change only when `permissions.officeHours` (schedule / open / closed override); Recordings only when `permissions.recordings`, streamed like voicemail (APP8); Signed-in devices ("This Pixel 8, Windows PC") with Rings switches and Sign out where `canSignOut`; Send call logs to support; Appearance: dark mode System / Light / Dark and the biometric unlock switch; Sign out (asks, posts `/devices/me/sign-out`, clears the phone); "Version x · Open source licences" (Flutter's licence page, which includes vp_linphone's via `addVpLinphoneLicenses`).
+- **Battery card** on Me when WS3's `batteryStatus()` says the app is not exempt and pushes woke late at least `lateWakesForBatteryCard` times in 7 days. **Proposed number: 2** (no decision exists); the card links to Android's battery settings.
+- **AppSignedOut** (`/signed-out`): a refresh answering 401 with a SignedOut body (directly or after a `signed_out` push) clears every local store (session, access token, device key, shared preferences, theme and biometric state, address-book values held for the scrubber; data providers drop with the token) and shows who and when ("Priya Shah, your admin, signed this phone out at 3:12 pm today"), the extension still ringing the desk phone, and "Not expecting this? Ask Priya, or call Demo Telco on 03 5550 4000." Sign in again goes to AppSignIn. Nothing else opens while it shows.
+
+### Not done / to confirm
+
+- **Send call logs**: app PR #18 (`CallDiagnostics.sendCallLogs()`) is not merged, so `sendCallLogsProvider` is a TODO that says "Sending call logs comes in the next update."; wiring it is one line.
+- `refresh_invalid` (reused refresh token) also shows AppSignedOut, without a name, since the platform revokes the device then.
+- Call settings PATCH sends an empty string to clear the mobile or forward number; please confirm that is how WS1 clears them.
+- Copy not on any artboard: compose page, DND durations, call-settings editor, office-hours sheet, Recordings and Devices pages, battery card ("Calls may ring late on this phone", "N calls this week reached this phone late because Android was saving battery…"), sign-out confirmation, Appearance rows, send-logs messages.
+- Deviations: Me's row icons are the nearest existing icons; the WhatsApp card border is solid (Flutter has no dashed border without a painter); the Appearance section (dark mode, biometric) is added below This phone; dark out-bubbles use charcoal-800 as the dark artboard shows.
+
+### Tests
+
+Messages and Thread behaviour and SMS part counting; Send body; `message` and `signed_out` pushes; Me rows, DND until, office hours, pages, battery card shown and not, dark mode, call logs, sign out; AppSignedOut copy, gate and wipe of every store; labelled 48 px targets and 200 % text on every new screen. Goldens `messages_*`, `thread_*`, `me_*`, `signed_out_light`, side by side in `test/goldens/compare/me_messages_side_by_side.png`.

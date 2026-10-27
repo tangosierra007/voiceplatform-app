@@ -255,14 +255,17 @@ void main() {
         expect(await auth().refresh(), isTrue);
         await store.write(old);
         expect(await auth().refresh(), isFalse);
-        expect(c.read(authProvider), isA<NotSignedIn>());
+        // AppSignedOut, with no admin named: the server revoked it.
+        final s = c.read(authProvider);
+        expect(s, isA<SignedOutRemotely>());
+        expect((s as SignedOutRemotely).info.revokedBy, isNull);
         expect(store.session, isNull);
         expect(c.read(accessTokenProvider), isNull);
         expect(keys.deletes, 1);
       },
     );
 
-    test('device_revoked: storage cleared, back to sign-in', () async {
+    test('device_revoked: storage cleared, AppSignedOut says who', () async {
       await store.write(
         StoredSession(
           deviceId: uid(0x6, 1),
@@ -270,8 +273,15 @@ void main() {
         ),
       );
       expect(await auth().refresh(), isFalse);
-      expect(c.read(authProvider), isA<NotSignedIn>());
+      final s = c.read(authProvider);
+      expect(s, isA<SignedOutRemotely>());
+      final info = (s as SignedOutRemotely).info;
+      expect(info.revokedBy, 'Priya Shah, your admin');
+      expect(info.extensionValue, '202');
+      expect(info.support?.name, 'Demo Telco');
       expect(store.session, isNull);
+      auth().acknowledgeSignedOut();
+      expect(c.read(authProvider), isA<NotSignedIn>());
     });
 
     test('moved to Basic at refresh: AppBasic', () async {
