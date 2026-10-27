@@ -1,0 +1,3 @@
+lane :x do
+  upload_to_play_store(track: 'internal', promoteTrack: true)
+end

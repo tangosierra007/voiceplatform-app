@@ -10,7 +10,7 @@
 | --- | --- |
 | Analyze and test | Flutter 3.47.8 (pinned, checked), `flutter analyze` over the whole tree, `flutter test` for the app, then every `packages/*/` with a `test/` folder: `flutter test` if its pubspec depends on the Flutter SDK, `dart test` otherwise. New packages are picked up without editing the workflow. |
 | Build | Temurin JDK 17, Android platform 36, build-tools 36.0.0, NDK 28.2.13676358; debug APK and release App Bundle. The release bundle is **unsigned** here (this job gets no key) and the job says so in a notice and the run summary. Both files are kept as a run artifact for 14 days. |
-| Play track guard | `.github/scripts/play-track-guard.sh`: fails if any file under `.github/` or `android/fastlane/` names a track other than the literal `internal`, or mentions production, promotion or rollout. |
+| Play track guard | `.github/scripts/play-track-guard.sh` over every tracked text file except docs (`docs/`, `*.md`). Fails on: any track setting (`track:`, `tracks:`, `track =`, `track_promote_to:`, `--track`, `--track=`, ...) whose value isn't the literal `internal`; `promote`, `rollout`, `userFraction`, `promote_track` or `track_promote` anywhere; `production` in CI, fastlane, Gradle or script files; fastlane files outside `android/fastlane/`; a Play upload tool (fastlane supply, `upload_to_play_store`, other upload actions, the Android Publisher API) anywhere but `android.yml` and `android/fastlane/`; the Gradle Play Publisher plugin or a `play { }` block. A self-test (`play-track-guard-test.sh`) runs first against fixtures in `.github/scripts/play-track-guard-fixtures/`: one per bad form, each expecting its refusal message, and a good set expecting a pass. |
 | Upload to Play internal testing | Only on manual dispatch from `main` or a `v*` tag; needs the three jobs above. Skips with a notice when no upload secret is set, fails if only some are set. Builds a bundle signed with the upload key, refuses it if unsigned or debug-signed, and uploads to the **internal** track with `r0adkll/upload-google-play` v1.1.5 (pinned by commit). |
 
 Caching: the Flutter SDK and pub cache (flutter-action), Gradle (setup-java). Every action is pinned to a full commit SHA with its tag in a comment. Permissions are empty at the top and `contents: read` per job. `secret-scan.yml` is unchanged.
@@ -35,7 +35,21 @@ Tested locally: CI unsigned bundle, a partial configuration (fails), and a throw
 - `versionCode`: `github.run_number` of `android.yml` (`--build-number`). One counter for all runs of this workflow, so it only goes up. It restarts if the workflow file is renamed; if that ever happens, add a fixed offset above the last code uploaded.
 - A `v*` tag must equal `v<pubspec version name>` or the upload job fails.
 
-### Secrets the upload job expects (repository secrets)
+### Repository settings for TJ to apply (not done by this task)
+
+The upload job declares `environment: play-internal`. **Apply these before the first manual dispatch or `v*` tag**: if that job runs first, GitHub creates the environment by itself with no protection.
+
+1. **Settings → Environments → New environment** `play-internal`:
+   - **Required reviewers**: TJ (and mobile-lead's account if wanted). Tick **Prevent self-review** if more than one reviewer is listed.
+   - **Deployment branches and tags → Selected branches and tags**: add branch rule `main` and tag rule `v*`.
+   - **Allow administrators to bypass**: off.
+   - **Environment secrets**: the five secrets below (not repository secrets).
+2. **Settings → Rules → Rulesets → New tag ruleset** `release tags`:
+   - Enforcement **Active**; target tags matching `v*`.
+   - Rules: **Restrict creations**, **Restrict updates**, **Restrict deletions**; bypass list: TJ only.
+3. Leave no Play or keystore secret at repository level.
+
+### Secrets the upload job expects (`play-internal` environment secrets)
 
 | Secret | What goes in it |
 | --- | --- |
@@ -51,7 +65,7 @@ Set all five or none. None were set by this task, and no keystore was generated.
 
 1. versionCode from the run number as above; no offset for now.
 2. Manual dispatch defaults to release status `draft`; tags use `completed`. Play only accepts `draft` releases until the app's first release is set up in Play Console.
-3. Optionally put the five secrets in a GitHub environment (for example `play-internal`) limited to `main` and `v*` tags, and add `environment:` to the upload job. Not done here, because it changes repository settings.
+3. `production` is refused only in CI, fastlane, Gradle and script files (any other track name is refused everywhere through the track check), so app code can still say for example a Sentry environment of `production` in 5.3.
 
 ### Open questions for TJ (through mobile-lead)
 

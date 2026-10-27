@@ -1,0 +1,5 @@
+steps:
+  - uses: r0adkll/upload-google-play@0000000000000000000000000000000000000000
+    with:
+      track: internal
+      status: draft

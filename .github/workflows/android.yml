@@ -138,10 +138,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Every Play track named in CI is internal
-        # Fails on any track setting in .github/ or android/fastlane/ whose
-        # value is not the literal "internal", and on any mention of the other
-        # release channels or of promoting a release (see the script).
+      - name: Self-test the guard against its fixtures
+        run: bash .github/scripts/play-track-guard-test.sh
+      - name: Every Play track named in the repo is internal
+        # Checks every tracked text file except docs; see the script header.
         run: bash .github/scripts/play-track-guard.sh
 
   play-internal:
@@ -151,6 +151,10 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
+    # The upload secrets belong in this environment, limited to main and v*
+    # tags with a required reviewer (repository settings; see
+    # docs/handbacks/mobile-release.md).
+    environment: play-internal
     permissions:
       contents: read
     concurrency:
