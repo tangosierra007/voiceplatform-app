@@ -63,8 +63,10 @@ jobs:
           done
       - name: flutter analyze (whole tree, packages included)
         run: flutter analyze
-      - name: Test the app
-        run: flutter test
+      - name: Test the app (goldens excluded)
+        # Golden tests are rendered and checked on Windows, where the golden
+        # files were made; they run locally there, not on this Linux runner.
+        run: flutter test --exclude-tags golden
       - name: Test every package that has tests
         run: |
           set -euo pipefail

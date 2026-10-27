@@ -66,12 +66,19 @@ bad=$(printf '%s\n' "$hits" | awk -F: 'NF { v = $NF; gsub(/["'\'']/, "", v); if 
 [ -z "$bad" ] || { err "Play track other than internal:"; echo "$bad"; }
 
 # 2. Moving or staging a release anywhere; the public channel name in CI,
-#    fastlane, Gradle and script files.
-if grep -HnPi 'pro[m]ote|roll[o]ut|user[f]raction|pro[m]ote[_-]?[t]rack|[t]rack[_-]?pro[m]ote' "${files[@]}"; then
+#    fastlane, Gradle and script files. Licence texts, by exact file name
+#    (OFL.txt, LICENSE, LICENSE.*, COPYING, NOTICE), are left out of these
+#    word checks only; check 4 fails if anything runs or sources one.
+kw_files=()
+for f in "${files[@]}"; do
+  case "${f##*/}" in OFL.txt|LICENSE|LICENSE.*|COPYING|NOTICE) continue ;; esac
+  kw_files+=("$f")
+done
+if [ "${#kw_files[@]}" -gt 0 ] && grep -HnPi 'pro[m]ote|roll[o]ut|user[f]raction|pro[m]ote[_-]?[t]rack|[t]rack[_-]?pro[m]ote' "${kw_files[@]}"; then
   err "moving or staging a release is not allowed"
 fi
 release_files=()
-for f in "${files[@]}"; do
+for f in "${kw_files[@]}"; do
   case "$f" in
     .github/*|*/fastlane/*|fastlane/*|*Fastfile|*Appfile|*Pluginfile|*Gemfile|*.sh|*.bash|*.rb|*.ps1|*.py|*.gradle|*.gradle.kts) release_files+=("$f") ;;
   esac
@@ -98,10 +105,16 @@ if [ "${#gradle[@]}" -gt 0 ] && grep -HnP '^\s*pla[y]\s*\{' "${gradle[@]}"; then
   err "Gradle Play Publisher play { } block"
 fi
 
-# 4. Nothing runs a Markdown file or names the old fixtures folder.
+# 4. Nothing runs a Markdown file or a licence file, or names the old
+#    fixtures folder.
 md_run_re='(?:\b(?:bash|sh|zsh|dash|ksh|source|exec|python3?|ruby|node|perl|pwsh|powershell)\s+(?:-\S+\s+)*|(?:^|[\s;&|("'\''])\.\s+|(?:^|[\s;&|("'\''])\./)\S*\.m[d]\b'
 if grep -HnPi -- "$md_run_re" "${files[@]}"; then
   err "a workflow or script runs a Markdown file"
+fi
+run_prefix='(?:\b(?:bash|sh|zsh|dash|ksh|source|exec|python3?|ruby|node|perl|pwsh|powershell)\s+(?:-\S+\s+)*|(?:^|[\s;&|("'\''])\.\s+|(?:^|[\s;&|("'\''])\./)'
+licence_run_re="${run_prefix}(?:\\S*/)?(?:OFL[.]txt|LICENS[E](?:[.]\\S+)?|COPYIN[G]|NOTIC[E])(?=[\\s\"');|&]|\$)"
+if grep -HnP -- "$licence_run_re" "${files[@]}"; then
+  err "a workflow or script runs or sources a licence file"
 fi
 if grep -HnF -- 'play-track-guard-fixture''s' "${files[@]}"; then
   err "a file names the fixtures folder"

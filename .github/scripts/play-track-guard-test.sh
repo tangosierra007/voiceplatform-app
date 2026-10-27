@@ -23,13 +23,16 @@ CO='actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
 FX='play-track-guard-fixture''s'
 TT='Tr''ack'
 MD='m''d'
+LO='OFL.tx''t'
+LL='LICENS''E'
+LN='NOTIC''E'
 
 # fixture <case> <path>, content on stdin
 fixture() {
   mkdir -p "$work/$1/$(dirname "$2")"
   sed -e "s|@T@|$T|g" -e "s|@P@|$P|g" -e "s|@PR@|$PR|g" -e "s|@RO@|$RO|g" \
       -e "s|@SUP@|$SUP|g" -e "s|@UPS@|$UPS|g" -e "s|@UGP@|$UGP|g" -e "s|@CO@|$CO|g" \
-      -e "s|@FX@|$FX|g" -e "s|@TT@|$TT|g" -e "s|@MD@|$MD|g" > "$work/$1/$2"
+      -e "s|@FX@|$FX|g" -e "s|@TT@|$TT|g" -e "s|@MD@|$MD|g" -e "s|@LO@|$LO|g" -e "s|@LL@|$LL|g" -e "s|@LN@|$LN|g" > "$work/$1/$2"
 }
 expect() { mkdir -p "$work/$1"; printf '%s\n' "$2" > "$work/$1/.expect"; }
 
@@ -173,6 +176,45 @@ fixture bad-uses-reusable-workflow .github/workflows/ci.yml <<'EOF'
 jobs:
   x:
     uses: other-org/release/.github/workflows/play.yml@main
+EOF
+
+expect bad-licence-run 'runs or sources a licence file'
+fixture bad-licence-run .github/workflows/ci.yml <<'EOF'
+jobs:
+  x:
+    steps:
+      - run: bash assets/fonts/Inter/@LO@
+EOF
+fixture bad-licence-run assets/fonts/Inter/OFL.txt <<'EOF'
+fastlane @SUP@ --@T@ @P@
+EOF
+
+expect bad-licence-source 'runs or sources a licence file'
+fixture bad-licence-source tool/build.sh <<'EOF'
+source ./@LL@
+EOF
+
+expect bad-licence-dot 'runs or sources a licence file'
+fixture bad-licence-dot tool/build.sh <<'EOF'
+cd x && . @LN@
+EOF
+
+expect bad-licence-name-not-exact 'moving or staging a release'
+fixture bad-licence-name-not-exact assets/fonts/Inter/OFL-notes.txt <<'EOF'
+permission to @PR@ the font
+EOF
+
+fixture good assets/fonts/Inter/OFL.txt <<'EOF'
+The name of the Copyright Holder may not be used to @PR@ or advertise.
+EOF
+fixture good LICENSE <<'EOF'
+Use it to @PR@ the software; staged @RO@ is not mentioned here.
+EOF
+fixture good NOTICE <<'EOF'
+Third-party notices. @RO@ and @PR@ appear in quoted licence texts.
+EOF
+fixture good packages/x/LICENSE.txt <<'EOF'
+@PR@
 EOF
 
 fixture good .github/workflows/android.yml <<'EOF'
