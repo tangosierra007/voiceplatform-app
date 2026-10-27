@@ -89,7 +89,7 @@ The last three are for the screens in 4.2 to 4.4. Also noted, with no change: th
 
 ## 4.2 `feat/app-signin`
 
-PR: opened from `feat/app-signin` against `main`, not merged.
+PR: https://github.com/tangosierra007/voiceplatform-app/pull/13 (against `main`, not merged).
 
 ### What is built
 
