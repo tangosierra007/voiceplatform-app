@@ -18,7 +18,7 @@ For TJ and mobile-lead together. Internal testing only; nothing else in Play Con
    - [ ] Foreground service types: phone call and microphone, with the video (`declarations.md`).
    - [ ] Full-screen intent: calling app (`declarations.md`).
    - [ ] Data safety (`data-safety.md`), privacy policy URL (`privacy-policy.md` published first), ads (none), content rating, target audience, app access (`reviewer-notes.md`).
-   - [ ] Store listing text and graphics (`listing.md`).
+   - [ ] Store listing text and graphics (`listing.md`). The app icon is `graphics/ic_launcher-playstore-512.png`.
 5. **Release to testers**
    - [ ] Internal testing, testers: the `Milavo Staff` list. Start the release.
    - [ ] Later releases come from CI: run `android` again; the upload job sends to the internal track.
@@ -27,3 +27,8 @@ For TJ and mobile-lead together. Internal testing only; nothing else in Play Con
    - [ ] `assetlinks.json` on each portal host (WS1 1.4): `au.com.voiceplatform.app` with both the Play App Signing SHA-256 and the upload key SHA-256 above.
    - [ ] **F1:** in Google Cloud for the Firebase project, restrict the `google-services.json` API key to Android apps. Add package `au.com.voiceplatform.app` with the SHA-1 of the Play App Signing key and of the upload key. Then check push still arrives on the test phone.
    - [ ] Install from the internal testing link on TJ's phone and start the handset tests.
+   - [ ] Icon checks (A3):
+     - The home screen icon is the VoicePlatform mark, not the Flutter default, under the launcher's own mask.
+     - With Material You themed icons on (Android 13+), the icon follows the wallpaper colours.
+     - The status bar shows the white mark for the "ready" and in-call notifications and for an incoming call.
+     - The internal testing listing shows the 512 icon.

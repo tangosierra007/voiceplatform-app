@@ -57,9 +57,12 @@ Draft for task 5.4. Nothing here is uploaded yet. Plain Australian English, sent
 > **Open source**
 > VoicePlatform is free software under the GNU Affero General Public License, version 3. The source code is at github.com/tangosierra007/voiceplatform-app.
 
-## Graphics still to make
+## Graphics
 
-- App icon 512 x 512 (from the logo tile in the design system).
+- App icon 512 x 512: `graphics/ic_launcher-playstore-512.png`, a full square with no rounding (Play applies its own mask). It's the same mark as the launcher icon in `android/app/src/main/res`, both from `design/app-icon-android` (28 Oct). Use it as is; don't regenerate it.
+
+Still to make:
+
 - Feature graphic 1024 x 500.
 - Phone screenshots (at least 2, from the light and dark artboards with Demo Co sample data and ACMA fictional numbers only).
 

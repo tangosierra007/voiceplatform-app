@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- vp_linphone's ongoing-call and incoming-call notifications use
+         R.drawable.vp_linphone_ic_call. The app's resources win over a
+         library's, so this alias gives them the VoicePlatform mark without the
+         plugin knowing the app. -->
+    <drawable name="vp_linphone_ic_call">@drawable/ic_stat_voiceplatform</drawable>
+</resources>

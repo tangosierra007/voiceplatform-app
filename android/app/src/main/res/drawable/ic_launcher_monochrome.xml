@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VoicePlatform launcher mark. 108dp canvas, mark inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FF000000" android:pathData="M30.200,40.000a3.850,3.850 0,0 1,7.700,0v4.900a3.850,3.850 0,0 1,-7.700,0zM40.175,44.200a3.850,3.850 0,0 1,7.700,0v10.500a3.850,3.850 0,0 1,-7.700,0zM50.150,47.700a3.850,3.850 0,0 1,7.700,0v20.300a3.850,3.850 0,0 1,-7.700,0zM60.125,44.200a3.850,3.850 0,0 1,7.700,0v10.500a3.850,3.850 0,0 1,-7.700,0zM70.100,40.000a3.850,3.850 0,0 1,7.700,0v4.900a3.850,3.850 0,0 1,-7.700,0z"/>
+</vector>
