@@ -162,7 +162,7 @@ steps:
   - 'uses': someone/play-deploy@0123456789abcdef0123456789abcdef01234567
 EOF
 
-expect bad-uses-tag'action not on the allow-list'
+expect bad-uses-tag 'action not on the allow-list'
 fixture bad-uses-tag .github/workflows/ci.yml <<'EOF'
 steps:
   - uses: actions/setup-java@v6
