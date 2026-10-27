@@ -66,7 +66,7 @@ final class VpBatteryStatus {
 final class VpCallQuality {
   const VpCallQuality({
     required this.callId,
-    required this.quality,
+    this.quality,
     required this.jitterMs,
     required this.localLossPercent,
     required this.remoteLossPercent,
@@ -74,8 +74,9 @@ final class VpCallQuality {
   });
   final String callId;
 
-  /// liblinphone's estimate, 0 (worst) to 5 (best), on a MOS-like scale.
-  final double quality;
+  /// liblinphone's estimate, 0 (worst) to 5 (best), on a MOS-like scale;
+  /// null while it has none (never 0 for unknown).
+  final double? quality;
 
   /// Interarrival jitter the far end reported, in milliseconds.
   final double jitterMs;

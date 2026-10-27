@@ -103,6 +103,43 @@ class CallLogFileTest {
     }
 
     @Test
+    fun aClockGoingBackStillExportsTheNewestCallAndKeepsIt() {
+        var now = 2_000_000_000_000L
+        val log = CallLogFile(dir(), LogScrubber(), maxCalls = 2, clock = { now })
+        log.beginCall()
+        log.write("ENGINE", "older call")
+        log.endCall()
+        now -= 3_600_000 // the clock is set back an hour
+        log.beginCall()
+        log.write("ENGINE", "newer call")
+        log.endCall()
+        now -= 3_600_000
+        log.beginCall()
+        log.write("ENGINE", "newest call")
+        log.endCall()
+        assertTrue("newest call" in log.export().toString(Charsets.UTF_8))
+        val kept = log.keptFiles().joinToString { it.readText() }
+        assertTrue("newest call" in kept && "newer call" in kept)
+        assertFalse("older call" in kept)
+    }
+
+    @Test
+    fun twoCallsInTheSameMillisecondKeepTheirOwnLogs() {
+        val log = CallLogFile(dir(), LogScrubber(), clock = { 1_761_534_900_123L })
+        log.beginCall()
+        log.write("ENGINE", "first call")
+        log.endCall()
+        log.beginCall()
+        log.write("ENGINE", "second call")
+        log.endCall()
+        val files = log.keptFiles()
+        assertEquals(2, files.size)
+        assertTrue("first call" in files[0].readText())
+        assertTrue("second call" in files[1].readText())
+        assertTrue("second call" in log.export().toString(Charsets.UTF_8))
+    }
+
+    @Test
     fun nothingWritesToLogcat() {
         // The scrubbing sink is the only log; liblinphone's logcat output is off.
         val sources = File("src/main/kotlin").walk().filter { it.isFile && it.extension == "kt" }.toList()

@@ -824,7 +824,8 @@ object LinphoneEngine {
             val stats = runCatching { t.call.audioStats }.getOrNull() ?: continue
             val msg = QualityMsg(
                 callId = t.id,
-                quality = t.call.currentQuality.toDouble().takeIf { it >= 0 } ?: 0.0,
+                // No estimate yet (liblinphone gives a negative value): null, never 0.
+                quality = t.call.currentQuality.toDouble().takeIf { it >= 0 },
                 jitterMs = stats.receiverInterarrivalJitter.toDouble(),
                 localLossPercent = stats.localLossRate.toDouble(),
                 remoteLossPercent = stats.receiverLossRate.toDouble(),

@@ -431,7 +431,7 @@ class UiRequestMsg {
 class QualityMsg {
   QualityMsg({
     required this.callId,
-    required this.quality,
+    this.quality,
     required this.jitterMs,
     required this.localLossPercent,
     required this.remoteLossPercent,
@@ -440,8 +440,9 @@ class QualityMsg {
 
   String callId;
 
-  /// liblinphone's quality estimate, 0 (worst) to 5 (best), MOS-like.
-  double quality;
+  /// liblinphone's quality estimate, 0 (worst) to 5 (best), MOS-like; null
+  /// until it has one.
+  double? quality;
 
   double jitterMs;
 
@@ -463,7 +464,7 @@ class QualityMsg {
     result as List<Object?>;
     return QualityMsg(
       callId: result[0]! as String,
-      quality: result[1]! as double,
+      quality: result[1] as double?,
       jitterMs: result[2]! as double,
       localLossPercent: result[3]! as double,
       remoteLossPercent: result[4]! as double,

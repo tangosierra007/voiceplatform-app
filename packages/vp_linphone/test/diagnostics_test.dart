@@ -134,6 +134,11 @@ void main() {
     expect(got.single.callId, 'call-1');
     expect(got.single.quality, 4.2);
     expect(got.single.roundTripMs, 48);
+    engine.events.onCallQuality(
+      QualityMsg(callId: 'call-1', jitterMs: 0, localLossPercent: 0, remoteLossPercent: 0, roundTripMs: 0),
+    );
+    await pumpEventQueue();
+    expect(got.last.quality, isNull); // no estimate yet: null, not 0
     await sub.cancel();
   });
 

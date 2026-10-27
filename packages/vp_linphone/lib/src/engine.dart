@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 
 import 'call_diagnostics.dart';
 import 'incoming_headers.dart';
-import 'log_scrubber.dart';
 import 'messages.g.dart';
 import 'platform_types.dart';
 
@@ -164,7 +163,7 @@ final class VpLinphoneEngine implements CallEngine {
     final bytes = await _guard(_host.exportLastCallLog);
     if (bytes.isEmpty) return Uint8List(0);
     final text = utf8.decode(bytes, allowMalformed: true);
-    return packCallLog(LogScrubber().scrub(text));
+    return scrubAndPackCallLog(text);
   }
 
   // ------------------------------------------------------------ plumbing

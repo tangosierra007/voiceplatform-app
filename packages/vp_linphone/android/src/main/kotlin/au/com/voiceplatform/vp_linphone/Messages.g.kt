@@ -594,8 +594,11 @@ data class UiRequestMsg (
  */
 data class QualityMsg (
   val callId: String,
-  /** liblinphone's quality estimate, 0 (worst) to 5 (best), MOS-like. */
-  val quality: Double,
+  /**
+   * liblinphone's quality estimate, 0 (worst) to 5 (best), MOS-like; null
+   * until it has one.
+   */
+  val quality: Double? = null,
   val jitterMs: Double,
   val localLossPercent: Double,
   val remoteLossPercent: Double,
@@ -605,7 +608,7 @@ data class QualityMsg (
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): QualityMsg {
       val callId = pigeonVar_list[0] as String
-      val quality = pigeonVar_list[1] as Double
+      val quality = pigeonVar_list[1] as Double?
       val jitterMs = pigeonVar_list[2] as Double
       val localLossPercent = pigeonVar_list[3] as Double
       val remoteLossPercent = pigeonVar_list[4] as Double

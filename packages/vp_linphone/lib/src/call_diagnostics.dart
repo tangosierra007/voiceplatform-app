@@ -3,6 +3,9 @@ import 'dart:io' show gzip;
 import 'dart:typed_data';
 
 import 'package:call_engine/call_engine.dart';
+import 'package:flutter/foundation.dart' show compute;
+
+import 'log_scrubber.dart';
 
 /// The contract's limit for `POST /app/v1/diagnostics/call-logs`.
 const int callLogMaxBytes = 2 * 1024 * 1024;
@@ -27,6 +30,14 @@ Uint8List packCallLog(String text, {int maxBytes = callLogMaxBytes}) {
     if (packed.length <= maxBytes) return Uint8List.fromList(packed);
   }
 }
+
+/// Scrubs [text] and packs it as [packCallLog] does, in a background isolate
+/// (`compute`): a log can be megabytes, and neither the regexes nor gzip
+/// belong on the UI isolate.
+Future<Uint8List> scrubAndPackCallLog(String text, {int maxBytes = callLogMaxBytes}) =>
+    compute(_scrubAndPack, (text, maxBytes));
+
+Uint8List _scrubAndPack((String, int) args) => packCallLog(LogScrubber().scrub(args.$1), maxBytes: args.$2);
 
 /// Posts a gzipped call log to `POST /app/v1/diagnostics/call-logs`
 /// (Content-Type `application/gzip`) and returns the reference from the 201

@@ -16,7 +16,8 @@ import java.util.TimeZone
  * - Lines outside a call go to a small in-memory ring (the lead-in: REGISTER
  *   and set-up just before the call). [beginCall] starts the call's files with
  *   that lead-in; lines go to them until [endCall].
- * - A call's log is a series of segments `calls/<start>-<n>.log` of at most
+ * - A call's log is a series of segments `calls/<call>-<n>.log` (calls numbered
+ *   in order, not by the clock) of at most
  *   [segmentBytes]. The logs of the last [maxCalls] calls are kept, within
  *   [maxTotalBytes] in all, whichever limit comes first; the oldest segments
  *   go first, so a very long call loses its beginning (the export says so).
@@ -66,7 +67,10 @@ class CallLogFile(
     fun beginCall() {
         if (currentCall != null) return
         callsDir.mkdirs()
-        currentCall = "%013d".format(clock())
+        // Numbered, not timed: a clock that goes back or two starts in the same
+        // millisecond must not reorder or overwrite calls.
+        val next = (callKeys().lastOrNull()?.toLongOrNull() ?: 0L) + 1
+        currentCall = "%013d".format(next)
         segment = 0
         currentFile = segmentFile(currentCall!!, 0).also { it.writeText("") }
         for (line in ring) append(line)
