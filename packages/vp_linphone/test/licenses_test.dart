@@ -34,8 +34,13 @@ void main() {
 
   test('every licences/ folder is a declared asset', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    for (final dir in onDisk.map((f) => f.split('/').first).toSet()) {
-      expect(pubspec, contains('    - licenses/$dir/'), reason: dir);
+    expect(pubspec, contains('    - licenses/\n'));
+    for (final f in onDisk) {
+      expect(
+        f,
+        matches(RegExp(r'^LICENSE\.[a-z0-9+-]+$')),
+        reason: 'named LICENSE.<component> for the Play track guard: $f',
+      );
     }
   });
 

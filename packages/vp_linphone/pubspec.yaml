@@ -30,34 +30,4 @@ flutter:
   # Licence texts of the native code in the liblinphone SDK, for the in-app
   # licence list (addVpLinphoneLicenses) and NOTICE.
   assets:
-    - licenses/bctoolbox/
-    - licenses/belle-sip/
-    - licenses/belr/
-    - licenses/bzrtp/
-    - licenses/dav1d/
-    - licenses/jsoncpp/
-    - licenses/libc++/
-    - licenses/libjpeg-turbo/
-    - licenses/liblinphone/
-    - licenses/liboqs/
-    - licenses/libsrtp/
-    - licenses/libvpx/
-    - licenses/libxml2/
-    - licenses/lime/
-    - licenses/mbedtls/
-    - licenses/mediastreamer2/
-    - licenses/msaaudio/
-    - licenses/msandroidcamera2/
-    - licenses/mswebrtc/
-    - licenses/mswebrtc-abseil/
-    - licenses/mswebrtc-ooura/
-    - licenses/openldap/
-    - licenses/opus/
-    - licenses/ortp/
-    - licenses/postquantumcryptoengine/
-    - licenses/soci/
-    - licenses/speex/
-    - licenses/sqlite/
-    - licenses/xerces-c/
-    - licenses/zlib/
-    - licenses/zxing-cpp/
+    - licenses/
