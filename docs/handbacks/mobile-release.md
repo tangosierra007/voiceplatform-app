@@ -37,9 +37,9 @@ Tested locally: CI unsigned bundle, a partial configuration (fails), and a throw
 
 ### Repository settings for TJ to apply (not done by this task)
 
-The upload job declares `environment: play-internal`. **Apply these before the first manual dispatch or `v*` tag**: if that job runs first, GitHub creates the environment by itself with no protection.
+The upload job (and no other job) declares `environment: play-internal`. As of 27 October the environment exists with deployment policies `main` and `v*` and the five secrets set in it only; still open: required reviewers, the bypass setting and the tag ruleset (items 1 and 2 below).
 
-1. **Settings → Environments → New environment** `play-internal`:
+1. **Settings → Environments →** `play-internal` (exists; check each item):
    - **Required reviewers**: TJ (and mobile-lead's account if wanted). Tick **Prevent self-review** if more than one reviewer is listed.
    - **Deployment branches and tags → Selected branches and tags**: add branch rule `main` and tag rule `v*`.
    - **Allow administrators to bypass**: off.
@@ -59,7 +59,13 @@ The upload job declares `environment: play-internal`. **Apply these before the f
 | `ANDROID_UPLOAD_KEY_ALIAS` | The key's alias in the keystore. |
 | `ANDROID_UPLOAD_KEY_PASSWORD` | The key's password (the same as the store password if one was set for both). |
 
-Set all five or none. None were set by this task, and no keystore was generated.
+Set all five or none. Set by mobile-lead in the `play-internal` environment (not by this task); this task generated no keystore. The key alias is `voiceplatform-upload`; the keystore is PKCS12, so the key password equals the store password.
+
+### Upload key certificate (for App Links, WS1 1.4)
+
+SHA-256: `E0:C6:75:63:BE:C0:2A:6F:42:7A:18:7E:15:DE:25:98:66:30:47:48:94:14:A2:A4:22:CD:6C:D9:D1:DD:97:09`
+
+`assetlinks.json` also needs Play App Signing's SHA-256, from Play Console after the first upload. The upload job prints the signer's SHA-256 on every run; check it against this one.
 
 ### Proposed (for mobile-lead to decide)
 
@@ -70,7 +76,7 @@ Set all five or none. None were set by this task, and no keystore was generated.
 ### Open questions for TJ (through mobile-lead)
 
 - Play may refuse API uploads until a first bundle has been uploaded by hand in Play Console. If so, TJ uploads the signed bundle kept by that run (artifact `android-signed-<run>`, 7 days) by hand once; after that CI uploads.
-- The upload key's SHA-256 (printed by the upload job) is needed for `assetlinks.json` (WS1 1.4) alongside Play App Signing's.
+- Play App Signing's SHA-256 (after the first upload) is needed for `assetlinks.json` (WS1 1.4) alongside the upload key's above.
 
 ### Deviations
 
