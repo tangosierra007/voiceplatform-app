@@ -1,0 +1,27 @@
+name: vp_linphone
+description: "VoicePlatform SIP engine on liblinphone: implements CallEngine (contracts/call_engine.dart). Android only for now."
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.7
+  flutter: '>=3.3.0'
+
+dependencies:
+  call_engine:
+    path: ../call_engine
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  pigeon: ^29.0.11
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: au.com.voiceplatform.vp_linphone
+        pluginClass: VpLinphonePlugin

@@ -1,0 +1,7 @@
+/// VoicePlatform's SIP engine on liblinphone: [VpLinphoneEngine] implements
+/// `CallEngine` (contracts/call_engine.dart). Android only for now.
+library;
+
+export 'src/engine.dart' show VpLinphoneEngine, levelFromDbm0;
+export 'src/incoming_headers.dart' show IncomingHeaders;
+export 'src/log_scrubber.dart' show LogScrubber;

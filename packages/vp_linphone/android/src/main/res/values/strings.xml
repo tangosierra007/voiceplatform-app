@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Placeholder copy; the app's notification wording comes with Telecom in 3.2. -->
+    <string name="vp_linphone_channel_name">Calls service</string>
+    <string name="vp_linphone_notification_title">VoicePlatform</string>
+    <string name="vp_linphone_notification_ready">Ready for calls</string>
+    <string name="vp_linphone_notification_in_call">Call in progress</string>
+</resources>
