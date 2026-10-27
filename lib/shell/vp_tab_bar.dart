@@ -50,7 +50,7 @@ class VpTabBar extends StatelessWidget {
     return RepaintBoundary(
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: context.vpArtboard.tabBar,
+          color: VpTabBarColours.background(c, Theme.of(context).brightness),
           border: Border(top: BorderSide(color: c.border)),
         ),
         child: Padding(
@@ -110,7 +110,6 @@ class _TabItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
-    final a = context.vpArtboard;
     final iconColour = active ? c.brandText : c.textMuted;
 
     final content = ConstrainedBox(
@@ -177,8 +176,8 @@ class _TabItem extends StatelessWidget {
                   right: 6,
                   child: _Badge(
                     count: badge,
-                    colour: a.badge,
-                    textColour: a.onBadge,
+                    colour: VpTabBarColours.badge,
+                    textColour: VpTabBarColours.onBadge,
                   ),
                 ),
             ],

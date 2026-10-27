@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'nav/call_flow.dart';
 import 'nav/routes.dart';
+import 'net/live_events.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_preference.dart';
 
@@ -20,8 +21,9 @@ class VoicePlatformApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       themeMode: preference.mode,
       routerConfig: router,
-      builder: (context, child) =>
-          CallFlow(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => LiveEventsLifecycle(
+        child: CallFlow(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

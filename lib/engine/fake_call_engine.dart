@@ -193,11 +193,13 @@ class FakeCallEngine implements CallEngine {
 
   @override
   Future<String> call(String number, {String? callerId}) async {
+    // Emergency numbers always go to the phone's own dialler, ahead of every
+    // other check (started, registered, microphone): the app never places one
+    // itself (decision 139 as amended 27 Oct; APP6).
+    if (isEmergencyNumber(number)) throw const EmergencyNumberUseDialler();
     _requireStarted();
     if (_regState != RegistrationState.ok) throw const NotRegistered();
     if (!microphoneGranted) throw const MicrophoneDenied();
-    // Emergency numbers are never refused here (rule 8): the UI hands them to
-    // the phone's dialler first, and one that gets this far is placed.
     final id = _newId();
     _emit(
       CallSnapshot(

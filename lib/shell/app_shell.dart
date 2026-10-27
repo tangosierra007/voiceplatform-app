@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../net/live_events.dart';
 import 'shell_status.dart';
 import 'vp_tab_bar.dart';
 
@@ -24,6 +25,15 @@ class AppShell extends ConsumerWidget {
       // Messages went away (last SMS line removed): fall back to Keypad.
       current = AppTab.keypad;
       WidgetsBinding.instance.addPostFrameCallback((_) => shell.goBranch(0));
+    }
+    // Presence polling (the stream's fallback) runs only while Contacts is
+    // open; Transfer (4.3) sets the same flag.
+    final live = ref.read(liveEventsProvider);
+    final onContacts = current == AppTab.contacts;
+    if (live.presenceVisible != onContacts) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => live.presenceVisible = onContacts,
+      );
     }
     return Scaffold(
       body: shell,

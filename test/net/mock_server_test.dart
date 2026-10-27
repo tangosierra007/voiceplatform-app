@@ -8,6 +8,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/net/events.dart';
+import 'package:voiceplatform_app/net/live_events.dart';
 
 import '../../tool/mock_server/fixtures.dart';
 import '../../tool/mock_server/server.dart';
@@ -145,12 +146,18 @@ void main() {
       ]);
       final sip = await api.device.postDevicesMeSipCredentials();
       expect(sip.domain, 'sip.demo-co.example');
+      expect(sip.instanceId, 'urn:uuid:${uid(0x6, 1)}');
     });
 
     test('directory', () async {
       final c = await api.directory.getDirectoryColleagues();
       expect(c.total, 22);
-      expect(c.freeNow, 4);
+      // Counted from presence: Mia and Priya available, Tom on mobile.
+      expect(c.freeNow, 3);
+      expect(
+        c.items.firstWhere((x) => x.extensionValue == '201').name,
+        'Reception',
+      );
       expect(c.items.map((x) => x.name).first, 'Ava Nguyen');
       expect(
         c.items
@@ -336,5 +343,30 @@ void main() {
     await api.me.putMeStatus(
       body: const StatusInput(status: StatusInputStatus.available),
     );
+  });
+
+  test(
+    'pollPresence keeps the ETag; unchanged answers 304 with no items',
+    () async {
+      final first = await pollPresence(dio, null);
+      expect(first.items, hasLength(colleagues.length));
+      expect(first.etag, isNotNull);
+      final again = await pollPresence(dio, first.etag);
+      expect(again.items, isNull);
+      expect(again.etag, first.etag);
+    },
+  );
+
+  test('connectEvents through LiveEvents against the mock', () async {
+    final live = LiveEvents(
+      connect: () => connectEvents(dio),
+      poll: (etag) => pollPresence(dio, etag),
+    );
+    final first = live.events.first;
+    live.resume();
+    final e = await first.timeout(const Duration(seconds: 5));
+    expect(e.type, 'presence.snapshot');
+    expect(live.consecutiveFailures, 0);
+    await live.dispose();
   });
 }

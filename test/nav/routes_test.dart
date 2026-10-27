@@ -20,6 +20,7 @@ const _account = SipAccount(
   outboundProxy: 'sip:sip.voiceplatform.example:5061;transport=tls',
   displayName: 'Ava Nguyen',
   expiresSeconds: 600,
+  instanceId: 'urn:uuid:60000000-0000-4000-8000-000000000001',
 );
 
 void main() {

@@ -94,22 +94,28 @@ void main() {
     );
   });
 
-  test('tab bar badge colours from the artboard pass 4.5:1', () {
-    for (final a in [vpLightArtboardColours, vpDarkArtboardColours]) {
-      expect(a.badge, const Color(0xFFB42318));
-      expect(contrast(a.onBadge, a.badge), greaterThanOrEqualTo(4.5));
-    }
-    expect(vpDarkArtboardColours.tabBar, const Color(0xFF1A1613));
-    expect(vpLightArtboardColours.tabBar, vpLightColors.surface);
-  });
-
-  test('tab bar labels and icons pass 4.5:1 on the tab bar', () {
-    for (final (c, a) in [
-      (vpLightColors, vpLightArtboardColours),
-      (vpDarkColors, vpDarkArtboardColours),
+  test('tab bar: nearest tokens to the artboard colours, all 4.5:1', () {
+    expect(VpTabBarColours.badge, const Color(0xFFC62828));
+    expect(VpTabBarColours.onBadge, const Color(0xFFFFFFFF));
+    expect(
+      contrast(VpTabBarColours.onBadge, VpTabBarColours.badge),
+      greaterThanOrEqualTo(4.5),
+    );
+    expect(
+      VpTabBarColours.background(vpDarkColors, Brightness.dark),
+      const Color(0xFF1F1B18),
+    );
+    expect(
+      VpTabBarColours.background(vpLightColors, Brightness.light),
+      const Color(0xFFFFFFFF),
+    );
+    for (final (c, b) in [
+      (vpLightColors, Brightness.light),
+      (vpDarkColors, Brightness.dark),
     ]) {
-      expect(contrast(c.textMuted, a.tabBar), greaterThanOrEqualTo(4.5));
-      expect(contrast(c.text, a.tabBar), greaterThanOrEqualTo(4.5));
+      final bg = VpTabBarColours.background(c, b);
+      expect(contrast(c.textMuted, bg), greaterThanOrEqualTo(4.5));
+      expect(contrast(c.text, bg), greaterThanOrEqualTo(4.5));
       expect(contrast(c.brandText, c.brandTint), greaterThanOrEqualTo(4.5));
     }
   });

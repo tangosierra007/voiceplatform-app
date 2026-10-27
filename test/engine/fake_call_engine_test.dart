@@ -12,6 +12,7 @@ const _account = SipAccount(
   outboundProxy: 'sip:sip.voiceplatform.example:5061;transport=tls',
   displayName: 'Ava Nguyen',
   expiresSeconds: 600,
+  instanceId: 'urn:uuid:60000000-0000-4000-8000-000000000001',
   push: PushParams(
     provider: 'fcm',
     prid: 'token-1',
@@ -211,12 +212,71 @@ void main() {
       }
     });
 
-    test('emergency numbers are placed, never refused (rule 8)', () async {
-      final e = await _ready();
-      final id = await e.call('000');
-      expect(e.activeCalls.single.id, id);
-      expect(e.activeCalls.single.remoteNumber, '000');
-    });
+    group(
+      'emergency numbers go to the phone dialler, ahead of every check',
+      () {
+        const emergency = [
+          '000',
+          '112',
+          '106',
+          '0000',
+          '0112',
+          '0106',
+          '000.',
+          '(000)',
+          '1 1 2',
+          '1-0-6',
+          '+000',
+          ' 0 0 0 0 ',
+        ];
+        Future<void> refused(FakeCallEngine e) async {
+          for (final n in emergency) {
+            await expectLater(
+              e.call(n),
+              throwsA(isA<EmergencyNumberUseDialler>()),
+              reason: n,
+            );
+          }
+          expect(e.activeCalls, isEmpty);
+        }
+
+        test('registered', () async => refused(await _ready()));
+
+        test('not started', () async {
+          final e = FakeCallEngine();
+          addTearDown(e.dispose);
+          await refused(e);
+        });
+
+        test('started but not registered', () async {
+          final e = FakeCallEngine();
+          addTearDown(e.dispose);
+          await e.start();
+          await refused(e);
+        });
+
+        test('microphone refused', () async {
+          final e = await _ready();
+          e.microphoneGranted = false;
+          await refused(e);
+        });
+
+        test('near misses are ordinary numbers', () async {
+          final e = await _ready();
+          for (final n in [
+            '1000',
+            '00000',
+            '0001',
+            '1120',
+            '131',
+            '+61355501200',
+          ]) {
+            await e.call(n);
+          }
+          expect(e.activeCalls, hasLength(6));
+        });
+      },
+    );
 
     test('the log masks numbers', () async {
       final e = await _ready();

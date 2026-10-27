@@ -464,6 +464,8 @@ class MockServer {
       'displayName': 'Ava Nguyen',
       'expiresSeconds': 600,
       'pushParam': 'voiceplatform-app',
+      // This device's own id, as the edge expects for +sip.instance.
+      'instanceId': 'urn:uuid:${uid(0x6, 1)}',
     });
   }
 
@@ -489,7 +491,9 @@ class MockServer {
 
   Future<void> _colleagues(_Req r) => r.json(200, {
     'total': colleaguesTotal,
-    'freeNow': colleaguesFreeNow,
+    'freeNow': _presence.values
+        .where((p) => p == 'available' || p == 'mobile_only')
+        .length,
     'items': [for (final c in colleagues) _colleague(c)],
   });
 

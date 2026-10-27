@@ -9,6 +9,7 @@ part of 'sip_credentials.dart';
 SipCredentials _$SipCredentialsFromJson(Map<String, dynamic> json) =>
     SipCredentials(
       authUsername: json['authUsername'] as String,
+      instanceId: json['instanceId'] as String,
       password: json['password'] as String,
       domain: json['domain'] as String,
       outboundProxy: json['outboundProxy'] as String,
@@ -20,6 +21,7 @@ SipCredentials _$SipCredentialsFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$SipCredentialsToJson(SipCredentials instance) =>
     <String, dynamic>{
       'authUsername': instance.authUsername,
+      'instanceId': instance.instanceId,
       'password': instance.password,
       'domain': instance.domain,
       'outboundProxy': instance.outboundProxy,

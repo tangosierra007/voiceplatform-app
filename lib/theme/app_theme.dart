@@ -12,10 +12,8 @@ export 'tokens.g.dart';
 /// - Call controls are the one place for green and red: [VpCallColours].
 /// - In-call and incoming screens are ink in both themes: [AppTheme.callScreen].
 abstract final class AppTheme {
-  static ThemeData light() =>
-      _build(Brightness.light, vpLightColors, vpLightArtboardColours);
-  static ThemeData dark() =>
-      _build(Brightness.dark, vpDarkColors, vpDarkArtboardColours);
+  static ThemeData light() => _build(Brightness.light, vpLightColors);
+  static ThemeData dark() => _build(Brightness.dark, vpDarkColors);
 
   /// The in-call and incoming screens: ink ground, light text, whatever the
   /// device theme is.
@@ -28,11 +26,7 @@ abstract final class AppTheme {
     );
   }
 
-  static ThemeData _build(
-    Brightness brightness,
-    VpColors c,
-    VpArtboardColours a,
-  ) {
+  static ThemeData _build(Brightness brightness, VpColors c) {
     final dark = brightness == Brightness.dark;
     final scheme = ColorScheme(
       brightness: brightness,
@@ -95,7 +89,7 @@ abstract final class AppTheme {
       focusColor: c.focus.withValues(alpha: 0.24),
       dividerColor: c.border,
       dividerTheme: DividerThemeData(color: c.border, thickness: 1, space: 1),
-      extensions: [c, a],
+      extensions: [c],
       filledButtonTheme: FilledButtonThemeData(
         style:
             FilledButton.styleFrom(
@@ -177,8 +171,21 @@ abstract final class VpCallColours {
   static const text = VpPalette.grey100;
 }
 
+/// The tab bar's colours, by role, from tokens. The artboards draw the dark
+/// bar #1a1613 and the badges #b42318; TJ (27 Oct) chose the nearest tokens.
+abstract final class VpTabBarColours {
+  /// Light: surface (white). Dark: charcoal-850 (#1f1b18), the nearest token
+  /// to the artboard's #1a1613 and the dark theme's own navigation colour.
+  static Color background(VpColors c, Brightness b) =>
+      b == Brightness.dark ? c.charcoal850 : c.surface;
+
+  /// danger-600 (#c62828) in both themes, the nearest token to #b42318.
+  static const badge = VpPalette.danger600;
+
+  /// White on danger-600: 5.6:1.
+  static const onBadge = VpPalette.white;
+}
+
 extension VpThemeX on BuildContext {
   VpColors get vp => Theme.of(this).extension<VpColors>()!;
-  VpArtboardColours get vpArtboard =>
-      Theme.of(this).extension<VpArtboardColours>()!;
 }

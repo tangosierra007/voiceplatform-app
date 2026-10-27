@@ -11,6 +11,7 @@ part 'sip_credentials.g.dart';
 class SipCredentials {
   const SipCredentials({
     required this.authUsername,
+    required this.instanceId,
     required this.password,
     required this.domain,
     required this.outboundProxy,
@@ -22,6 +23,9 @@ class SipCredentials {
   factory SipCredentials.fromJson(Map<String, Object?> json) => _$SipCredentialsFromJson(json);
   
   final String authUsername;
+
+  /// The contact's `+sip.instance`: `urn:uuid:` and this device's id. The edge refuses any other instance and removes a revoked device's contact by it.
+  final String instanceId;
   final String password;
   final String domain;
   final String outboundProxy;

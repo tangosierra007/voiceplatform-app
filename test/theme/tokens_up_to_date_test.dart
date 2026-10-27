@@ -8,7 +8,6 @@ void main() {
   test('lib/theme/tokens.g.dart matches design/tokens.json (run dart run tool/gen_theme.dart)', () {
     final expected = gen.generateTokens(
       File(gen.tokensPath).readAsStringSync(),
-      File(gen.artboardPath).readAsStringSync(),
     );
     final actual = File(gen.outputPath)
         .readAsStringSync()

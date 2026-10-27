@@ -125,9 +125,9 @@ const colleagues = [
   },
   {
     'n': 201,
-    'name': 'Jess Rowe',
-    'initials': 'JR',
-    'role': 'Reception',
+    // Extension 201 is Reception in the sample data (no person named).
+    'name': 'Reception',
+    'initials': 'RE',
     'presence': 'on_call',
     'ago': 252,
   },
@@ -163,9 +163,10 @@ const colleagues = [
   },
 ];
 
-/// Totals the Contacts header shows; the list above is its first screen.
+/// The tenant's colleague total the Contacts header shows (22 of 25 seats);
+/// the list above is its first screen. The free count is counted live from
+/// presence (available and mobile_only), never fixed.
 const colleaguesTotal = 22;
-const colleaguesFreeNow = 4;
 
 final teams = [
   {
@@ -319,8 +320,8 @@ const greetings = [
   },
 ];
 
-/// AppRecents, newest first. The artboard's "03 9555 0142" is not an ACMA
-/// fictional number, so the fixture uses 03 7010 0142 in its place.
+/// AppRecents, newest first. 03 5550 1142 replaces the artboard's
+/// 03 9555 0142, which is not an ACMA fictional number (TJ, 27 Oct).
 final history = [
   {
     'id': 'h1',
@@ -379,7 +380,7 @@ final history = [
     'at': melb(26, 11, 15),
     'direction': 'outgoing',
     'outcome': 'answered',
-    'number': '+61370100142',
+    'number': '+61355501142',
     'durationSeconds': 380,
     'mine': true,
   },
