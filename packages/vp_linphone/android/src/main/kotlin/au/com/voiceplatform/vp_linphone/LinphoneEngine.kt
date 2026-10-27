@@ -13,6 +13,7 @@ import org.linphone.core.Account
 import org.linphone.core.AudioDevice
 import org.linphone.core.AuthInfo
 import org.linphone.core.Call
+import org.linphone.core.CallParams
 import org.linphone.core.Core
 import org.linphone.core.CoreListenerStub
 import org.linphone.core.Factory
@@ -241,9 +242,11 @@ object LinphoneEngine {
         c.setTransports(t)
         c.verifyServerCertificates(true)
         c.verifyServerCn(true)
-        // SRTP SDES offered when the far end takes it; never mandatory.
-        if (c.isMediaEncryptionSupported(MediaEncryption.SRTP)) c.setMediaEncryption(MediaEncryption.SRTP)
-        c.setMediaEncryptionMandatory(false)
+        // APP13: SRTP (SDES) on every call, mandatory: RTP/SAVP only in the SDP,
+        // and liblinphone answers 488 to an offer without crypto. No SRTP in
+        // the build means no engine, never plain RTP.
+        MediaSecurity.applyToCore(CoreEncryption(c))
+        log("media encryption ${c.mediaEncryption}, mandatory ${c.isMediaEncryptionMandatory}")
         c.isVideoCaptureEnabled = false
         c.isVideoDisplayEnabled = false
         // RFC 4733 telephone-event, never SIP INFO.
@@ -258,6 +261,44 @@ object LinphoneEngine {
         c.disableCallRinging(true)
         c.isKeepAliveEnabled = true
         applyCodecOrder(c)
+    }
+
+    private class CoreEncryption(private val c: Core) : MediaSecurity.CoreSettings {
+        override var encryption: MediaEncryption
+            get() = c.mediaEncryption
+            set(v) {
+                check(c.setMediaEncryption(v) == 0) { "setMediaEncryption($v) failed" }
+            }
+        override var mandatory: Boolean
+            get() = c.isMediaEncryptionMandatory
+            set(v) = c.setMediaEncryptionMandatory(v)
+        override var capabilityNegotiation: Boolean
+            get() = c.isCapabilityNegociationEnabled
+            set(v) {
+                c.isCapabilityNegociationEnabled = v
+            }
+        override fun supports(encryption: MediaEncryption) = c.isMediaEncryptionSupported(encryption)
+    }
+
+    private class CallEncryption(private val p: CallParams) : MediaSecurity.Settings {
+        override var encryption: MediaEncryption
+            get() = p.mediaEncryption
+            set(v) {
+                p.mediaEncryption = v
+            }
+        override var capabilityNegotiation: Boolean
+            get() = p.isCapabilityNegotiationsEnabled
+            set(v) {
+                p.isCapabilityNegotiationsEnabled = v
+            }
+    }
+
+    /** Refuses a call when the Core is not set up for SRTP only (it always is after [configure]). */
+    private fun requireSrtpOnly(c: Core) {
+        if (!MediaSecurity.coreCompliant(c.mediaEncryption, c.isMediaEncryptionMandatory)) {
+            log("call refused: media encryption not mandatory SRTP (APP13)")
+            throw VpFlutterError("invalid_state", "Media encryption is not mandatory SRTP")
+        }
     }
 
     private fun applyCodecOrder(c: Core) {
@@ -493,9 +534,11 @@ object LinphoneEngine {
         }
         if (acc == null) throw VpFlutterError("not_registered", "Not registered")
         val address = target(number)
+        requireSrtpOnly(c)
         val params = c.createCallParams(null) ?: throw VpFlutterError("invalid_state", "No call params")
         params.account = acc
         params.isVideoEnabled = false
+        MediaSecurity.applyToCall(CallEncryption(params))
         if (callerId != null) params.addCustomHeader("X-VP-Caller-Id", callerId)
         val call = c.inviteAddressWithParams(address, params)
             ?: throw VpFlutterError("invalid_state", "Call could not be placed")
@@ -514,9 +557,11 @@ object LinphoneEngine {
         val t = tracked(callId)
         if (t.state != CallStateMsg.INCOMING) throw VpFlutterError("invalid_state", "Call is not ringing")
         if (!micGranted()) throw VpFlutterError("microphone_denied", "Microphone permission not granted")
-        val params = c.createCallParams(t.call)
-        params?.isVideoEnabled = false
-        val rc = if (params != null) t.call.acceptWithParams(params) else t.call.accept()
+        requireSrtpOnly(c)
+        val params = c.createCallParams(t.call) ?: throw VpFlutterError("invalid_state", "No call params")
+        params.isVideoEnabled = false
+        MediaSecurity.applyToCall(CallEncryption(params))
+        val rc = t.call.acceptWithParams(params)
         if (rc != 0) throw VpFlutterError("invalid_state", "Answer failed")
     }
 
@@ -872,7 +917,7 @@ object LinphoneEngine {
         val name = remote.displayName?.takeIf { it.isNotBlank() }
         val current = if (t.state == CallStateMsg.ENDED) null else call.currentParams
         val tls = account?.params?.transport == TransportType.Tls
-        val srtp = current?.mediaEncryption == MediaEncryption.SRTP
+        val srtp = current?.mediaEncryption == MediaSecurity.REQUIRED
         return CallMsg(
             id = t.id,
             incoming = t.incoming,
@@ -927,6 +972,18 @@ object LinphoneEngine {
                 }
             }
         }
+        if (t.intent != Mapping.LocalIntent.INSECURE_MEDIA) {
+            val encryption = call.currentParams?.mediaEncryption
+            if (MediaSecurity.verdict(state, encryption) == MediaSecurity.Verdict.END) {
+                // APP13: media without SRTP is never kept. The End that follows
+                // reports EndReason.failed.
+                t.intent = Mapping.LocalIntent.INSECURE_MEDIA
+                log("call ${t.id} ending: media encryption $encryption, not SRTP (APP13)")
+                if (call.terminate() != 0) log("call ${t.id} terminate failed")
+                return
+            }
+        }
+        if (state == Call.State.StreamsRunning) log("call ${t.id} media encryption ${call.currentParams?.mediaEncryption}")
         var mapped = Mapping.callState(state) ?: return
         if (mapped == CallStateMsg.CONNECTED && t.connectedAt == null) t.connectedAt = System.currentTimeMillis()
         if (t.transferring && mapped != CallStateMsg.ENDED) mapped = CallStateMsg.TRANSFERRING
