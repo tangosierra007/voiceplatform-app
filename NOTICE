@@ -210,6 +210,11 @@ Third-party components are listed below with their licences as they are added.
     page (broadcom.com/broadvoice) now redirects to Broadcom's product list,
     so the release's own licence text could not be obtained from Broadcom.
     The in-app list says so.
+    RELEASE BLOCKER: BroadVoice16: licence text not available from Belledonne
+    (no GitHub repository; GitLab unreachable). An unofficial mirror's source
+    headers at the pinned commit state Broadcom, LGPL 2.1
+    (github.com/Ferenc-/linphone-bv16-floatingpoint, c4a341a3). No store
+    release until Belledonne confirms (TJ, 28 Oct).
 - AndroidX Core (androidx.core:core-ktx 1.16.0), The Android Open Source
   Project. Apache-2.0. Used by packages/vp_linphone.
 

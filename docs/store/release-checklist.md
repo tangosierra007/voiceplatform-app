@@ -2,6 +2,8 @@
 
 For TJ and mobile-lead together. Internal testing only; nothing else in Play Console changes.
 
+> **Release blocker:** BroadVoice16: licence text not available from Belledonne (no GitHub repository; GitLab unreachable). An unofficial mirror's source headers at the pinned commit state Broadcom, LGPL 2.1 (github.com/Ferenc-/linphone-bv16-floatingpoint, c4a341a3). No store release until Belledonne confirms (TJ, 28 Oct).
+
 1. **Before the run**
    - [ ] `main` is green; `pubspec.yaml` `version:` is the versionName wanted (for example `1.0.0`). The versionCode is the run number of `android.yml` (it only goes up).
    - [x] The `play-internal` environment has its five secrets (set 27 Oct), a required reviewer (TJ) with admin bypass off, and deploys only from `main` and `v*` tags.

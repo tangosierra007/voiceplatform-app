@@ -162,8 +162,21 @@ See the PR: `flutter analyze` and `flutter test` (root and packages). `licenses_
 
 ### Open
 
-1. **BroadVoice16:** needs either gitlab.linphone.org access (the fork's own COPYING) or a copy of Broadcom's release from TJ. Distribution question for TJ: ship with BV16 as is, or have it disabled (it is already a disabled payload type; the code is still in `libmediastreamer2.so`).
+1. **BroadVoice16** *(now a release blocker; see "BroadVoice16 licence" below)*: needs either gitlab.linphone.org access (the fork's own COPYING) or a copy of Broadcom's release from TJ. Distribution question for TJ: ship with BV16 as is, or have it disabled (it is already a disabled payload type; the code is still in `libmediastreamer2.so`).
 2. **aom and GSM versions** need the forks (gitlab.linphone.org) to pin exactly.
+
+## BroadVoice16 licence `docs/bv16-licence`
+
+Branch `docs/bv16-licence` from `main` at `7d3e211`. One PR, not merged.
+
+TJ named Belledonne's own bv16-floatingpoint repository on GitHub as the upstream for the licence. Where it was looked for (raw text fetches only; nothing downloaded as an archive or run):
+
+- `github.com/BelledonneCommunications/bv16-floatingpoint`: 404. The org's full repository list (GitHub API) has no repository named bv16 or broadvoice; a repository search for `bv16` in the org finds none.
+- `gitlab.linphone.org/BC/public/external/bv16-floatingpoint`: `ECONNREFUSED` on 443, as before.
+- The licence URL in the source headers, `www.broadcom.com/licenses/LGPLv2.1.php`: 404.
+- **Unofficial mirror** `github.com/Ferenc-/linphone-bv16-floatingpoint` (not Belledonne's) has the pinned commit `c4a341a3277e8adcc42427c4fd80a457fe934f2a` (Ghislain MARY, 2025-04-14, "Fix build with CMake 4"). Its tree has no LICENSE, COPYING or README. The source headers (for example `bv16/encoder.c`) say "Copyright 2000-2012 Broadcom Corporation" and that the code is under LGPL 2.1; they name BV16 floating-point version 1.2, 5 October 2012.
+
+Decision (mobile-lead, following TJ): stay conservative. No `LICENSE.bv16` is added, and nothing is taken from the mirror. NOTICE and `docs/store/release-checklist.md` mark BroadVoice16 as a **release blocker**: no store release until Belledonne confirms. The in-app list still says the licence could not be obtained; `licenses.dart` and `licenses_test.dart` are unchanged.
 
 ## 3.2 (Android) `feat/telecom-fcm`
 
