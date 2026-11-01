@@ -17,7 +17,8 @@ import '../../tool/mock_server/fixtures.dart' as fx;
 import '../support/fake_api.dart';
 import '../support/fakes.dart';
 
-final _now = DateTime.utc(2026, 10, 27, 5); // 4 pm in Melbourne
+// Local times, so the line reads the same in any time zone (CI runs in UTC).
+final _now = DateTime(2026, 10, 27, 16);
 
 void main() {
   late MemorySessionStore store;
@@ -61,7 +62,7 @@ void main() {
           'error': 'device_revoked',
           'message': "You've been signed out",
           'revokedBy': 'Priya Shah, your admin',
-          'revokedAt': fx.melb(27, 15, 12),
+          'revokedAt': DateTime(2026, 10, 27, 15, 12).toUtc().toIso8601String(),
           'extension': '202',
           'support': fx.support,
         },
