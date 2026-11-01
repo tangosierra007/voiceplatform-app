@@ -1,0 +1,167 @@
+// A 401 from refresh: only `device_revoked` is a revocation and shows
+// AppSignedOut (saying who only when the API names someone). Everything
+// else (`refresh_invalid`, the clock message, a 401 with no usable body)
+// blames no one: AppSignIn with "Please sign in again."
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:voiceplatform_app/auth/auth.dart';
+import 'package:voiceplatform_app/auth/session_store.dart';
+import 'package:voiceplatform_app/net/api.dart';
+import 'package:voiceplatform_app/platform/device_keys.dart';
+import 'package:voiceplatform_app/screens/signin/signed_out_screen.dart';
+import 'package:voiceplatform_app/theme/theme_preference.dart';
+
+import '../../tool/mock_server/fixtures.dart' as fx;
+import '../support/fake_api.dart';
+import '../support/fakes.dart';
+
+final _now = DateTime.utc(2026, 10, 27, 5); // 4 pm in Melbourne
+
+void main() {
+  late MemorySessionStore store;
+
+  /// Signed in from a stored session; `POST /auth/refresh` answers [answer].
+  Future<ProviderContainer> make(Object? Function(SeenRequest) answer) async {
+    SharedPreferences.setMockInitialValues({});
+    final sp = await SharedPreferences.getInstance();
+    store = MemorySessionStore()
+      ..session = const StoredSession(deviceId: 'd1', refreshToken: 'r1');
+    final c = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(sp),
+        sessionStoreProvider.overrideWithValue(store),
+        deviceKeysProvider.overrideWithValue(FakeDeviceKeys()),
+        clockProvider.overrideWithValue(() => _now),
+        dioProvider.overrideWithValue(
+          Dio(BaseOptions(baseUrl: 'http://127.0.0.1:9/app/v1'))
+            ..httpClientAdapter = FakeApi({'POST /auth/refresh': answer}),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    c.read(authProvider);
+    await pumpEventQueue();
+    // _restore signs in from the store and refreshes once by itself.
+    return c;
+  }
+
+  void expectCleared(ProviderContainer c) {
+    expect(store.session, isNull);
+    expect(c.read(accessTokenProvider), isNull);
+  }
+
+  test('device_revoked with revokedBy and revokedAt: AppSignedOut says who '
+      'and when', () async {
+    final c = await make(
+      (_) => (
+        401,
+        {
+          'error': 'device_revoked',
+          'message': "You've been signed out",
+          'revokedBy': 'Priya Shah, your admin',
+          'revokedAt': fx.melb(27, 15, 12),
+          'extension': '202',
+          'support': fx.support,
+        },
+      ),
+    );
+    final s = c.read(authProvider);
+    expect(s, isA<SignedOutRemotely>());
+    expect(
+      signedOutLine((s as SignedOutRemotely).info, _now),
+      'Priya Shah, your admin, signed this phone out at 3:12 pm today. '
+      'This usually happens when a phone is replaced or lost.',
+    );
+    expectCleared(c);
+  });
+
+  test('device_revoked without revokedBy or revokedAt: AppSignedOut, '
+      'nobody blamed', () async {
+    final c = await make(
+      (_) => (
+        401,
+        {
+          'error': 'device_revoked',
+          'message': "You've been signed out",
+          'extension': '202',
+        },
+      ),
+    );
+    final s = c.read(authProvider);
+    expect(s, isA<SignedOutRemotely>());
+    final line = signedOutLine((s as SignedOutRemotely).info, _now);
+    expect(
+      line,
+      'This phone was signed out. '
+      'This usually happens when a phone is replaced or lost.',
+    );
+    expect(line, isNot(contains('admin')));
+    expectCleared(c);
+  });
+
+  test('refresh_invalid: AppSignIn, "Please sign in again."', () async {
+    final c = await make(
+      (_) => (401, {'error': 'refresh_invalid', 'message': 'Sign in again'}),
+    );
+    final s = c.read(authProvider);
+    expect(s, isA<NotSignedIn>());
+    expect((s as NotSignedIn).notice, 'Please sign in again.');
+    expectCleared(c);
+  });
+
+  test('refresh_invalid for the clock: the API\'s message too', () async {
+    final c = await make(
+      (_) => (
+        401,
+        {
+          'error': 'refresh_invalid',
+          'message': "Check the phone's date and time",
+        },
+      ),
+    );
+    final s = c.read(authProvider) as NotSignedIn;
+    expect(s.notice, "Please sign in again. Check the phone's date and time.");
+    expectCleared(c);
+  });
+
+  for (final (name, body) in [
+    ('no body', null),
+    ('a body that is not SignedOut', {'error': 'unauthorized'}),
+    (
+      'an error code this build does not know',
+      {'error': 'something_new', 'message': 'Sign in again'},
+    ),
+  ]) {
+    test('a 401 with $name: AppSignIn, "Please sign in again."', () async {
+      final c = await make((_) => (401, body));
+      final s = c.read(authProvider);
+      expect(s, isA<NotSignedIn>());
+      expect((s as NotSignedIn).notice, 'Please sign in again.');
+      expectCleared(c);
+    });
+  }
+
+  test('the notice: the generic message adds nothing', () {
+    SignedOut info(String m) =>
+        SignedOut(error: SignedOutError.refreshInvalid, message: m);
+    expect(SignInFailure.signInAgainNotice(null), 'Please sign in again.');
+    for (final m in [
+      'Sign in again',
+      'Sign in again.',
+      ' sign in again ',
+      '',
+    ]) {
+      expect(
+        SignInFailure.signInAgainNotice(info(m)),
+        'Please sign in again.',
+        reason: m,
+      );
+    }
+    expect(
+      SignInFailure.signInAgainNotice(info("Check the phone's date and time.")),
+      "Please sign in again. Check the phone's date and time.",
+    );
+  });
+}

@@ -28,7 +28,9 @@ String signedOutLine(SignedOut info, DateTime now) {
         : 'on ${whenShort(at, now)}'; // on Tue 3:12 pm, on 14 Oct
   }
   final subject = who == null || who.isEmpty
-      ? 'Your admin signed this phone out'
+      // Nobody named (for example the platform revoked it after a reused
+      // refresh token): say what happened, blame no one.
+      ? 'This phone was signed out'
       // revokedBy is name and role, as the contract says: Priya Shah, your admin.
       : '$who, signed this phone out';
   return '$subject${when == null ? '' : ' $when'}. This usually happens '

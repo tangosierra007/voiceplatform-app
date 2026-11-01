@@ -135,4 +135,30 @@ void main() {
     );
     await _shot(tester, 'signed_out_light.png');
   });
+
+  // No artboard: device_revoked with nobody named (the platform revoked the
+  // phone after a reused refresh token). Says what happened, blames no one.
+  testWidgets('AppSignedOut light, nobody named', (tester) async {
+    usePhone(tester);
+    await tester.pumpWidget(
+      await appUnderTest(
+        theme: ThemePreference.light,
+        clock: () => _now,
+        authController: ScriptedAuth(
+          SignedOutRemotely(
+            SignedOut.fromJson({
+              'error': 'device_revoked',
+              'message': "You've been signed out",
+              'extension': '202',
+              'support': fx.support,
+            }),
+          ),
+        ),
+      ),
+    );
+    await _settle(tester);
+    expect(find.textContaining('This phone was signed out.'), findsOneWidget);
+    expect(find.textContaining('admin'), findsNothing);
+    await _shot(tester, 'signed_out_nobody_light.png');
+  });
 }

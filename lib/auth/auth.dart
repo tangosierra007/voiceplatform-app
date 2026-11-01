@@ -83,6 +83,19 @@ class SignInFailure implements Exception {
   static const offline =
       "Can't reach VoicePlatform. Check your connection and try again.";
 
+  /// The session ended without a revocation (`refresh_invalid`, or a 401
+  /// with no usable body): AppSignIn's note, blaming no one.
+  static const signInAgain = 'Please sign in again.';
+
+  /// [signInAgain], plus the API's own message when it says more than "Sign
+  /// in again" (today: "Check the phone's date and time").
+  static String signInAgainNotice(SignedOut? info) {
+    var m = info?.message.trim() ?? '';
+    if (m.endsWith('.')) m = m.substring(0, m.length - 1);
+    if (m.isEmpty || m.toLowerCase() == 'sign in again') return signInAgain;
+    return '$signInAgain $m.';
+  }
+
   /// Spec 22, Sign-in item 3.
   static const notThisPhone =
       'This link only signs in the phone that asked for it.';
@@ -373,16 +386,23 @@ class AuthController extends Notifier<AuthState> {
       final status = e.response?.statusCode;
       final data = e.response?.data;
       if (status == 401) {
-        // device_revoked or refresh_invalid: everything local is cleared,
-        // then AppSignedOut says who and when, as far as the body says.
+        // Everything local is cleared either way. Only `device_revoked` is a
+        // real revocation: AppSignedOut, saying who and when as far as the
+        // body says. `refresh_invalid` (a session the server doesn't know,
+        // reused or expired), an unparsable body or any other 401 blames no
+        // one: AppSignIn with a neutral note.
         SignedOut? info;
         if (data is Map<String, Object?>) {
           try {
             info = SignedOut.fromJson(data);
           } catch (_) {}
         }
-        await signOutLocally();
-        if (info != null) state = SignedOutRemotely(info);
+        if (info != null && info.error == SignedOutError.deviceRevoked) {
+          await signOutLocally();
+          state = SignedOutRemotely(info);
+        } else {
+          await signOutLocally(notice: SignInFailure.signInAgainNotice(info));
+        }
       } else if (status == 403 && data is Map<String, Object?>) {
         await signOutLocally();
         state = LicenceRefused(LicenceRefusal.fromJson(data));

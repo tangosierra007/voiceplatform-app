@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/emergency/emergency.dart';
 import 'package:voiceplatform_app/nav/routes.dart';
+import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
@@ -45,6 +46,31 @@ void main() {
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
       await _shot(tester, 'signin_$mode.png');
+    });
+
+    // No artboard: the session ended without a revocation (refresh_invalid,
+    // here the clock one), so AppSignIn carries the neutral note.
+    testWidgets('AppSignIn, signed out without blame, $mode', (tester) async {
+      usePhone(tester);
+      await tester.pumpWidget(
+        await appUnderTest(
+          auth: NotSignedIn(
+            notice: SignInFailure.signInAgainNotice(
+              SignedOut.fromJson(const {
+                'error': 'refresh_invalid',
+                'message': "Check the phone's date and time",
+              }),
+            ),
+          ),
+          theme: pref,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text("Please sign in again. Check the phone's date and time."),
+        findsOneWidget,
+      );
+      await _shot(tester, 'signin_sign_in_again_$mode.png');
     });
 
     testWidgets('AppCode $mode', (tester) async {
