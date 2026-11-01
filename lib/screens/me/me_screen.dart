@@ -62,7 +62,11 @@ class MeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.vp;
-    final me = ref.watch(meProvider).value;
+    final meLoad = ref.watch(meProvider);
+    final me = meLoad.value;
+    // `GET /me` failed with no earlier answer held (a cold start offline):
+    // the error state in place of the name; everything else still works.
+    final meFailed = me == null && meLoad.hasError;
     final settings = ref.watch(callSettingsProvider).value;
     final hours = ref.watch(officeHoursProvider).value;
     final devices = ref.watch(devicesProvider).value;
@@ -76,134 +80,147 @@ class MeScreen extends ConsumerWidget {
     };
     return SafeArea(
       bottom: false,
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
-            child: Row(
-              children: [
-                ExcludeSemantics(
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: c.ink900,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      me?.initials ?? initialsOf(me?.name ?? ''),
-                      textScaler: TextScaler.noScaling,
-                      style: VpType.body.copyWith(
-                        fontSize: 14,
-                        height: 1,
-                        fontWeight: FontWeight.w800,
-                        fontVariations: const [FontVariation('wght', 800)],
-                        color: c.grey100,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Semantics(
-                        header: true,
+      child: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(meProvider);
+          try {
+            await ref.read(meProvider.future);
+          } catch (_) {}
+        },
+        child: ListView(
+          padding: EdgeInsets.zero,
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            if (meFailed)
+              const VpEmpty("Your details didn't load. Pull down to try again.")
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+                child: Row(
+                  children: [
+                    ExcludeSemantics(
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: c.ink900,
+                          shape: BoxShape.circle,
+                        ),
                         child: Text(
-                          me?.name ?? '',
-                          style: vpTitle(context, size: 22, line: 28),
+                          me?.initials ?? initialsOf(me?.name ?? ''),
+                          textScaler: TextScaler.noScaling,
+                          style: VpType.body.copyWith(
+                            fontSize: 14,
+                            height: 1,
+                            fontWeight: FontWeight.w800,
+                            fontVariations: const [FontVariation('wght', 800)],
+                            color: c.grey100,
+                          ),
                         ),
                       ),
-                      Text(
-                        [
-                          me?.extensionValue,
-                          me?.tenantName,
-                          licence,
-                        ].whereType<String>().join(' · '),
-                        style: vpMuted(context, size: 13, line: 18),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const _StatusPicker(),
-          if (battery != null) _BatteryCard(status: battery),
-          const _Band('Calls'),
-          _MeRow(
-            icon: VpIcon.phone,
-            title: "When I don't answer",
-            subtitle: settings == null ? null : callSettingsSummary(settings),
-            onTap: () => context.push(callSettingsPath),
-          ),
-          // Only with permissions.officeHours: the row and its fetch.
-          if (canHours && hours != null)
-            _MeRow(
-              icon: VpIcon.update,
-              title: 'Office hours',
-              subtitle:
-                  hours.summary ?? (hours.openNow ? 'Open now' : 'Closed now'),
-              trailing: _Chip(
-                'Change',
-                onTap: () => _changeHours(context, ref, hours),
-              ),
-            ),
-          if (canRecordings)
-            _MeRow(
-              icon: VpIcon.mic,
-              title: 'Recordings',
-              subtitle: 'Your recorded calls, last 90 days',
-              onTap: () => context.push(recordingsPath),
-            ),
-          const _Band('This phone'),
-          _MeRow(
-            icon: VpIcon.keypad,
-            title: 'Signed-in devices',
-            subtitle: devices == null ? null : devicesSummary(devices),
-            onTap: () => context.push(devicesPath),
-          ),
-          _MeRow(
-            icon: VpIcon.info,
-            title: 'Send call logs to support',
-            subtitle: 'For the last call, no passwords included',
-            onTap: () => _sendLogs(context, ref),
-          ),
-          const _Band('Appearance'),
-          const _Appearance(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SignOutButton(onPressed: () => _signOut(context, ref)),
-                const SizedBox(height: 4),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      'Version $version · ',
-                      style: vpMuted(context, size: 12, line: 18),
                     ),
-                    VpLink(
-                      'Open source licences',
-                      size: 12,
-                      onTap: () => showLicensePage(
-                        context: context,
-                        applicationName: 'VoicePlatform',
-                        applicationVersion: version,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              me?.name ?? '',
+                              style: vpTitle(context, size: 22, line: 28),
+                            ),
+                          ),
+                          Text(
+                            [
+                              me?.extensionValue,
+                              me?.tenantName,
+                              licence,
+                            ].whereType<String>().join(' · '),
+                            style: vpMuted(context, size: 13, line: 18),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
+            const _StatusPicker(),
+            if (battery != null) _BatteryCard(status: battery),
+            const _Band('Calls'),
+            _MeRow(
+              icon: VpIcon.phone,
+              title: "When I don't answer",
+              subtitle: settings == null ? null : callSettingsSummary(settings),
+              onTap: () => context.push(callSettingsPath),
             ),
-          ),
-        ],
+            // Only with permissions.officeHours: the row and its fetch.
+            if (canHours && hours != null)
+              _MeRow(
+                icon: VpIcon.update,
+                title: 'Office hours',
+                subtitle:
+                    hours.summary ??
+                    (hours.openNow ? 'Open now' : 'Closed now'),
+                trailing: _Chip(
+                  'Change',
+                  onTap: () => _changeHours(context, ref, hours),
+                ),
+              ),
+            if (canRecordings)
+              _MeRow(
+                icon: VpIcon.mic,
+                title: 'Recordings',
+                subtitle: 'Your recorded calls, last 90 days',
+                onTap: () => context.push(recordingsPath),
+              ),
+            const _Band('This phone'),
+            _MeRow(
+              icon: VpIcon.keypad,
+              title: 'Signed-in devices',
+              subtitle: devices == null ? null : devicesSummary(devices),
+              onTap: () => context.push(devicesPath),
+            ),
+            _MeRow(
+              icon: VpIcon.info,
+              title: 'Send call logs to support',
+              subtitle: 'For the last call, no passwords included',
+              onTap: () => _sendLogs(context, ref),
+            ),
+            const _Band('Appearance'),
+            const _Appearance(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _SignOutButton(onPressed: () => _signOut(context, ref)),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Version $version · ',
+                        style: vpMuted(context, size: 12, line: 18),
+                      ),
+                      VpLink(
+                        'Open source licences',
+                        size: 12,
+                        onTap: () => showLicensePage(
+                          context: context,
+                          applicationName: 'VoicePlatform',
+                          applicationVersion: version,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

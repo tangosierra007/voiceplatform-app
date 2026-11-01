@@ -173,7 +173,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                       ? (context, state) =>
                             ProviderScope.containerOf(context)
                                 .read(shellStatusProvider)
-                                .hasSmsLine
+                                .allowsMessages
                             ? null
                             : Routes.keypad
                       : null,

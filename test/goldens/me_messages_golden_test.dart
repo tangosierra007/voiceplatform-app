@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/nav/routes.dart';
 import 'package:voiceplatform_app/net/api.dart';
+import 'package:voiceplatform_app/shell/shell_status.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
@@ -78,6 +79,27 @@ void main() {
       await tester.tap(_tab('Me'));
       await _settle(tester);
       await _shot(tester, 'me_$mode.png');
+    });
+
+    // No artboard: AppMe when `GET /me` failed on a cold start with no
+    // network. The other tabs stay (Messages included, from the last known
+    // tab set); the name gives way to the lists' error line.
+    testWidgets('AppMe, /me failed, $mode', (tester) async {
+      usePhone(tester);
+      await tester.pumpWidget(
+        await appUnderTest(
+          theme: pref,
+          clock: () => _now,
+          appVersion: '1.0.3',
+          status: null,
+          prefs: {LastKnownShellNotifier.storageKey: true},
+          me: () async => throw const MeUnavailable(),
+        ),
+      );
+      await _settle(tester);
+      await tester.tap(_tab('Me'));
+      await _settle(tester);
+      await _shot(tester, 'me_unavailable_$mode.png');
     });
   }
 

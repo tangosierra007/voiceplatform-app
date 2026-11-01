@@ -11,6 +11,7 @@ import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/auth/session_store.dart';
 import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/platform/device_keys.dart';
+import 'package:voiceplatform_app/shell/shell_status.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
 import '../../tool/mock_server/fixtures.dart';
@@ -108,6 +109,20 @@ void main() {
         );
       },
     );
+
+    test('the session\'s own me sets the tab set before GET /me answers; '
+        'sign-out forgets it', () async {
+      expect(c.read(lastKnownShellProvider).hasSmsLine, isNull);
+      await auth().requestEmail(SignInFixtures.advancedEmail);
+      await auth().completeWithCode(SignInFixtures.code);
+      // Read straight after sign-in: no /me request has answered yet.
+      expect(c.read(lastKnownShellProvider).hasSmsLine, isTrue);
+      final sp = c.read(sharedPreferencesProvider);
+      expect(sp.getBool(LastKnownShellNotifier.storageKey), isTrue);
+      await auth().signOutLocally();
+      expect(c.read(lastKnownShellProvider).hasSmsLine, isNull);
+      expect(sp.getKeys(), isEmpty);
+    });
 
     test(
       'an unknown email gets the same 202, and no code works for it',

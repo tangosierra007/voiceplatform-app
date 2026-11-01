@@ -10,6 +10,7 @@ import '../calls/directory.dart';
 import '../diagnostics/scrubber.dart';
 import '../net/api.dart';
 import '../platform/device_keys.dart';
+import '../shell/shell_status.dart';
 import '../theme/theme_preference.dart';
 import 'app_lock.dart';
 import 'local_wipe.dart';
@@ -94,10 +95,11 @@ class SignInFailure implements Exception {
 final localDataWipersProvider = Provider<List<Future<void> Function()>>(
   (ref) => [
     // Settings and remembered choices (theme, biometric unlock, contacts
-    // asked, update banner): back to a new install.
+    // asked, update banner, the last known tab set): back to a new install.
     () async {
       await ref.read(sharedPreferencesProvider).clear();
       ref.invalidate(themePreferenceProvider);
+      ref.invalidate(lastKnownShellProvider);
       ref.invalidate(biometricUnlockProvider);
     },
     // The address-book values held for the scrubber, and the contacts read:
@@ -281,6 +283,9 @@ class AuthController extends Notifier<AuthState> {
     await _store.write(
       StoredSession(deviceId: s.deviceId, refreshToken: s.refreshToken),
     );
+    // The tab set from the session's own `me`, before `GET /me` answers:
+    // the shell opens with Messages already right, no tab flashing in.
+    ref.read(lastKnownShellProvider.notifier).record(s.me);
     ref.read(accessTokenProvider.notifier).set(s.accessToken);
     ref.read(pendingSignInProvider.notifier).set(null);
     state = SignedIn(s.deviceId);

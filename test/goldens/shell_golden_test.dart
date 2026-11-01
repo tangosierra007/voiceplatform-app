@@ -11,6 +11,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
@@ -31,6 +32,24 @@ void main() {
       await expectLater(
         find.byType(MaterialApp),
         matchesGoldenFile('shell_keypad_$name.png'),
+      );
+    });
+
+    // No artboard: a fresh install whose first `GET /me` failed (nothing
+    // known yet). Four tabs under the banner saying some may be missing.
+    testWidgets('shell, /me failed with nothing known, $name', (tester) async {
+      usePhone(tester);
+      await tester.pumpWidget(
+        await appUnderTest(
+          theme: pref,
+          status: null,
+          me: () async => throw const MeUnavailable(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('shell_me_failed_$name.png'),
       );
     });
 

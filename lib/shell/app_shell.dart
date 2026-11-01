@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/version.dart';
+import '../calls/me_state.dart';
+import '../net/api.dart';
 import '../net/live_events.dart';
 import '../screens/signin/update_screen.dart';
+import 'me_failed_banner.dart';
 import 'shell_status.dart';
 import 'vp_tab_bar.dart';
 
@@ -18,16 +21,20 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(shellStatusProvider);
-    final tabs = [
-      for (final t in AppTab.values)
-        if (t != AppTab.messages || status.hasSmsLine) t,
-    ];
     var current = AppTab.values[shell.currentIndex];
+    final tabs = status.tabsWhileOn(current);
     if (!tabs.contains(current)) {
       // Messages went away (last SMS line removed): fall back to Keypad.
       current = AppTab.keypad;
       WidgetsBinding.instance.addPostFrameCallback((_) => shell.goBranch(0));
     }
+    // Back online with `GET /me` still failed: ask again (Riverpod's own
+    // retries stop after about a minute).
+    ref.listen(offlineProvider, (was, offline) {
+      if (was == true && !offline && ref.read(shellStatusProvider).meFailed) {
+        ref.invalidate(meProvider);
+      }
+    });
     // Presence polling (the stream's fallback) runs only while Contacts is
     // open; Transfer (4.3) sets the same flag.
     final live = ref.read(liveEventsProvider);
@@ -37,12 +44,25 @@ class AppShell extends ConsumerWidget {
         (_) => live.presenceVisible = onContacts,
       );
     }
+    // On Keypad while offline, AppOffline's own banner already says it.
+    final meBanner =
+        status.meFailed &&
+        !(current == AppTab.keypad && ref.watch(offlineProvider));
+    final updateBanner = ref.watch(updateBannerProvider);
     return Scaffold(
-      body: ref.watch(updateBannerProvider)
+      body: updateBanner || meBanner
           ? Column(
               children: [
-                // Between minimum and recommended versions, once a day.
-                const SafeArea(bottom: false, child: UpdateBanner()),
+                SafeArea(
+                  bottom: false,
+                  child: Column(
+                    children: [
+                      // Between minimum and recommended versions, once a day.
+                      if (updateBanner) const UpdateBanner(),
+                      if (meBanner) MeFailedBanner(status: status),
+                    ],
+                  ),
+                ),
                 Expanded(
                   child: MediaQuery.removePadding(
                     context: context,

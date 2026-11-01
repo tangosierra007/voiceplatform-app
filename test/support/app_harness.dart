@@ -48,9 +48,13 @@ const artboardStatus = ShellStatus(
 );
 
 /// The whole app with no network: fixed shell status and a FakeCallEngine.
-/// [theme] is stored the way the Me switch stores it.
+/// [theme] is stored the way the Me switch stores it. [status] null runs the
+/// real shell status (from [me], the last known tab set and live badges).
 Future<Widget> appUnderTest({
-  ShellStatus status = artboardStatus,
+  ShellStatus? status = artboardStatus,
+
+  /// In place of `GET /me` (the fixture Ava Nguyen by default).
+  Future<Me?> Function()? me,
   CallEngine? engine,
   ThemePreference theme = ThemePreference.system,
   LiveEvents? live,
@@ -94,9 +98,11 @@ Future<Widget> appUnderTest({
   final sp = await SharedPreferences.getInstance();
   final e = engine ?? FakeCallEngine(outgoing: OutgoingScript.manual);
   return ProviderScope(
+    // No automatic retries: a failing fake never leaves a timer behind.
+    retry: (_, _) => null,
     overrides: [
       sharedPreferencesProvider.overrideWithValue(sp),
-      shellStatusProvider.overrideWithValue(status),
+      if (status != null) shellStatusProvider.overrideWithValue(status),
       callEngineProvider.overrideWithValue(e),
       liveEventsProvider.overrideWithValue(live ?? quietLiveEvents()),
       if (!realAuth)
@@ -150,7 +156,9 @@ Future<Widget> appUnderTest({
       ),
       teamsProvider.overrideWith((ref) async => fixtureTeams()),
       meProvider.overrideWith(
-        (ref) async => Me.fromJson(fx.me(status: myStatus.json!)),
+        (ref) async => me != null
+            ? await me()
+            : Me.fromJson(fx.me(status: myStatus.json!)),
       ),
       historyProvider.overrideWith(
         (ref, f) async => fixtureHistory(

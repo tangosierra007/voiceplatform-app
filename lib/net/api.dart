@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/export.dart';
 import '../auth/auth.dart';
+import '../shell/shell_status.dart';
 
 export '../api/app_api.dart';
 export '../api/export.dart';
@@ -112,8 +113,33 @@ final appApiProvider = Provider<AppApi>(
   (ref) => AppApi(ref.watch(dioProvider)),
 );
 
+/// `GET /me` could not be asked: signed in from the stored session, but the
+/// refresh for an access token failed (offline, or the API unreachable).
+class MeUnavailable implements Exception {
+  const MeUnavailable();
+
+  @override
+  String toString() => 'MeUnavailable';
+}
+
 /// The signed-in user; drives the tab badges and whether Messages shows.
+/// Null when not signed in. Signed in without an access token yet (a cold
+/// start), it waits for the refresh and fails with [MeUnavailable] when that
+/// fails, so the shell can tell "failed" from "not signed in". Each answer is
+/// recorded as the last known tab set (`lastKnownShellProvider`).
 final meProvider = FutureProvider<Me?>((ref) async {
-  if (ref.watch(accessTokenProvider) == null) return null;
-  return ref.watch(appApiProvider).me.getMe();
+  final signedIn = ref.watch(authProvider.select((s) => s is SignedIn));
+  final token = ref.watch(accessTokenProvider);
+  final api = ref.watch(appApiProvider);
+  if (token == null) {
+    if (!signedIn) return null;
+    if (!await ref.read(authProvider.notifier).refresh()) {
+      throw const MeUnavailable();
+    }
+    // The new token rebuilds this provider; this run's answer is dropped.
+    if (!ref.mounted) return null;
+  }
+  final me = await api.me.getMe();
+  if (ref.mounted) ref.read(lastKnownShellProvider.notifier).record(me);
+  return me;
 });
