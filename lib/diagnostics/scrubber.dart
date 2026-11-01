@@ -15,6 +15,8 @@ import 'dart:convert';
 ///   (`newPassword`, `client_secret`, `refreshToken` ...), or is pass, pwd,
 ///   ha1, pn-prid or prid; keys may be quoted with `"` or `'`, values may be
 ///   quoted with either too; `Bearer` tokens;
+/// - SDES-SRTP keys (`a=crypto` `inline:` key-params, with any lifetime
+///   and MKI);
 /// - App Link and QR tokens (`/app/signin/<id>/<token>`,
 ///   `vpapp://signin/<token>`), media tokens (`/app/v1/media/<token>`) and
 ///   secret query parameters;
@@ -112,6 +114,10 @@ final class DiagnosticsScrubber {
       (m) => '${m[1]}${m[2]}$redacted',
     ),
     (RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false), (_) => 'Bearer $redacted'),
+    // SDES-SRTP keys in the SDP: "a=crypto:1 AES_CM_128_HMAC_SHA1_80
+    // inline:<key>|2^20|1:32", the key with any lifetime and MKI (APP13).
+    // The same rule as vp_linphone's LogScrubber.
+    (RegExp(r'\binline:[^\s;"]+', caseSensitive: false), (_) => 'inline:$redacted'),
     // App Link, QR and media tokens.
     (RegExp(r'''(/app/signin/)[^\s/?#"'<>]+(?:/[^\s/?#"'<>]+)?'''), (m) => '${m[1]}$redacted'),
     (RegExp(r'''(vpapp://signin/)[^\s?#"'<>]+''', caseSensitive: false), (m) => '${m[1]}$redacted'),

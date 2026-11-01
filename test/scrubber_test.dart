@@ -155,6 +155,49 @@ void main() {
     });
   });
 
+  group('SDES-SRTP keys (APP13)', () {
+    // Built at run time from low-entropy parts, so no key-shaped literal
+    // sits in the repo for secret scanners.
+    final a = 'FAKE' * 10;
+    final b = 'TEST' * 10;
+    final c = 'KEYS' * 10;
+    final s = DiagnosticsScrubber();
+
+    test('every inline key goes, with its lifetime and MKI, any case', () {
+      final sdp =
+          'a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:$a|2^20|1:32\r\n'
+          'a=crypto:2 AES_CM_128_HMAC_SHA1_32 INLINE:$b;inline:$c\r\n'
+          'a=crypto:3 AES_256_CM_HMAC_SHA1_80 inline:${a}xy== '
+          'UNENCRYPTED_SRTCP\r\n';
+      final out = s.scrub(sdp);
+      expect(
+        out,
+        'a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:[scrubbed]\r\n'
+        'a=crypto:2 AES_CM_128_HMAC_SHA1_32 inline:[scrubbed];inline:[scrubbed]\r\n'
+        'a=crypto:3 AES_256_CM_HMAC_SHA1_80 inline:[scrubbed] '
+        'UNENCRYPTED_SRTCP\r\n',
+      );
+      for (final k in [a, b, c]) {
+        expect(out, isNot(contains(k)));
+      }
+      expect(s.scrub(out), out, reason: 'idempotent');
+    });
+
+    test('in structured data too', () {
+      final out = jsonEncode(
+        s.scrubJson({'sdp': 'a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:$a'}),
+      );
+      expect(out, isNot(contains(a)));
+      expect(out, contains('inline:[scrubbed]'));
+    });
+
+    test('a key short enough to slip past the opaque-string rule', () {
+      // 16 characters, letters only: no other rule would catch it.
+      final short = 'FAKE' * 4;
+      expect(s.scrub('inline:$short|2^31'), 'inline:[scrubbed]');
+    });
+  });
+
   group('review fixes', () {
     late DiagnosticsScrubber s;
     setUp(() => s = DiagnosticsScrubber());
