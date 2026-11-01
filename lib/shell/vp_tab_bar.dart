@@ -99,14 +99,6 @@ class _TabItem extends StatelessWidget {
     fontVariations: [FontVariation('wght', 700)],
   );
 
-  String get _semanticLabel {
-    if (badge <= 0) return tab.label;
-    return switch (tab) {
-      AppTab.messages => '${tab.label}, $badge unread',
-      _ => '${tab.label}, $badge new',
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
@@ -152,7 +144,7 @@ class _TabItem extends StatelessWidget {
       container: true,
       button: true,
       selected: active,
-      label: _semanticLabel,
+      label: tabSemanticLabel(tab, badge),
       onTap: onTap,
       excludeSemantics: true,
       child: InkResponse(
@@ -174,11 +166,7 @@ class _TabItem extends StatelessWidget {
                 Positioned(
                   top: -2,
                   right: 6,
-                  child: _Badge(
-                    count: badge,
-                    colour: VpTabBarColours.badge,
-                    textColour: VpTabBarColours.onBadge,
-                  ),
+                  child: VpCountBadge(count: badge),
                 ),
             ],
           ),
@@ -188,11 +176,23 @@ class _TabItem extends StatelessWidget {
   }
 }
 
-class _Badge extends StatelessWidget {
-  const _Badge({
+/// What a screen reader says for a tab, in the bar and the rail alike:
+/// "Recents, 2 new", "Messages, 1 unread".
+String tabSemanticLabel(AppTab tab, int badge) {
+  if (badge <= 0) return tab.label;
+  return switch (tab) {
+    AppTab.messages => '${tab.label}, $badge unread',
+    _ => '${tab.label}, $badge new',
+  };
+}
+
+/// The red count badge on a tab, in the bar and the rail.
+class VpCountBadge extends StatelessWidget {
+  const VpCountBadge({
+    super.key,
     required this.count,
-    required this.colour,
-    required this.textColour,
+    this.colour = VpTabBarColours.badge,
+    this.textColour = VpTabBarColours.onBadge,
   });
 
   final int count;

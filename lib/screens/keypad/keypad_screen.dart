@@ -561,12 +561,14 @@ class _StatusChip extends ConsumerWidget {
       foreground: fg,
       border: Colors.transparent,
       semantics: 'Status: $label',
-      onTap: () => _statusSheet(context, ref, s),
+      onTap: () => showStatusSheet(context, ref, s),
     );
   }
 }
 
-Future<void> _statusSheet(
+/// The status sheet: Available, Do not disturb, Away. From the keypad chip
+/// and the navigation rail's own status.
+Future<void> showStatusSheet(
   BuildContext context,
   WidgetRef ref,
   StatusStatus current,

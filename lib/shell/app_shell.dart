@@ -7,19 +7,36 @@ import '../calls/me_state.dart';
 import '../net/api.dart';
 import '../net/live_events.dart';
 import '../screens/signin/update_screen.dart';
+import 'layout.dart';
 import 'me_failed_banner.dart';
 import 'shell_status.dart';
+import 'vp_nav_rail.dart';
 import 'vp_tab_bar.dart';
 
-/// The tabbed part of the app: the current tab's screen over the tab bar.
-/// Branch indexes follow [AppTab] order whether or not Messages is visible.
-class AppShell extends ConsumerWidget {
+/// The tabbed part of the app: the current tab's screen with the tab bar
+/// below it, or, at 600 dp and wider ([isWideLayout]), the navigation rail
+/// on its left. Branch indexes follow [AppTab] order whether or not Messages
+/// is visible.
+///
+/// Folding, unfolding or rotating only moves the bar to the rail and back:
+/// the tab screens sit under one [GlobalKey], so their state (open tab,
+/// pushed pages, scroll positions, half-typed text) carries over.
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  final _screensKey = GlobalKey(debugLabel: 'tab screens');
+
+  StatefulNavigationShell get shell => widget.shell;
+
+  @override
+  Widget build(BuildContext context) {
     final status = ref.watch(shellStatusProvider);
     var current = AppTab.values[shell.currentIndex];
     final tabs = status.tabs;
@@ -50,41 +67,69 @@ class AppShell extends ConsumerWidget {
         status.meFailed &&
         !(current == AppTab.keypad && ref.watch(offlineProvider));
     final updateBanner = ref.watch(updateBannerProvider);
-    return Scaffold(
-      body: updateBanner || meBanner
-          ? Column(
+    final badges = {
+      AppTab.recents: status.recentsBadge,
+      AppTab.messages: status.messagesBadge,
+    };
+    void select(AppTab t) {
+      final index = AppTab.values.indexOf(t);
+      shell.goBranch(index, initialLocation: index == shell.currentIndex);
+    }
+
+    final wide = isWideLayout(context);
+    Widget screens = Column(
+      children: [
+        if (updateBanner || meBanner)
+          SafeArea(
+            bottom: false,
+            left: !wide,
+            child: Column(
               children: [
-                SafeArea(
-                  bottom: false,
-                  child: Column(
-                    children: [
-                      // Between minimum and recommended versions, once a day.
-                      if (updateBanner) const UpdateBanner(),
-                      if (meBanner) MeFailedBanner(status: status),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: MediaQuery.removePadding(
-                    context: context,
-                    removeTop: true,
-                    child: shell,
-                  ),
-                ),
+                // Between minimum and recommended versions, once a day.
+                if (updateBanner) const UpdateBanner(),
+                if (meBanner) MeFailedBanner(status: status),
               ],
-            )
-          : shell,
-      bottomNavigationBar: VpTabBar(
-        tabs: tabs,
-        current: current,
-        badges: {
-          AppTab.recents: status.recentsBadge,
-          AppTab.messages: status.messagesBadge,
-        },
-        onSelect: (t) {
-          final index = AppTab.values.indexOf(t);
-          shell.goBranch(index, initialLocation: index == shell.currentIndex);
-        },
+            ),
+          ),
+        Expanded(
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: updateBanner || meBanner,
+            child: KeyedSubtree(key: _screensKey, child: shell),
+          ),
+        ),
+      ],
+    );
+    if (!wide) {
+      return Scaffold(
+        body: screens,
+        bottomNavigationBar: VpTabBar(
+          tabs: tabs,
+          current: current,
+          badges: badges,
+          onSelect: select,
+        ),
+      );
+    }
+    // Wide: the rail takes the left inset; the screens keep the rest. With
+    // no tab bar under them, they keep clear of the bottom inset themselves.
+    screens = MediaQuery.removePadding(
+      context: context,
+      removeLeft: true,
+      child: SafeArea(top: false, left: false, right: false, child: screens),
+    );
+    return Scaffold(
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          VpNavRail(
+            tabs: tabs,
+            current: current,
+            badges: badges,
+            onSelect: select,
+          ),
+          Expanded(child: screens),
+        ],
       ),
     );
   }
