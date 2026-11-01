@@ -81,8 +81,89 @@ class MediaSecurityTest {
     }
 
     @Test
-    fun exactlyTheThreeAudioStatesAreChecked() {
+    fun exactlyTheThreeAudioStatesAreCheckedEarlyMediaAfterItsStreamsStart() {
         assertEquals(checked.toSet(), MediaSecurity.CHECKED_STATES)
+        assertEquals(MediaSecurity.Check.NOW, MediaSecurity.checkAt(Call.State.StreamsRunning))
+        assertEquals(MediaSecurity.Check.NOW, MediaSecurity.checkAt(Call.State.PausedByRemote))
+        // liblinphone sets OutgoingEarlyMedia before updateStreams(): SRTP is
+        // only in currentParams once the callback has returned.
+        assertEquals(MediaSecurity.Check.AFTER_STREAMS_START, MediaSecurity.checkAt(Call.State.OutgoingEarlyMedia))
+        for (s in Call.State.values().filter { it !in checked }) {
+            assertEquals(MediaSecurity.Check.NONE, MediaSecurity.checkAt(s), s.name)
+        }
+    }
+
+    /** A main-thread queue: tasks run only when [drain] is called, as after the callback returns. */
+    private class Posted {
+        val tasks = ArrayDeque<Runnable>()
+        val post: (Runnable) -> Unit = { tasks.addLast(it) }
+        fun drain() {
+            while (tasks.isNotEmpty()) tasks.removeFirst().run()
+        }
+    }
+
+    @Test
+    fun anEarlyMediaCheckRunsOnlyAfterThePost() {
+        val q = Posted()
+        val judged = mutableListOf<Call.State>()
+        var encryption: MediaEncryption? = MediaEncryption.None // the callback's view: streams not started
+        var now: Call.State? = Call.State.OutgoingEarlyMedia
+        val judge = { s: Call.State ->
+            judged += s
+            MediaSecurity.verdict(s, encryption) == MediaSecurity.Verdict.END
+        }
+        // In the callback: nothing judged, the state is shown.
+        assertFalse(MediaSecurity.runCheck(Call.State.OutgoingEarlyMedia, q.post, { now }, judge))
+        assertTrue(judged.isEmpty())
+        assertEquals(1, q.tasks.size)
+        // updateStreams() has run: a good SDES call reads SRTP and is kept.
+        encryption = MediaEncryption.SRTP
+        q.drain()
+        assertEquals(listOf(Call.State.OutgoingEarlyMedia), judged)
+
+        // Early media without crypto: still None after the post, so it ends.
+        judged.clear()
+        encryption = MediaEncryption.None
+        var ended = false
+        MediaSecurity.runCheck(Call.State.OutgoingEarlyMedia, q.post, { now }) { s ->
+            judged += s
+            (MediaSecurity.verdict(s, encryption) == MediaSecurity.Verdict.END).also { ended = it }
+        }
+        assertFalse(ended)
+        q.drain()
+        assertTrue(ended)
+
+        // The call moved on before the post ran: the later checked state is judged.
+        judged.clear()
+        MediaSecurity.runCheck(Call.State.OutgoingEarlyMedia, q.post, { now }, judge)
+        now = Call.State.StreamsRunning
+        q.drain()
+        assertEquals(listOf(Call.State.StreamsRunning), judged)
+
+        // Ended or no longer tracked (null), or in an unchecked state: nothing is judged.
+        judged.clear()
+        for (later in listOf(null, Call.State.OutgoingRinging, Call.State.Connected)) {
+            now = Call.State.OutgoingEarlyMedia
+            MediaSecurity.runCheck(Call.State.OutgoingEarlyMedia, q.post, { now }, judge)
+            now = later
+            q.drain()
+        }
+        assertTrue(judged.isEmpty())
+    }
+
+    @Test
+    fun runningMediaAndRemoteHoldAreJudgedInTheCallback() {
+        val q = Posted()
+        for (s in listOf(Call.State.StreamsRunning, Call.State.PausedByRemote)) {
+            val judged = mutableListOf<Call.State>()
+            assertTrue(MediaSecurity.runCheck(s, q.post, { s }) { judged += it; true }, s.name)
+            assertEquals(listOf(s), judged)
+            assertTrue(q.tasks.isEmpty(), s.name)
+        }
+        for (s in listOf(Call.State.Connected, Call.State.OutgoingRinging, Call.State.End)) {
+            assertFalse(MediaSecurity.runCheck(s, q.post, { s }) { error("judged $s") }, s.name)
+            assertTrue(q.tasks.isEmpty(), s.name)
+        }
     }
 
     @Test
@@ -98,13 +179,42 @@ class MediaSecurityTest {
     }
 
     @Test
-    fun aRefusedTerminateEndsEveryCall() {
+    fun aRefusedTerminateEndsEveryCallUnlessTheCallHasEnded() {
         var all = 0
-        assertEquals(MediaSecurity.Ending.TERMINATED, MediaSecurity.endInsecure({ 0 }, { all++; 0 }))
+        var marked = 0
+        fun end(term: Int, state: Call.State?, allRc: Int) =
+            MediaSecurity.endInsecure({ term }, { state }, { marked++ }, { all++; allRc })
+
+        assertEquals(MediaSecurity.Ending.TERMINATED, end(0, Call.State.StreamsRunning, 0))
         assertEquals(0, all, "every call is ended only if the one call cannot be")
-        assertEquals(MediaSecurity.Ending.ALL_TERMINATED, MediaSecurity.endInsecure({ -1 }, { all++; 0 }))
+        // Refused, but the call has ended meanwhile (or is gone): no escalation.
+        for (s in listOf(Call.State.End, Call.State.Error, Call.State.Released, null)) {
+            assertEquals(MediaSecurity.Ending.ALREADY_ENDED, end(-1, s, 0), s.toString())
+        }
+        assertEquals(0, all)
+        assertEquals(0, marked)
+        // Refused and still up: the other calls are marked first, then all end.
+        assertEquals(MediaSecurity.Ending.ALL_TERMINATED, end(-1, Call.State.StreamsRunning, 0))
+        assertEquals(1, marked)
         assertEquals(1, all)
-        assertEquals(MediaSecurity.Ending.FAILED, MediaSecurity.endInsecure({ -1 }, { -1 }))
+        assertEquals(MediaSecurity.Ending.FAILED, end(-1, Call.State.PausedByRemote, -1))
+    }
+
+    @Test
+    fun onlyOneRetryIsPendingPerCall() {
+        val q = Posted()
+        val r = MediaSecurity.Retry()
+        var runs = 0
+        assertTrue(r.schedule(q.post) { runs++ })
+        assertFalse(r.schedule(q.post) { runs++ })
+        assertFalse(r.schedule(q.post) { runs++ })
+        assertEquals(1, q.tasks.size)
+        assertTrue(r.pending)
+        q.drain()
+        assertEquals(1, runs)
+        assertFalse(r.pending)
+        // Once it has run, the next one can be scheduled.
+        assertTrue(r.schedule(q.post) { runs++ })
     }
 
     private fun facts(
@@ -144,14 +254,22 @@ class MediaSecurityTest {
 
     @Test
     fun theEngineKeepsCheckingAndEscalatesUntilTheCallHasEnded() {
-        // Every state is checked, also after the engine asked for the end:
-        // no guard on INSECURE_MEDIA turns the check off.
-        assertTrue("if (endIfInsecure(t, state)) return" in engine)
+        // Every state goes through runCheck, also after the engine asked for
+        // the end: no guard on INSECURE_MEDIA turns the check off. Posted
+        // checks go to the main thread.
+        assertTrue("val endingNow = MediaSecurity.runCheck(" in engine)
+        assertTrue("post = { r -> main.post(r) }," in engine)
+        assertTrue("if (endingNow) return" in engine)
         assertFalse(Regex("""intent\s*!=\s*Mapping\.LocalIntent\.INSECURE_MEDIA""").containsMatchIn(engine))
-        // A refused terminate() ends every call, then retries.
+        // A refused terminate() re-reads the state, marks the other calls
+        // failed, ends every call, then retries once per call.
+        assertTrue("stateNow = { call.state }," in engine)
+        assertTrue(".forEach { it.intent = Mapping.LocalIntent.INSECURE_MEDIA }" in engine)
         assertTrue("terminateAll = { core?.terminateAllCalls() ?: -1 }" in engine)
-        assertTrue("MediaSecurity.Ending.FAILED ->" in engine)
-        assertTrue(Regex("""main\.postDelayed\(\{[^}]*endIfInsecure\(t, now\)""").containsMatchIn(engine))
+        assertTrue("val retry = MediaSecurity.Retry()" in engine)
+        assertTrue("t.retry.schedule({ r -> main.postDelayed(r, INSECURE_RETRY_MS) })" in engine)
+        val endCall = engine.substringAfter("private fun endInsecureCall").substringBefore("private val coreListener")
+        assertFalse(Regex("""main\.postDelayed\(\{""").containsMatchIn(endCall), "retries only through Retry")
     }
 
     @Test

@@ -78,6 +78,7 @@ object LinphoneEngine {
         var hdrRepeat: String? = null
         var hdrLastAnswered: String? = null
         var announced = false
+        val retry = MediaSecurity.Retry()
     }
 
     private val calls = LinkedHashMap<String, Tracked>()
@@ -973,10 +974,15 @@ object LinphoneEngine {
                 }
             }
         }
-        // APP13: checked at every state until the call has ended, even after
-        // the engine has asked for it to end.
-        if (endIfInsecure(t, state)) return
-        if (MediaSecurity.checksMedia(state)) log("call ${t.id} $state media encryption ${call.currentParams?.mediaEncryption}")
+        // APP13: every checked state is judged, even after the engine has
+        // asked for the call to end; early media only once its streams run.
+        val endingNow = MediaSecurity.runCheck(
+            state,
+            post = { r -> main.post(r) },
+            stateNow = { stateIfUp(t) },
+            judge = { s -> endIfInsecure(t, s) },
+        )
+        if (endingNow) return
         var mapped = Mapping.callState(state) ?: return
         if (mapped == CallStateMsg.CONNECTED && t.connectedAt == null) t.connectedAt = System.currentTimeMillis()
         if (t.transferring && mapped != CallStateMsg.ENDED) mapped = CallStateMsg.TRANSFERRING
@@ -1000,39 +1006,56 @@ object LinphoneEngine {
         emitCall(t)
     }
 
+    /** The call's liblinphone state while it is tracked and not ended, else null. */
+    private fun stateIfUp(t: Tracked): Call.State? =
+        if (calls[t.id] === t && t.state != CallStateMsg.ENDED) t.call.state else null
+
     /**
      * APP13: media without SRTP is never kept. True when [state] carries
      * media that is not SRTP; the call is then being ended (the End that
-     * follows reports EndReason.failed) and [state] is not shown. If
-     * liblinphone refuses to end it, every call is ended; if that is refused
-     * too, the error is logged and the check runs again every
-     * [INSECURE_RETRY_MS] until the call has ended.
+     * follows reports EndReason.failed) and [state] is not shown.
      */
     private fun endIfInsecure(t: Tracked, state: Call.State): Boolean {
-        val call = t.call
-        val encryption = call.currentParams?.mediaEncryption
+        val encryption = t.call.currentParams?.mediaEncryption
+        log("call ${t.id} $state media encryption $encryption")
         if (MediaSecurity.verdict(state, encryption) != MediaSecurity.Verdict.END) return false
         t.intent = Mapping.LocalIntent.INSECURE_MEDIA
         log("call ${t.id} ending: $state media encryption $encryption, not SRTP (APP13)")
+        endInsecureCall(t)
+        return true
+    }
+
+    /**
+     * Ends [t], found with media that is not SRTP. If liblinphone refuses
+     * and the call has not ended meanwhile, every call is ended (each marked
+     * so its end reason is `failed`); if that is refused too, the error is
+     * logged and one retry per call runs every [INSECURE_RETRY_MS] until the
+     * call has ended.
+     */
+    private fun endInsecureCall(t: Tracked) {
+        val call = t.call
         val ending = MediaSecurity.endInsecure(
             terminate = { call.terminate() },
+            stateNow = { call.state },
+            beforeTerminateAll = {
+                calls.values.filter { it.state != CallStateMsg.ENDED }
+                    .forEach { it.intent = Mapping.LocalIntent.INSECURE_MEDIA }
+            },
             terminateAll = { core?.terminateAllCalls() ?: -1 },
         )
         when (ending) {
             MediaSecurity.Ending.TERMINATED -> {}
+            MediaSecurity.Ending.ALREADY_ENDED ->
+                log("call ${t.id} terminate refused; the call has already ended")
             MediaSecurity.Ending.ALL_TERMINATED ->
                 logLine("ERROR", "call ${t.id} terminate refused; ended every call (APP13)")
             MediaSecurity.Ending.FAILED -> {
-                logLine("ERROR", "call ${t.id} terminate and terminateAllCalls refused; retrying (APP13)")
-                main.postDelayed({
-                    if (calls[t.id] === t && t.state != CallStateMsg.ENDED) {
-                        val now = call.state
-                        if (now != null) endIfInsecure(t, now)
-                    }
-                }, INSECURE_RETRY_MS)
+                val posted = t.retry.schedule({ r -> main.postDelayed(r, INSECURE_RETRY_MS) }) {
+                    if (stateIfUp(t) != null) endInsecureCall(t)
+                }
+                if (posted) logLine("ERROR", "call ${t.id} terminate and terminateAllCalls refused; retrying (APP13)")
             }
         }
-        return true
     }
 
     private val coreListener = object : CoreListenerStub() {
