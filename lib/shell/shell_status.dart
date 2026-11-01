@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../net/api.dart';
@@ -31,9 +31,10 @@ class ShellStatus {
   /// from the latest `GET /me`, or the last one known when it fails.
   final bool hasSmsLine;
 
-  /// False only when no `GET /me` has ever answered for this session (an
-  /// app updated from a build that kept no tab set, still loading): the
-  /// shell then leaves the current tab alone rather than bouncing it.
+  /// False when no answer from `GET /me` (or the sign-in session) has ever
+  /// been kept: a fresh install whose `/me` fails, or a build updated from
+  /// one that kept no tab set. Messages is then hidden and refused, and the
+  /// failure banner says some tabs may be missing.
   final bool tabsKnown;
 
   /// `GET /me` failed and no answer from it is held in memory (for example
@@ -47,17 +48,10 @@ class ShellStatus {
       if (t != AppTab.messages || hasSmsLine) t,
   ];
 
-  /// The tabs to draw while [current] is open. The same as [tabs], except
-  /// that while the tab set is unknown an open Messages (from a text
-  /// notification) stays rather than bouncing to Keypad. A [current] not in
-  /// the answer has gone for good: the shell moves to Keypad.
-  List<AppTab> tabsWhileOn(AppTab current) => [
-    for (final t in AppTab.values)
-      if (t != AppTab.messages || hasSmsLine || (!tabsKnown && t == current)) t,
-  ];
-
-  /// Whether the Messages route may open (the router's redirect).
-  bool get allowsMessages => hasSmsLine || !tabsKnown;
+  /// Whether the Messages route may open (the router's redirect): only with
+  /// an SMS line, from `/me` or the last known tab set. Nothing known (still
+  /// loading, or failed) refuses it, as it hides the tab.
+  bool get allowsMessages => hasSmsLine;
 
   @override
   bool operator ==(Object other) =>
@@ -128,8 +122,12 @@ class LastKnownShellNotifier extends Notifier<LastKnownShell> {
     hasSmsLine: ref.read(sharedPreferencesProvider).getBool(storageKey),
   );
 
-  /// Each answer from `GET /me`, and the sign-in session's `me`.
+  /// Each answer from `GET /me`, and the sign-in session's `me`. A no-op
+  /// without an access token (signed out, or signing out: see
+  /// `AuthController.signOutLocally`), so a late answer never writes the
+  /// tab set back after sign-out.
   void record(Me me) {
+    if (ref.read(accessTokenProvider) == null) return;
     final messages = me.permissions.messages;
     if (state.hasSmsLine != messages) {
       unawaited(
@@ -158,4 +156,16 @@ final shellStatusProvider = Provider<ShellStatus>((ref) {
     tabsKnown: hasSmsLine != null,
     meFailed: m == null && me.hasError,
   );
+});
+
+/// Back in the foreground with `GET /me` still failed: ask again. The shell
+/// watches it while signed in; with the offline listener and Riverpod's own
+/// retries, a failure never stays for good.
+final meRetryOnResumeProvider = Provider<void>((ref) {
+  final listener = AppLifecycleListener(
+    onResume: () {
+      if (ref.read(shellStatusProvider).meFailed) ref.invalidate(meProvider);
+    },
+  );
+  ref.onDispose(listener.dispose);
 });

@@ -283,10 +283,11 @@ class AuthController extends Notifier<AuthState> {
     await _store.write(
       StoredSession(deviceId: s.deviceId, refreshToken: s.refreshToken),
     );
-    // The tab set from the session's own `me`, before `GET /me` answers:
-    // the shell opens with Messages already right, no tab flashing in.
-    ref.read(lastKnownShellProvider.notifier).record(s.me);
     ref.read(accessTokenProvider.notifier).set(s.accessToken);
+    // The tab set from the session's own `me`, before `GET /me` answers
+    // and before the router shows the shell: Messages already right, no tab
+    // flashing in. After the token, as `record` needs a session.
+    ref.read(lastKnownShellProvider.notifier).record(s.me);
     ref.read(pendingSignInProvider.notifier).set(null);
     state = SignedIn(s.deviceId);
   }
@@ -430,6 +431,15 @@ class AuthController extends Notifier<AuthState> {
     }
     ref.read(accessTokenProvider.notifier).set(null);
     ref.read(pendingSignInProvider.notifier).set(null);
+    // Again, now the token has gone: a `GET /me` answer that landed while
+    // the wipers above were awaiting (token still held) may have written
+    // the tab set back. From here `record` is a no-op.
+    try {
+      await ref
+          .read(sharedPreferencesProvider)
+          .remove(LastKnownShellNotifier.storageKey);
+    } catch (_) {}
+    ref.invalidate(lastKnownShellProvider);
     state = NotSignedIn(notice: notice);
   }
 

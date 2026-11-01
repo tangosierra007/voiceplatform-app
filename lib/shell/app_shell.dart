@@ -22,12 +22,13 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(shellStatusProvider);
     var current = AppTab.values[shell.currentIndex];
-    final tabs = status.tabsWhileOn(current);
+    final tabs = status.tabs;
     if (!tabs.contains(current)) {
       // Messages went away (last SMS line removed): fall back to Keypad.
       current = AppTab.keypad;
       WidgetsBinding.instance.addPostFrameCallback((_) => shell.goBranch(0));
     }
+    ref.watch(meRetryOnResumeProvider);
     // Back online with `GET /me` still failed: ask again (Riverpod's own
     // retries stop after about a minute).
     ref.listen(offlineProvider, (was, offline) {

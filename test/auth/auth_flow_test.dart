@@ -40,7 +40,10 @@ void main() {
   late MemorySessionStore store;
   late FakeDeviceKeys keys;
 
-  Future<ProviderContainer> make({String version = '1.0.0'}) async {
+  Future<ProviderContainer> make({
+    String version = '1.0.0',
+    List<Future<void> Function()> Function(Ref ref)? wipers,
+  }) async {
     SharedPreferences.setMockInitialValues({});
     final sp = await SharedPreferences.getInstance();
     store = MemorySessionStore();
@@ -49,6 +52,7 @@ void main() {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(sp),
         sessionStoreProvider.overrideWithValue(store),
+        if (wipers != null) localDataWipersProvider.overrideWith(wipers),
         deviceKeysProvider.overrideWithValue(keys),
         clockProvider.overrideWithValue(clock),
         apiConfigProvider.overrideWithValue(
@@ -122,6 +126,39 @@ void main() {
       await auth().signOutLocally();
       expect(c.read(lastKnownShellProvider).hasSmsLine, isNull);
       expect(sp.getKeys(), isEmpty);
+    });
+
+    test('a GET /me answer landing mid sign-out never brings the tab set '
+        'back', () async {
+      c = await make(
+        wipers: (ref) => [
+          // The settings wiper, as the app's own.
+          () async {
+            await ref.read(sharedPreferencesProvider).clear();
+            ref.invalidate(lastKnownShellProvider);
+          },
+          // A later wiper awaiting while the token is still held, and the
+          // /me answer that lands meanwhile.
+          () async {
+            await pumpEventQueue();
+            ref
+                .read(lastKnownShellProvider.notifier)
+                .record(Me.fromJson(me(status: 'available')));
+          },
+        ],
+      );
+      await auth().requestEmail(SignInFixtures.advancedEmail);
+      await auth().completeWithCode(SignInFixtures.code);
+      final sp = c.read(sharedPreferencesProvider);
+      await auth().signOutLocally();
+      expect(sp.getBool(LastKnownShellNotifier.storageKey), isNull);
+      expect(c.read(lastKnownShellProvider).hasSmsLine, isNull);
+      // And any answer after sign-out is ignored.
+      c
+          .read(lastKnownShellProvider.notifier)
+          .record(Me.fromJson(me(status: 'available')));
+      expect(sp.getBool(LastKnownShellNotifier.storageKey), isNull);
+      expect(c.read(lastKnownShellProvider).hasSmsLine, isNull);
     });
 
     test(

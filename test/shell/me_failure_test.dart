@@ -65,6 +65,8 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(sp),
           liveEventsProvider.overrideWithValue(quietLiveEvents()),
+          // Signed in: `record` keeps nothing without a session.
+          accessTokenProvider.overrideWith(() => _Token('access')),
           meProvider.overrideWith((ref) async {
             final m = await me();
             if (m != null) ref.read(lastKnownShellProvider.notifier).record(m);
@@ -178,14 +180,31 @@ void main() {
       },
     );
 
-    test('Messages route stays open while the tab set is unknown', () async {
-      const unknown = ShellStatus(tabsKnown: false);
-      expect(unknown.allowsMessages, isTrue);
-      expect(unknown.tabsWhileOn(AppTab.messages), contains(AppTab.messages));
-      expect(unknown.tabsWhileOn(AppTab.keypad), _fourTabs);
-      const none = ShellStatus();
-      expect(none.allowsMessages, isFalse);
-      expect(none.tabsWhileOn(AppTab.messages), _fourTabs);
+    test('the Messages route needs an SMS line, known or last known', () {
+      expect(const ShellStatus(hasSmsLine: true).allowsMessages, isTrue);
+      expect(const ShellStatus().allowsMessages, isFalse);
+      // Nothing known, still loading.
+      expect(const ShellStatus(tabsKnown: false).allowsMessages, isFalse);
+    });
+
+    test('nothing known and /me failed: Messages refused', () async {
+      final c = await make(() async => throw const MeUnavailable());
+      await expectLater(c.read(meProvider.future), throwsA(anything));
+      final s = c.read(shellStatusProvider);
+      expect((s.tabsKnown, s.meFailed), (false, true));
+      expect(s.allowsMessages, isFalse);
+    });
+
+    test('record keeps nothing without an access token', () async {
+      SharedPreferences.setMockInitialValues({});
+      final sp = await SharedPreferences.getInstance();
+      final c = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(sp)],
+      );
+      addTearDown(c.dispose);
+      c.read(lastKnownShellProvider.notifier).record(_me());
+      expect(c.read(lastKnownShellProvider).hasSmsLine, isNull);
+      expect(sp.getKeys(), isEmpty);
     });
   });
 
@@ -232,6 +251,34 @@ void main() {
         c.read(meProvider.future),
         throwsA(isA<DioException>()),
       );
+    });
+
+    test('signed in with a token, /me answers: recorded and stored', () async {
+      SharedPreferences.setMockInitialValues({});
+      final sp = await SharedPreferences.getInstance();
+      final api = FakeApi({
+        'GET /me': (_) => _me(messages: true, recents: 3, unread: 4).toJson(),
+      });
+      final c = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(sp),
+          authProvider.overrideWith(() => ScriptedAuth(const SignedIn('d1'))),
+          accessTokenProvider.overrideWith(() => _Token('access')),
+          dioProvider.overrideWithValue(
+            Dio(BaseOptions(baseUrl: 'http://127.0.0.1:9/app/v1'))
+              ..httpClientAdapter = api,
+          ),
+        ],
+        retry: (_, _) => null,
+      );
+      addTearDown(c.dispose);
+      final me = await c.read(meProvider.future);
+      expect(me!.name, 'Ava Nguyen');
+      expect(api.requests.map((r) => '$r'), ['GET /me']);
+      final known = c.read(lastKnownShellProvider);
+      expect(known.hasSmsLine, isTrue);
+      expect((known.badges!.recents, known.badges!.messages), (3, 4));
+      expect(sp.getBool(LastKnownShellNotifier.storageKey), isTrue);
     });
   });
 
@@ -417,6 +464,39 @@ void main() {
       expect(_tabLabels(tester), _four);
     });
 
+    testWidgets('back in the foreground after a failed /me asks again', (
+      tester,
+    ) async {
+      usePhone(tester);
+      var asked = 0;
+      await tester.pumpWidget(
+        await appUnderTest(
+          status: null,
+          me: () async {
+            asked++;
+            if (asked == 1) throw const MeUnavailable();
+            return _me();
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(MeFailedBanner), findsOneWidget);
+      background(tester);
+      await tester.pump();
+      expect(asked, 1, reason: 'not while in the background');
+      foreground(tester);
+      await tester.pumpAndSettle();
+      expect(asked, 2);
+      expect(find.byType(MeFailedBanner), findsNothing);
+      expect(_tabLabels(tester), _five);
+
+      // Resumed again with /me fine: no extra request.
+      background(tester);
+      foreground(tester);
+      await tester.pumpAndSettle();
+      expect(asked, 2);
+    });
+
     testWidgets('back online after a failed /me asks again', (tester) async {
       usePhone(tester);
       var asked = 0;
@@ -471,6 +551,27 @@ void main() {
       expect(find.text('Ava Nguyen'), findsOneWidget);
     });
   });
+}
+
+/// Every step, as Android goes to the background and back.
+void background(WidgetTester tester) {
+  for (final s in [
+    AppLifecycleState.inactive,
+    AppLifecycleState.hidden,
+    AppLifecycleState.paused,
+  ]) {
+    tester.binding.handleAppLifecycleStateChanged(s);
+  }
+}
+
+void foreground(WidgetTester tester) {
+  for (final s in [
+    AppLifecycleState.hidden,
+    AppLifecycleState.inactive,
+    AppLifecycleState.resumed,
+  ]) {
+    tester.binding.handleAppLifecycleStateChanged(s);
+  }
 }
 
 const _fourTabs = [AppTab.keypad, AppTab.recents, AppTab.contacts, AppTab.me];
