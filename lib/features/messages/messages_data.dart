@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../net/api.dart';
+import '../../shell/list_detail.dart';
 import '../../shell/shell_status.dart';
 
 /// The SMS lines this user may text from (`GET /messages/lines`).
@@ -19,6 +20,30 @@ class MessagesLineNotifier extends Notifier<String?> {
   @override
   String? build() => null;
   void set(String? id) => state = id;
+}
+
+/// The conversation the person opened: full screen on the phone, beside the
+/// list at 600 dp and wider. Kept across fold and unfold.
+final pickedThreadProvider = NotifierProvider<PickedNotifier, String?>(
+  PickedNotifier.new,
+);
+
+/// A half-typed reply per conversation, in memory only, so it survives the
+/// thread moving between its own page and the pane beside the list. Cleared
+/// when it sends and at sign-out.
+final threadDraftProvider =
+    NotifierProvider.family<ThreadDraftNotifier, String, String>(
+      ThreadDraftNotifier.new,
+    );
+
+class ThreadDraftNotifier extends Notifier<String> {
+  ThreadDraftNotifier(this.threadId);
+  final String threadId;
+
+  @override
+  String build() => '';
+
+  void set(String text) => state = text;
 }
 
 final threadsProvider = FutureProvider.family<ThreadPage, String?>((

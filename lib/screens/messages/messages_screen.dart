@@ -11,8 +11,15 @@ import '../../net/api.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_icons.dart';
 import '../../widgets/vp_list.dart';
+import '../../widgets/vp_wide.dart';
+import '../../shell/layout.dart';
+import '../../shell/list_detail.dart';
+import '../../shell/vp_tab_bar.dart';
+import 'thread_screen.dart';
 
-/// AppMessages: texts on the user's SMS lines, with a chip per line.
+/// AppMessages: texts on the user's SMS lines, with a chip per line. At
+/// 600 dp and wider, FoldMessages: the list on the left, the conversation
+/// beside it.
 class MessagesScreen extends ConsumerWidget {
   const MessagesScreen({super.key});
 
@@ -20,8 +27,30 @@ class MessagesScreen extends ConsumerWidget {
   static const newPath = '/new-message';
 
   @override
+  Widget build(BuildContext context, WidgetRef ref) => LayoutSwitchListener(
+    // Folded with a conversation open beside the list: it opens full
+    // screen, as it would have on the phone. Only when Messages is the tab
+    // on show.
+    onChange: (wide) {
+      final id = ref.read(pickedThreadProvider);
+      if (!wide &&
+          id != null &&
+          TickerMode.valuesOf(context).enabled &&
+          (ModalRoute.of(context)?.isCurrent ?? false)) {
+        context.push(threadPath(id));
+      }
+    },
+    child: isListDetailLayout(context)
+        ? const _WideMessages()
+        : const _PhoneMessages(),
+  );
+}
+
+class _PhoneMessages extends ConsumerWidget {
+  const _PhoneMessages();
+
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.vp;
     final lines = ref.watch(smsLinesProvider).value ?? const <SmsLine>[];
     final line = ref.watch(messagesLineProvider);
     final page = ref.watch(threadsProvider(line));
@@ -38,39 +67,7 @@ class MessagesScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                VpPageTitle(
-                  'Messages',
-                  trailing: Semantics(
-                    button: true,
-                    label: 'New message',
-                    excludeSemantics: true,
-                    onTap: () => context.push(newPath),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => context.push(newPath),
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: c.brand,
-                              shape: BoxShape.circle,
-                            ),
-                            alignment: Alignment.center,
-                            child: VpSvgIcon(
-                              VpIcon.plus,
-                              size: 20,
-                              colour: c.onBrand,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                VpPageTitle('Messages', trailing: const _NewMessageButton()),
                 if (lines.length > 1) ...[
                   const SizedBox(height: 12),
                   VpSeg<String?>(
@@ -277,6 +274,207 @@ class _WhatsAppCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The "+" that starts a new text.
+class _NewMessageButton extends StatelessWidget {
+  const _NewMessageButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
+    return Semantics(
+      button: true,
+      label: 'New message',
+      excludeSemantics: true,
+      onTap: () => context.push(MessagesScreen.newPath),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => context.push(MessagesScreen.newPath),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: c.brand, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: VpSvgIcon(VpIcon.plus, size: 20, colour: c.onBrand),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// FoldMessages: the conversations (360 dp) and the one picked beside them.
+/// Until the person picks one, the first is shown, and stays unread.
+class _WideMessages extends ConsumerWidget {
+  const _WideMessages();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lines = ref.watch(smsLinesProvider).value ?? const <SmsLine>[];
+    final line = ref.watch(messagesLineProvider);
+    final page = ref.watch(threadsProvider(line));
+    final matcher = ref.watch(contactMatcherProvider);
+    final now = ref.watch(clockProvider)();
+    final picked = ref.watch(pickedThreadProvider);
+    final items = page.value?.items;
+    final shown = picked ?? items?.firstOrNull?.id;
+    String title(Thread t) =>
+        t.name ?? matcher.match(t.number)?.name ?? formatAuNumber(t.number);
+    return SafeArea(
+      bottom: false,
+      child: ListDetailLayout(
+        list: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            WideListHeader(
+              title: 'Messages',
+              trailing: const _NewMessageButton(),
+              children: [
+                if (lines.length > 1)
+                  VpSeg<String?>(
+                    label: 'Line',
+                    options: [
+                      (null, 'All'),
+                      for (final l in lines) (l.id, l.label),
+                    ],
+                    value: line,
+                    onChanged: (id) =>
+                        ref.read(messagesLineProvider.notifier).set(id),
+                  ),
+              ],
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(threadsProvider(line));
+                  try {
+                    await ref.read(threadsProvider(line).future);
+                  } catch (_) {}
+                },
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    if (items == null && page.hasError)
+                      const VpEmpty(
+                        "Messages didn't load. Pull down to try again.",
+                      )
+                    else if (items != null && items.isEmpty)
+                      const VpEmpty('No texts yet.'),
+                    for (final t in items ?? const <Thread>[])
+                      _WideThreadRow(
+                        thread: t,
+                        title: title(t),
+                        when: recentsWhen(t.lastAt, now),
+                        selected: t.id == shown,
+                        onTap: () =>
+                            ref.read(pickedThreadProvider.notifier).pick(t.id),
+                      ),
+                    if (items != null) const _WhatsAppCard(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        detail: shown == null
+            ? const SizedBox.shrink()
+            : ThreadView(
+                key: ValueKey((shown, picked != null)),
+                threadId: shown,
+                wide: true,
+                markRead: picked != null,
+              ),
+      ),
+    );
+  }
+}
+
+/// FoldMessages' `.lrow`: initials, name with the line pill, the last text
+/// (bold when unread), the time, and the unread count.
+class _WideThreadRow extends StatelessWidget {
+  const _WideThreadRow({
+    required this.thread,
+    required this.title,
+    required this.when,
+    required this.selected,
+    required this.onTap,
+  });
+  final Thread thread;
+  final String title;
+  final String when;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
+    final t = thread;
+    final unread = t.unread > 0;
+    return WideListRow(
+      selected: selected,
+      onTap: onTap,
+      semanticLabel:
+          '${unread ? '${t.unread} unread. ' : ''}$title, ${t.lastText}, '
+          '$when, ${t.lineLabel}',
+      children: [
+        ThreadAvatar(title: title),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: VpType.body.copyWith(
+                        fontSize: 15,
+                        height: 22 / 15,
+                        fontWeight: FontWeight.w700,
+                        fontVariations: const [FontVariation('wght', 700)],
+                        color: c.text,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(child: VpOffPill(t.lineLabel)),
+                ],
+              ),
+              Text(
+                t.lastText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: VpType.caption.copyWith(
+                  fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+                  fontVariations: [FontVariation('wght', unread ? 700 : 500)],
+                  color: unread ? c.text : c.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(when, style: VpType.caption.copyWith(color: c.textMuted)),
+            if (unread) ...[
+              const SizedBox(height: 4),
+              VpCountBadge(count: t.unread),
+            ],
+          ],
+        ),
+      ],
     );
   }
 }

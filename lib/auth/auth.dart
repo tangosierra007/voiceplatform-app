@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../calls/directory.dart';
 import '../diagnostics/scrubber.dart';
+import '../features/messages/messages_data.dart';
 import '../net/api.dart';
 import '../platform/device_keys.dart';
 import '../shell/shell_status.dart';
@@ -120,6 +121,11 @@ final localDataWipersProvider = Provider<List<Future<void> Function()>>(
     () async {
       DiagnosticsScrubber.instance.forgetAddressBookValues();
       ref.invalidate(phoneContactsProvider);
+    },
+    // Half-typed replies and the open conversation (memory only).
+    () async {
+      ref.invalidate(threadDraftProvider);
+      ref.invalidate(pickedThreadProvider);
     },
     // Crash-report scope and the on-disk outbox.
     clearDiagnosticsOnDevice,

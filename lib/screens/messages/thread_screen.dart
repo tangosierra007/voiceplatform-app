@@ -10,6 +10,9 @@ import '../../calls/numbers.dart';
 import '../../emergency/emergency.dart';
 import '../../features/messages/messages_data.dart';
 import '../../net/api.dart';
+import '../../nav/routes.dart';
+import '../../shell/layout.dart';
+import '../../shell/list_detail.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
@@ -48,8 +51,11 @@ String _status(MessageStatus s) => switch (s) {
   _ => '',
 };
 
-/// AppThread: one conversation, with who sent each text and whether it was
-/// delivered; the reply box says which line it goes from.
+/// AppThread on the phone: the conversation full screen, over the tabs.
+///
+/// Unfolded (600 dp and wider) the conversation belongs beside the list
+/// (FoldMessages): this page closes and the Messages tab shows it there,
+/// with the half-typed reply. Back on the phone clears the pick.
 class ThreadScreen extends ConsumerStatefulWidget {
   const ThreadScreen({super.key, required this.threadId});
   final String threadId;
@@ -59,16 +65,92 @@ class ThreadScreen extends ConsumerStatefulWidget {
 }
 
 class _ThreadScreenState extends ConsumerState<ThreadScreen> {
-  final _text = TextEditingController();
+  bool _toPane = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(pickedThreadProvider.notifier).pick(widget.threadId);
+      if (isListDetailLayout(context)) _moveToPane();
+    });
+  }
+
+  void _moveToPane() {
+    if (_toPane) return;
+    _toPane = true;
+    ref.read(pickedThreadProvider.notifier).pick(widget.threadId);
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(Routes.messages);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutSwitchListener(
+    onChange: (wide) {
+      if (wide) _moveToPane();
+    },
+    child: PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop && !_toPane) {
+          ref.read(pickedThreadProvider.notifier).pick(null);
+        }
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: ThreadView(
+            key: ValueKey(widget.threadId),
+            threadId: widget.threadId,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// One conversation, with who sent each text and whether it was delivered;
+/// the reply box says which line it goes from. [wide] draws it as the pane
+/// beside the list (FoldMessages); otherwise as AppThread, with Back.
+class ThreadView extends ConsumerStatefulWidget {
+  const ThreadView({
+    super.key,
+    required this.threadId,
+    this.wide = false,
+    this.markRead = true,
+  });
+  final String threadId;
+  final bool wide;
+
+  /// False while the pane only shows the first conversation, unasked: it
+  /// stays unread until the person picks it.
+  final bool markRead;
+
+  @override
+  ConsumerState<ThreadView> createState() => _ThreadViewState();
+}
+
+class _ThreadViewState extends ConsumerState<ThreadView> {
+  late final TextEditingController _text = TextEditingController(
+    text: ref.read(threadDraftProvider(widget.threadId)),
+  );
   bool _sending = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _text.addListener(
+      () => ref
+          .read(threadDraftProvider(widget.threadId).notifier)
+          .set(_text.text),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final t = _thread();
-      if (t != null && t.unread > 0) {
+      if (widget.markRead && t != null && t.unread > 0) {
         unawaited(ref.read(messageActionsProvider).markRead(t.id));
       }
     });
@@ -146,112 +228,185 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         );
         lastDay = day;
       }
-      body.add(_Bubble(message: m));
+      body.add(_Bubble(message: m, wide: widget.wide));
     }
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(4, 4, 12, 10),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: c.border)),
-              ),
-              child: Row(
-                children: [
-                  Semantics(
-                    button: true,
-                    label: 'Back',
-                    excludeSemantics: true,
+    final wide = widget.wide;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (wide)
+          _WideHeader(
+            title: title,
+            subtitle: thread == null
+                ? null
+                : [
+                    if (title != formatAuNumber(thread.number))
+                      formatAuNumber(thread.number),
+                    'texting ${thread.lineLabel}',
+                  ].join(' · '),
+            onCall: thread == null
+                ? null
+                : () => dialNumber(context, ref, thread.number),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.fromLTRB(4, 4, 12, 10),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: c.border)),
+            ),
+            child: Row(
+              children: [
+                Semantics(
+                  button: true,
+                  label: 'Back',
+                  excludeSemantics: true,
+                  onTap: () => context.pop(),
+                  child: InkWell(
                     onTap: () => context.pop(),
-                    child: InkWell(
-                      onTap: () => context.pop(),
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: VpSvgIcon(
-                            VpIcon.back,
-                            size: 22,
-                            colour: c.brandText,
-                          ),
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Center(
+                        child: VpSvgIcon(
+                          VpIcon.back,
+                          size: 22,
+                          colour: c.brandText,
                         ),
                       ),
                     ),
                   ),
-                  ExcludeSemantics(
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: c.surfaceRaised,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        initialsOf(title),
-                        textScaler: TextScaler.noScaling,
-                        style: VpType.body.copyWith(
-                          fontSize: 14,
-                          height: 1,
-                          fontWeight: FontWeight.w800,
-                          fontVariations: const [FontVariation('wght', 800)],
-                          color: c.text,
-                        ),
-                      ),
+                ),
+                ExcludeSemantics(
+                  child: ThreadAvatar(title: title, hash: false),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: VpRowText(
+                      title: title,
+                      subtitle: thread == null
+                          ? null
+                          : 'Texting ${thread.lineLabel}',
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Semantics(
-                      header: true,
-                      child: VpRowText(
-                        title: title,
-                        subtitle: thread == null
-                            ? null
-                            : 'Texting ${thread.lineLabel}',
-                      ),
-                    ),
+                ),
+                if (thread != null)
+                  VpRoundIconButton(
+                    icon: VpIcon.phone,
+                    label: 'Call $title',
+                    onPressed: () => dialNumber(context, ref, thread.number),
                   ),
-                  if (thread != null)
-                    VpRoundIconButton(
-                      icon: VpIcon.phone,
-                      label: 'Call $title',
-                      onPressed: () => dialNumber(context, ref, thread.number),
-                    ),
-                ],
+              ],
+            ),
+          ),
+        Expanded(
+          child: messages.hasError && items.isEmpty
+              ? const VpEmpty("This conversation didn't load.")
+              : ListView(
+                  reverse: true,
+                  padding: wide
+                      ? const EdgeInsets.fromLTRB(22, 18, 22, 18)
+                      : const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  children: [
+                    for (final w in body.reversed)
+                      Padding(
+                        padding: EdgeInsets.only(top: wide ? 12 : 10),
+                        child: w,
+                      ),
+                  ],
+                ),
+        ),
+        if (thread != null)
+          _ReplyBox(
+            controller: _text,
+            from: line == null
+                ? 'From ${thread.lineLabel}'
+                : 'From ${line.label} ${formatAuNumber(line.number)}',
+            canSend: line?.canSend ?? true,
+            sending: _sending,
+            error: _error,
+            onChanged: () => setState(() {}),
+            onSend: () => _send(thread),
+            wide: wide,
+          ),
+      ],
+    );
+  }
+}
+
+/// FoldMessages' thread header: avatar, name, number and line, Call.
+class _WideHeader extends StatelessWidget {
+  const _WideHeader({required this.title, this.subtitle, this.onCall});
+  final String title;
+  final String? subtitle;
+  final VoidCallback? onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 12),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
+      child: Row(
+        children: [
+          ExcludeSemantics(child: ThreadAvatar(title: title)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: VpRowText(title: title, subtitle: subtitle),
+            ),
+          ),
+          if (onCall != null) ...[
+            const SizedBox(width: 12),
+            // Its own width, as the artboard's button.
+            IntrinsicWidth(
+              child: VpButton(
+                label: 'Call',
+                icon: VpIcon.phone,
+                kind: VpButtonKind.outline,
+                large: false,
+                dense: true,
+                height: 44,
+                onPressed: onCall,
               ),
             ),
-            Expanded(
-              child: messages.hasError && items.isEmpty
-                  ? const VpEmpty("This conversation didn't load.")
-                  : ListView(
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                      children: [
-                        for (final w in body.reversed)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: w,
-                          ),
-                      ],
-                    ),
-            ),
-            if (thread != null)
-              _ReplyBox(
-                controller: _text,
-                from: line == null
-                    ? 'From ${thread.lineLabel}'
-                    : 'From ${line.label} ${formatAuNumber(line.number)}',
-                canSend: line?.canSend ?? true,
-                sending: _sending,
-                error: _error,
-                onChanged: () => setState(() {}),
-                onSend: () => _send(thread),
-              ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The 40 px initials circle of a conversation; [hash] shows "#" for a bare
+/// number, as the Messages list does.
+class ThreadAvatar extends StatelessWidget {
+  const ThreadAvatar({super.key, required this.title, this.hash = true});
+  final String title;
+  final bool hash;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: c.surfaceRaised, shape: BoxShape.circle),
+      child: Text(
+        initialsOf(hash && title.startsWith(RegExp('[0-9+]')) ? '#' : title),
+        textScaler: TextScaler.noScaling,
+        style: VpType.body.copyWith(
+          fontSize: 14,
+          height: 1,
+          fontWeight: FontWeight.w800,
+          fontVariations: const [FontVariation('wght', 800)],
+          color: c.text,
         ),
       ),
     );
@@ -259,8 +414,12 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
+  const _Bubble({required this.message, this.wide = false});
   final Message message;
+
+  /// FoldMessages' bubbles: 70 % wide, 18 px corners with a 6 px tail, 14 px
+  /// text on 20. AppThread's: 80 %, 16 and 4, 15 px.
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +437,7 @@ class _Bubble extends StatelessWidget {
     return Align(
       alignment: out ? Alignment.centerRight : Alignment.centerLeft,
       child: FractionallySizedBox(
-        widthFactor: 0.8,
+        widthFactor: wide ? 0.7 : 0.8,
         alignment: out ? Alignment.centerRight : Alignment.centerLeft,
         child: Column(
           crossAxisAlignment: out
@@ -297,17 +456,21 @@ class _Bubble extends StatelessWidget {
                     : c.surface,
                 border: out ? null : Border.all(color: c.border),
                 borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(out ? 16 : 4),
-                  bottomRight: Radius.circular(out ? 4 : 16),
+                  topLeft: Radius.circular(wide ? 18 : 16),
+                  topRight: Radius.circular(wide ? 18 : 16),
+                  bottomLeft: Radius.circular(
+                    out ? (wide ? 18 : 16) : (wide ? 6 : 4),
+                  ),
+                  bottomRight: Radius.circular(
+                    out ? (wide ? 6 : 4) : (wide ? 18 : 16),
+                  ),
                 ),
               ),
               child: Text(
                 text,
                 style: VpType.body.copyWith(
-                  fontSize: 15,
-                  height: 1.4,
+                  fontSize: wide ? 14 : 15,
+                  height: wide ? 20 / 14 : 1.4,
                   fontStyle: m.kind == MessageKind.picture
                       ? FontStyle.italic
                       : null,
@@ -341,6 +504,7 @@ class _ReplyBox extends StatelessWidget {
     required this.error,
     required this.onChanged,
     required this.onSend,
+    this.wide = false,
   });
   final TextEditingController controller;
   final String from;
@@ -350,14 +514,35 @@ class _ReplyBox extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback onSend;
 
+  /// FoldMessages: 22 px sides, "From" on its own line in 12 px, the count
+  /// under the box. AppThread: the count beside "From".
+  final bool wide;
+
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
     final text = controller.text.trim();
     final count = smsCount(controller.text);
     final ready = canSend && !sending && text.isNotEmpty && !count.tooLong;
+    final countText = count.units == 0
+        ? null
+        : Semantics(
+            liveRegion: count.tooLong,
+            child: Text(
+              smsCountText(count),
+              style: VpType.caption.copyWith(
+                fontSize: 11,
+                fontWeight: wide ? FontWeight.w500 : FontWeight.w700,
+                fontVariations: [FontVariation('wght', wide ? 500 : 700)],
+                color: count.tooLong ? c.statusBad : c.textMuted,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          );
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      padding: wide
+          ? const EdgeInsets.fromLTRB(22, 10, 22, 14)
+          : const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
         color: c.surface,
         border: Border(top: BorderSide(color: c.border)),
@@ -366,34 +551,23 @@ class _ReplyBox extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: 6, bottom: 6),
+            padding: EdgeInsets.only(left: wide ? 0 : 6, bottom: 6),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     canSend ? from : '$from · this line receives only',
-                    style: VpType.caption.copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      fontVariations: const [FontVariation('wght', 700)],
-                      color: c.textMuted,
-                    ),
+                    style: wide
+                        ? VpType.caption.copyWith(color: c.textMuted)
+                        : VpType.caption.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            fontVariations: const [FontVariation('wght', 700)],
+                            color: c.textMuted,
+                          ),
                   ),
                 ),
-                if (count.units > 0)
-                  Semantics(
-                    liveRegion: count.tooLong,
-                    child: Text(
-                      smsCountText(count),
-                      style: VpType.caption.copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        fontVariations: const [FontVariation('wght', 700)],
-                        color: count.tooLong ? c.statusBad : c.textMuted,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ),
+                if (!wide && countText != null) countText,
               ],
             ),
           ),
@@ -474,12 +648,14 @@ class _ReplyBox extends StatelessWidget {
           ),
           if (error != null)
             Padding(
-              padding: const EdgeInsets.only(top: 6, left: 6),
+              padding: EdgeInsets.only(top: 6, left: wide ? 0 : 6),
               child: Text(
                 error!,
                 style: VpType.caption.copyWith(color: c.statusBad),
               ),
             ),
+          if (wide && countText != null)
+            Padding(padding: const EdgeInsets.only(top: 6), child: countText),
         ],
       ),
     );
