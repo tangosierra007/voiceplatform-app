@@ -58,7 +58,7 @@ void main() {
             notice: SignInFailure.signInAgainNotice(
               SignedOut.fromJson(const {
                 'error': 'refresh_invalid',
-                'message': "Check the phone's date and time",
+                'message': "Check this phone's date and time",
               }),
             ),
           ),
@@ -67,7 +67,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        find.text("Please sign in again. Check the phone's date and time."),
+        find.text("Please sign in again. Check this phone's date and time."),
         findsOneWidget,
       );
       await _shot(tester, 'signin_sign_in_again_$mode.png');

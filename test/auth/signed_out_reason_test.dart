@@ -99,7 +99,54 @@ void main() {
       'This usually happens when a phone is replaced or lost.',
     );
     expect(line, isNot(contains('admin')));
+    expect(
+      line,
+      isNot(contains(' at ')),
+      reason: 'no time the API did not send',
+    );
     expectCleared(c);
+  });
+
+  test('device_revoked with revokedAt but no revokedBy: the time, nobody '
+      'blamed', () async {
+    final c = await make(
+      (_) => (
+        401,
+        {
+          'error': 'device_revoked',
+          'message': "You've been signed out",
+          'revokedAt': DateTime(2026, 10, 27, 15, 12).toUtc().toIso8601String(),
+        },
+      ),
+    );
+    final s = c.read(authProvider) as SignedOutRemotely;
+    expect(
+      signedOutLine(s.info, _now),
+      'This phone was signed out at 3:12 pm today. '
+      'This usually happens when a phone is replaced or lost.',
+    );
+  });
+
+  test('named or not, the time and day read the same', () {
+    for (final at in [
+      DateTime(2026, 10, 27, 15, 12), // today
+      DateTime(2026, 10, 26, 9, 5), // yesterday
+      DateTime(2026, 10, 14, 11, 0), // older
+    ]) {
+      SignedOut info(String? who) => SignedOut(
+        error: SignedOutError.deviceRevoked,
+        message: "You've been signed out",
+        revokedBy: who,
+        revokedAt: at.toUtc(),
+      );
+      final named = signedOutLine(info('Priya Shah, your admin'), _now);
+      final nobody = signedOutLine(info(null), _now);
+      // Everything from " out" on: " out at 3:12 pm today. This usually ..."
+      String tail(String s) => s.substring(s.indexOf(' out'));
+      expect(tail(nobody), tail(named), reason: '$at');
+      expect(nobody, startsWith('This phone was signed out '));
+      expect(tail(nobody), isNot(startsWith(' out.')), reason: 'has a time');
+    }
   });
 
   test('refresh_invalid: AppSignIn, "Please sign in again."', () async {
@@ -118,12 +165,12 @@ void main() {
         401,
         {
           'error': 'refresh_invalid',
-          'message': "Check the phone's date and time",
+          'message': "Check this phone's date and time",
         },
       ),
     );
     final s = c.read(authProvider) as NotSignedIn;
-    expect(s.notice, "Please sign in again. Check the phone's date and time.");
+    expect(s.notice, "Please sign in again. Check this phone's date and time.");
     expectCleared(c);
   });
 
@@ -161,8 +208,10 @@ void main() {
       );
     }
     expect(
-      SignInFailure.signInAgainNotice(info("Check the phone's date and time.")),
-      "Please sign in again. Check the phone's date and time.",
+      SignInFailure.signInAgainNotice(
+        info("Check this phone's date and time."),
+      ),
+      "Please sign in again. Check this phone's date and time.",
     );
   });
 }

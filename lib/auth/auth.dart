@@ -88,7 +88,7 @@ class SignInFailure implements Exception {
   static const signInAgain = 'Please sign in again.';
 
   /// [signInAgain], plus the API's own message when it says more than "Sign
-  /// in again" (today: "Check the phone's date and time").
+  /// in again" (today: "Check this phone's date and time").
   static String signInAgainNotice(SignedOut? info) {
     var m = info?.message.trim() ?? '';
     if (m.endsWith('.')) m = m.substring(0, m.length - 1);
