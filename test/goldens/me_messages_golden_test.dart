@@ -161,4 +161,36 @@ void main() {
     expect(find.textContaining('admin'), findsNothing);
     await _shot(tester, 'signed_out_nobody_light.png');
   });
+
+  // No artboard: the person signed this phone out themselves (TJ, 2 Nov).
+  // "Not expecting this?" offers only the reseller's support, never "Ask you".
+  testWidgets('AppSignedOut light, by themselves', (tester) async {
+    usePhone(tester);
+    await tester.pumpWidget(
+      await appUnderTest(
+        theme: ThemePreference.light,
+        clock: () => _now,
+        authController: ScriptedAuth(
+          SignedOutRemotely(
+            SignedOut.fromJson({
+              'error': 'device_revoked',
+              'message': "You've been signed out",
+              'revokedBy': 'you',
+              'revokedAt': '2026-10-27T04:12:00Z',
+              'extension': '202',
+              'support': fx.support,
+            }),
+          ),
+        ),
+      ),
+    );
+    await _settle(tester);
+    expect(
+      find.text('You signed this phone out at 3:12 pm today.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Ask'), findsNothing);
+    expect(find.textContaining('Demo Telco'), findsOneWidget);
+    await _shot(tester, 'signed_out_self_light.png');
+  });
 }

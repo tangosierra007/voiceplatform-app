@@ -8,8 +8,13 @@ import '../../theme/app_theme.dart';
 import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
 
+/// True when the person signed this phone out themselves (`revokedBy` is
+/// exactly "you").
+bool isSelfRevocation(SignedOut info) => info.revokedBy == 'you';
+
 /// "Priya Shah, your admin, signed this phone out at 3:12 pm today." (the
 /// contract's revokedBy carries the name and role).
+/// "You signed this phone out at 3:12 pm today." when it was them.
 String signedOutLine(SignedOut info, DateTime now) {
   final who = info.revokedBy;
   final at = info.revokedAt?.toLocal();
@@ -26,6 +31,11 @@ String signedOutLine(SignedOut info, DateTime now) {
         : days == 1
         ? 'at ${clockTime(at)} yesterday'
         : 'on ${whenShort(at, now)}'; // on Tue 3:12 pm, on 14 Oct
+  }
+  // The API sends "you" exactly when the device's own user signed it out
+  // (from another device or the portal). TJ, 2 Nov: no "replaced or lost".
+  if (isSelfRevocation(info)) {
+    return 'You signed this phone out${when == null ? '' : ' $when'}.';
   }
   final subject = who == null || who.isEmpty
       // Nobody named (for example the platform revoked it after a reused
@@ -52,7 +62,7 @@ class SignedOutScreen extends ConsumerWidget {
     final support = info?.support;
     final who = info?.revokedBy;
     final ask = [
-      if (who != null && who.isNotEmpty)
+      if (who != null && who.isNotEmpty && !isSelfRevocation(info!))
         'Ask ${who.split(RegExp('[ ,]')).first}',
       if (support != null)
         'call ${support.name}${support.phone == null ? '' : ' on ${formatAuNumber(support.phone!)}'}',

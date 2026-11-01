@@ -125,6 +125,74 @@ void main() {
       'This phone was signed out at 3:12 pm today. '
       'This usually happens when a phone is replaced or lost.',
     );
+    expectCleared(c);
+  });
+
+  group('signed out by themselves (revokedBy "you")', () {
+    SignedOut info({String? by, DateTime? at}) => SignedOut(
+      error: SignedOutError.deviceRevoked,
+      message: "You've been signed out",
+      revokedBy: by,
+      revokedAt: at?.toUtc(),
+    );
+
+    test('with a time', () async {
+      final c = await make(
+        (_) => (
+          401,
+          {
+            'error': 'device_revoked',
+            'message': "You've been signed out",
+            'revokedBy': 'you',
+            'revokedAt': DateTime(
+              2026,
+              10,
+              27,
+              15,
+              12,
+            ).toUtc().toIso8601String(),
+            'support': fx.support,
+          },
+        ),
+      );
+      final s = c.read(authProvider) as SignedOutRemotely;
+      expect(
+        signedOutLine(s.info, _now),
+        'You signed this phone out at 3:12 pm today.',
+      );
+      expect(isSelfRevocation(s.info), isTrue);
+      expectCleared(c);
+    });
+
+    test('without a time: none made up', () {
+      expect(
+        signedOutLine(info(by: 'you'), _now),
+        'You signed this phone out.',
+      );
+    });
+
+    test('yesterday and older read as the other cases', () {
+      expect(
+        signedOutLine(info(by: 'you', at: DateTime(2026, 10, 26, 9, 5)), _now),
+        'You signed this phone out at 9:05 am yesterday.',
+      );
+    });
+
+    test('a named admin and nobody named are unchanged', () {
+      final at = DateTime(2026, 10, 27, 15, 12);
+      expect(
+        signedOutLine(info(by: 'Priya Shah, your admin', at: at), _now),
+        'Priya Shah, your admin, signed this phone out at 3:12 pm today. '
+        'This usually happens when a phone is replaced or lost.',
+      );
+      expect(
+        signedOutLine(info(at: at), _now),
+        'This phone was signed out at 3:12 pm today. '
+        'This usually happens when a phone is replaced or lost.',
+      );
+      expect(isSelfRevocation(info(by: 'Priya Shah, your admin')), isFalse);
+      expect(isSelfRevocation(info(by: 'You')), isFalse, reason: 'exactly');
+    });
   });
 
   test('named or not, the time and day read the same', () {
