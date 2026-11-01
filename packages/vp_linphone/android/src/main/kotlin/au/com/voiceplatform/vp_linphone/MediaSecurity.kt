@@ -63,20 +63,59 @@ object MediaSecurity {
     }
 
     /**
-     * The state where the call's media has been negotiated and is running, so
-     * `currentParams.mediaEncryption` must be [REQUIRED]. Every negotiation
-     * that leads to audio ends here: an outgoing call's answer, an incoming
-     * call's answer (late offer included), and every accepted re-INVITE or
-     * UPDATE (a resume from hold too). So this covers an answer without
-     * crypto and a re-INVITE that dropped it. liblinphone itself, with
-     * encryption mandatory, answers 488 to an offer without crypto and never
-     * sends unencrypted RTP; this is the engine's own check on top.
+     * The states in which audio can flow, so `currentParams.mediaEncryption`
+     * must be [REQUIRED]:
+     * - [Call.State.StreamsRunning]: an outgoing call's answer, an incoming
+     *   call's answer (late offer included), and every accepted re-INVITE or
+     *   UPDATE that leaves the call active (a resume from hold too);
+     * - [Call.State.OutgoingEarlyMedia]: a 183 with SDP, whose early media
+     *   (ringback, announcements) plays before any answer;
+     * - [Call.State.PausedByRemote]: a remote hold, where music on hold may
+     *   play; it does not pass through StreamsRunning.
+     *
+     * Not [Call.State.Connected]: the streams have not started there, and
+     * SDES reads None until they have, so checking it would end every call.
+     * Audio cannot flow until one of the checked states follows. liblinphone
+     * itself, with encryption mandatory, answers 488 to an offer without
+     * crypto and never sends unencrypted RTP; this is the engine's own check
+     * on top.
      */
-    fun checksMedia(state: Call.State): Boolean = state == Call.State.StreamsRunning
+    fun checksMedia(state: Call.State): Boolean = state in CHECKED_STATES
+
+    /** The states [checksMedia] checks. */
+    val CHECKED_STATES: Set<Call.State> = setOf(
+        Call.State.StreamsRunning,
+        Call.State.OutgoingEarlyMedia,
+        Call.State.PausedByRemote,
+    )
 
     /** [current] is `call.currentParams?.mediaEncryption`; unknown counts as plain. */
     fun verdict(state: Call.State, current: MediaEncryption?): Verdict =
         if (checksMedia(state) && current != REQUIRED) Verdict.END else Verdict.ALLOW
+
+    /** How [endInsecure] got the call ending. */
+    enum class Ending {
+        /** `call.terminate()` accepted. */
+        TERMINATED,
+
+        /** `terminate()` refused, so every call on the Core was ended. */
+        ALL_TERMINATED,
+
+        /** Both refused: the engine reports an error and checks again at the next state. */
+        FAILED,
+    }
+
+    /**
+     * Ends a call whose media is not SRTP. If liblinphone refuses to end
+     * that one call, it ends every call on the Core rather than leave plain
+     * media up. The engine runs the check at every later state until the
+     * call has ended, whatever this returns.
+     */
+    fun endInsecure(terminate: () -> Int, terminateAll: () -> Int): Ending = when {
+        terminate() == 0 -> Ending.TERMINATED
+        terminateAll() == 0 -> Ending.ALL_TERMINATED
+        else -> Ending.FAILED
+    }
 
     /** SIP 488 Not Acceptable Here: what liblinphone answers to an offer without crypto. */
     const val NOT_ACCEPTABLE = 488

@@ -8,6 +8,7 @@ package au.com.voiceplatform.vp_linphone
  * Removed: SIP Authorization and Proxy-Authorization values, digest
  * parameters (including nextnonce and rspauth), password-like key/value pairs
  * (also as JSON keys), push tokens (pn-prid) and other tokens, bearer tokens,
+ * SDES-SRTP keys (`a=crypto` `inline:` key-params),
  * any exact secret registered with [addSecret], email addresses (SIP URIs are
  * kept), and runs of 6 or more digits (phone numbers), which may be broken by
  * up to two spaces, dashes, dots, slashes or brackets. Dotted IPv4 addresses
@@ -50,6 +51,9 @@ class LogScrubber {
             // RFC 8599 push token and other tokens, also as JSON keys.
             Regex("""(?i)\b(pn-prid|prid|token|access_token|refresh_token)("?\s*[=:]\s*)("[^"]*"|[^;,\s>&"}]+)""") to "$1$2$REDACTED",
             Regex("""(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+""") to "Bearer $REDACTED",
+            // SDES-SRTP master key and salt (RFC 4568 a=crypto key-params,
+            // with any |lifetime|MKI): "inline:<key>" in the SDP (APP13).
+            Regex("""(?i)\binline:[^\s;"]+""") to "inline:$REDACTED",
             // Email addresses; a SIP or tel URI's user@host is left alone.
             Regex("""(?<![\w.%+-])(?<!sips:)(?<!sip:)(?<!tel:)[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}""") to EMAIL,
         )

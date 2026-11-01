@@ -128,4 +128,26 @@ class LogScrubberTest {
         val once = s.scrub("Authorization: Digest response=\"x\" from 0491 570 737 $password")
         assertEquals(once, s.scrub(once))
     }
+
+    // APP13 puts SDES keys in every SDP. Fake, low-entropy values of a real
+    // key's length (40 base64 characters), so the secret scan has nothing to flag.
+    @Test
+    fun sdesKeysInTheSdpAreRemoved() {
+        val a = "FAKE".repeat(10)
+        val b = "TEST".repeat(10)
+        val c = "sdes".repeat(10)
+        val sdp = "m=audio 49170 RTP/SAVP 0\r\n" +
+            "a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:$a|2^20|1:32\r\n" +
+            "a=crypto:2 AES_CM_128_HMAC_SHA1_32 INLINE:$b;inline:$c\r\n" +
+            "a=rtpmap:0 PCMU/8000\r\n"
+        val out = LogScrubber().scrub(sdp)
+        for (fake in listOf(a, b, c)) assertFalse(fake in out, fake)
+        assertEquals(
+            "m=audio 49170 RTP/SAVP 0\r\n" +
+                "a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:[scrubbed]\r\n" +
+                "a=crypto:2 AES_CM_128_HMAC_SHA1_32 inline:[scrubbed];inline:[scrubbed]\r\n" +
+                "a=rtpmap:0 PCMU/8000\r\n",
+            out,
+        )
+    }
 }

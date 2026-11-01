@@ -191,33 +191,46 @@ Branch `feat/srtp-mandatory` from `main` at `cbce9a0`, rebased onto `main` at `e
 - **Falling back to plain RTP is refused or ends the call:**
   - An incoming offer without crypto: liblinphone (mandatory) answers **488 Not Acceptable Here**; the call never rings.
   - Our offer refused by the far end with 488 (the edge would not do SRTP): the call ends.
-  - An outgoing call answered without crypto, an incoming late-offer call, or a re-INVITE/UPDATE that drops crypto: every negotiation that leads to audio ends in `StreamsRunning`. There the engine checks `currentParams.mediaEncryption`; anything but SRTP (unknown included) and the call is terminated at once. With encryption mandatory, mediastreamer2 also sends and accepts no unencrypted RTP meanwhile.
+  - An outgoing call answered without crypto, an incoming late-offer call, a re-INVITE/UPDATE that drops crypto, early media without crypto, or a remote hold without crypto: the engine checks `currentParams.mediaEncryption` in every state where audio can flow, and anything but SRTP (unknown included) ends the call at once. The checked states (`MediaSecurity.CHECKED_STATES`):
+    - `StreamsRunning`: every answer and every accepted re-INVITE or UPDATE that leaves the call active (a resume from hold too);
+    - `OutgoingEarlyMedia`: a 183 with SDP, whose early media (ringback, announcements) plays before any answer;
+    - `PausedByRemote`: a remote hold, where music on hold may play; it does not pass through `StreamsRunning`.
+  - **Not `Connected`:** the streams haven't started there, and SDES reads None until they have, so checking it would end every call. No audio flows until one of the checked states follows.
+  - With encryption mandatory, mediastreamer2 also sends and accepts no unencrypted RTP meanwhile.
+  - **Ending it:** `call.terminate()`; if liblinphone refuses (non-zero), `core.terminateAllCalls()`; if that is refused too, an `ERROR` line in the call log and the check runs again every second. The check is never switched off: every later state is checked again until the call has ended. The state with plain media is never shown to the UI or Telecom.
   - **End reason:** the contract's `EndReason.failed` in every case (a 488 either way, or the engine's own end). No contract change.
-- **Diagnostics:** `CallDiagnostics` does not report encryption, so nothing was added there. The call log it exports now has `media encryption SRTP, mandatory true` at Core start, `call <id> media encryption SRTP` at each `StreamsRunning`, and `call <id> ending: media encryption <x>, not SRTP (APP13)` when the engine ends one. `CallSnapshot.encrypted` is unchanged (TLS and SRTP).
+- **Holding `Connected` back until the first check:** possible, not done. The engine could keep reporting `dialling`/`ringing` (and leave Telecom's `setActive` and the microphone foreground type) until the first `StreamsRunning` passes the check. It isn't needed for APP13: no audio can flow at `Connected`, and the next state (normally within milliseconds) is checked before it is shown. Against it: `connectedAt`, the end reason's "was connected" and Telecom's active state would all move to `StreamsRunning`, so a call whose streams never start would sit in `dialling` instead of `connected`, and Telecom would keep the call ringing meanwhile. Proposed to mobile-lead as an option, not built.
+- **Diagnostics:** `CallDiagnostics` does not report encryption, so nothing was added there. The call log it exports now has `media encryption SRTP, mandatory true` at Core start, `call <id> <state> media encryption SRTP` at each checked state, and `call <id> ending: <state> media encryption <x>, not SRTP (APP13)` when the engine ends one. `CallSnapshot.encrypted` is unchanged (TLS and SRTP).
+- **Log scrubbing:** `LogScrubber` (Kotlin and Dart) now removes SDES keys: `a=crypto:<tag> <suite> inline:<key>|<lifetime>|<MKI>` becomes `inline:[scrubbed]`, so the master key and salt never reach the call log or an export. The root app's diagnostics scrubber (`lib/diagnostics/scrubber.dart`, not WS3's) has no such rule; its long-opaque-string rule probably catches a 40-character key, but that is for its owner to confirm. The shared scrub table is unchanged (it must match the root app's).
 
 ### Tests
 
-- Kotlin JVM (`gradlew :vp_linphone:testDebugUnitTest` from `example/android`): 79 pass, including `MediaSecurityTest`:
+- Kotlin JVM (`gradlew :vp_linphone:testDebugUnitTest` from `example/android`): 83 pass, including `MediaSecurityTest` (13) and `LogScrubberTest` (15):
   - the Core is SRTP, mandatory, without capability negotiation; no SRTP in the build means no engine; every call's params are SRTP;
   - a Core that is not mandatory SRTP refuses calls;
-  - running media that is not SRTP (None, unknown, DTLS) ends the call; no other state is checked;
+  - media that is not SRTP (None, unknown, DTLS, ZRTP) ends the call in `StreamsRunning`, `OutgoingEarlyMedia` and `PausedByRemote`; exactly those three states are checked; `Connected` and every other state are not;
+  - a refused `terminate()` ends every call; a refused `terminateAllCalls()` is reported as failed;
   - an RTP-only offer refused with 488 (incoming, or our offer refused) and a call the engine ended are `failed`;
-  - source checks: the engine applies the policy to the Core and to both `call()` and `answer()`, and nothing in the plugin sets mandatory to false, `MediaEncryption.None`, or capability negotiation on.
+  - source checks: the engine applies the policy to the Core and to both `call()` and `answer()`; it checks every state with no guard that turns the check off, escalates to `terminateAllCalls()` and retries; nothing in the plugin sets mandatory to false, `MediaEncryption.None`, or capability negotiation on;
+  - an SDP's `a=crypto` keys are scrubbed (Kotlin and Dart, any case, several keys on one line).
 - `flutter analyze` and `flutter test` (root and packages): see the PR.
-- **Not done:** a two-Core loopback test. This PC has no emulator (no `emulator` package or system image in the SDK, and installing one was out of scope), and the A53 was off limits. So liblinphone's own 488 to a plain offer, and that `currentParams.mediaEncryption` reads SRTP at `StreamsRunning` on a real SDES call, are unproven until the live SIP tests. If the second were wrong every call would end as `failed` at once, so it is the first thing to check on the handset.
+- **Not done:** a two-Core loopback test. This PC has no emulator (no `emulator` package or system image in the SDK, and installing one was out of scope), and the A53 was off limits. So liblinphone's own 488 to a plain offer, and that `currentParams.mediaEncryption` reads SRTP at `StreamsRunning`, at `OutgoingEarlyMedia` and at `PausedByRemote` on a real SDES call, are unproven until the live SIP tests. If it were wrong, every call (or every call with early media, or every remote hold) would end as `failed` at once, so it is the first thing to check on the handset.
 
 ### Handset test for TJ
 
-1. A normal call each way through the edge: two-way audio, the Encrypted tag shows, the exported log has `media encryption SRTP`.
+1. A normal call each way through the edge: two-way audio, the Encrypted tag shows, the exported log has `StreamsRunning media encryption SRTP`.
 2. With an edge or test UA that offers RTP/AVP only: the INVITE gets 488 and the phone doesn't ring.
 3. A test UA that answers our offer without `a=crypto`: the call ends at once as `failed`.
 4. A re-INVITE without crypto mid-call: refused with 488 (the call goes on, encrypted) or ended as `failed`.
+5. An outgoing call where the far end sends a **183 with SDP** (early media, for example a ringback announcement): with `a=crypto`, the early media plays and the log has `OutgoingEarlyMedia media encryption SRTP`; a test UA's 183 **without crypto**: the call ends at once as `failed`, and no early media plays.
+6. The far end puts the call **on hold** (music on hold): with crypto, the call shows held and the log has `PausedByRemote media encryption SRTP`; a test UA's hold re-INVITE **without crypto**: refused with 488 (the call stays encrypted) or ended as `failed`.
+7. No exported log contains `inline:` followed by anything but `[scrubbed]`.
 
 ### Open
 
-1. **Edge:** the app now needs the edge to offer and answer RTP/SAVP with SDES on every app branch and app-originated call. PR #117 (WS2 2.2) as read today has no SRTP change (its SIPp scenarios still use RTP/AVP). Until the edge's SRTP-only change lands, every app call fails with 488.
-2. **Store copy:** `docs/store/listing.md` now says every call is encrypted (TLS signalling, SRTP audio). **Do not merge** until the edge offers SDES RTP/SAVP on every app leg (WS2 `feat/app-srtp-mandatory`); merged first, every app call fails with 488.
-3. **Proposed guardrail row** for `docs/guardrails.md` (main repo): APP13, "Every app call's audio is SRTP (SDES), mandatory: the SDP never offers RTP/AVP, and a call that would carry plain RTP is refused (488) or ended (`failed`)". Test: app `MediaSecurityTest`; edge SIPp from WS2. Status: partial until the handset test.
+1. **Edge:** the app now needs the edge to offer and answer RTP/SAVP with SDES on every app branch and app-originated call: main repo PR **#125** (WS2 `feat/app-srtp-mandatory`). Until it lands, every app call fails with 488.
+2. **Store copy:** `docs/store/listing.md` now says every call is encrypted (TLS signalling, SRTP audio). **Do not merge** until main #125 has merged; merged first, every app call fails with 488.
+3. **Guardrail APP13** is already in main's `docs/guardrails.md` (decision 146). Proposed to mobile-lead: its test column cite the app's `MediaSecurityTest` (`packages/vp_linphone/android/src/test/.../MediaSecurityTest.kt`) by name, in place of "encryption-mandatory test". Status: partial until the handset test.
 
 ## 3.2 (Android) `feat/telecom-fcm`
 

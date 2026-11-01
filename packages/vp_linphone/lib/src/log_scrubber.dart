@@ -6,6 +6,7 @@
 /// Removed: SIP Authorization and Proxy-Authorization values, digest
 /// parameters (including nextnonce and rspauth), password-like key/value pairs
 /// (also as JSON keys), push tokens (pn-prid) and other tokens, bearer tokens,
+/// SDES-SRTP keys (`a=crypto` `inline:` key-params),
 /// any exact [secrets], email addresses (SIP URIs are kept), and runs of 6 or
 /// more digits (phone numbers), which may be broken by up to two spaces,
 /// dashes, dots, slashes or brackets. Dotted IPv4 addresses are kept.
@@ -37,6 +38,9 @@ final class LogScrubber {
       (m) => '${m[1]}${m[2]}$redacted',
     ),
     (RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false), (_) => 'Bearer $redacted'),
+    // SDES-SRTP master key and salt (RFC 4568 a=crypto key-params, with any
+    // |lifetime|MKI): "inline:<key>" in the SDP (APP13).
+    (RegExp(r'\binline:[^\s;"]+', caseSensitive: false), (_) => 'inline:$redacted'),
     (RegExp(r'(?<![\w.%+-])(?<!sips:)(?<!sip:)(?<!tel:)[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'), (_) => email),
   ];
 

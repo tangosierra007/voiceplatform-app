@@ -103,4 +103,28 @@ void main() {
     final once = s.scrub('Authorization: Digest response="x" from 0491 570 737 $password');
     expect(s.scrub(once), once);
   });
+
+  // APP13 puts SDES keys in every SDP. Fake, low-entropy values of a real
+  // key's length (40 base64 characters), so the secret scan has nothing to flag.
+  test('SDES keys in the SDP', () {
+    final a = 'FAKE' * 10;
+    final b = 'TEST' * 10;
+    final c = 'sdes' * 10;
+    final sdp =
+        'm=audio 49170 RTP/SAVP 0\r\n'
+        'a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:$a|2^20|1:32\r\n'
+        'a=crypto:2 AES_CM_128_HMAC_SHA1_32 INLINE:$b;inline:$c\r\n'
+        'a=rtpmap:0 PCMU/8000\r\n';
+    final out = LogScrubber().scrub(sdp);
+    for (final fake in [a, b, c]) {
+      expect(out, isNot(contains(fake)));
+    }
+    expect(
+      out,
+      'm=audio 49170 RTP/SAVP 0\r\n'
+      'a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:[scrubbed]\r\n'
+      'a=crypto:2 AES_CM_128_HMAC_SHA1_32 inline:[scrubbed];inline:[scrubbed]\r\n'
+      'a=rtpmap:0 PCMU/8000\r\n',
+    );
+  });
 }

@@ -64,21 +64,47 @@ class MediaSecurityTest {
         assertTrue(MediaSecurity.coreCompliant(MediaEncryption.SRTP, mandatory = true))
     }
 
+    private val checked = listOf(Call.State.StreamsRunning, Call.State.OutgoingEarlyMedia, Call.State.PausedByRemote)
+
     @Test
-    fun runningMediaWithoutSrtpEndsTheCall() {
-        // An answer without crypto, a late-offer call, or a re-INVITE that
-        // dropped crypto: each lands in StreamsRunning with plain media.
-        assertEquals(MediaSecurity.Verdict.END, MediaSecurity.verdict(Call.State.StreamsRunning, MediaEncryption.None))
-        assertEquals(MediaSecurity.Verdict.END, MediaSecurity.verdict(Call.State.StreamsRunning, null))
-        assertEquals(MediaSecurity.Verdict.END, MediaSecurity.verdict(Call.State.StreamsRunning, MediaEncryption.DTLS))
-        assertEquals(MediaSecurity.Verdict.ALLOW, MediaSecurity.verdict(Call.State.StreamsRunning, MediaEncryption.SRTP))
+    fun mediaWithoutSrtpEndsTheCallInEveryStateWhereAudioFlows() {
+        // StreamsRunning: an answer without crypto, a late-offer call, or a
+        // re-INVITE that dropped crypto. OutgoingEarlyMedia: a 183 with SDP.
+        // PausedByRemote: a remote hold (music on hold).
+        for (s in checked) {
+            assertEquals(MediaSecurity.Verdict.END, MediaSecurity.verdict(s, MediaEncryption.None), s.name)
+            assertEquals(MediaSecurity.Verdict.END, MediaSecurity.verdict(s, null), s.name)
+            assertEquals(MediaSecurity.Verdict.END, MediaSecurity.verdict(s, MediaEncryption.DTLS), s.name)
+            assertEquals(MediaSecurity.Verdict.END, MediaSecurity.verdict(s, MediaEncryption.ZRTP), s.name)
+            assertEquals(MediaSecurity.Verdict.ALLOW, MediaSecurity.verdict(s, MediaEncryption.SRTP), s.name)
+        }
     }
 
     @Test
-    fun onlyRunningMediaIsChecked() {
-        for (s in Call.State.values().filter { it != Call.State.StreamsRunning }) {
+    fun exactlyTheThreeAudioStatesAreChecked() {
+        assertEquals(checked.toSet(), MediaSecurity.CHECKED_STATES)
+    }
+
+    @Test
+    fun statesWithoutRunningMediaAreNotChecked() {
+        // Connected above all: SDES reads None there until the streams start,
+        // and StreamsRunning always follows before any audio.
+        assertFalse(MediaSecurity.checksMedia(Call.State.Connected))
+        assertEquals(MediaSecurity.Verdict.ALLOW, MediaSecurity.verdict(Call.State.Connected, MediaEncryption.None))
+        for (s in Call.State.values().filter { it !in checked }) {
             assertEquals(MediaSecurity.Verdict.ALLOW, MediaSecurity.verdict(s, MediaEncryption.None), s.name)
+            assertEquals(MediaSecurity.Verdict.ALLOW, MediaSecurity.verdict(s, null), s.name)
         }
+    }
+
+    @Test
+    fun aRefusedTerminateEndsEveryCall() {
+        var all = 0
+        assertEquals(MediaSecurity.Ending.TERMINATED, MediaSecurity.endInsecure({ 0 }, { all++; 0 }))
+        assertEquals(0, all, "every call is ended only if the one call cannot be")
+        assertEquals(MediaSecurity.Ending.ALL_TERMINATED, MediaSecurity.endInsecure({ -1 }, { all++; 0 }))
+        assertEquals(1, all)
+        assertEquals(MediaSecurity.Ending.FAILED, MediaSecurity.endInsecure({ -1 }, { -1 }))
     }
 
     private fun facts(
@@ -114,6 +140,18 @@ class MediaSecurityTest {
         assertEquals(2, Regex("""MediaSecurity\.applyToCall\(CallEncryption\(params\)\)""").findAll(engine).count())
         assertEquals(2, Regex("""requireSrtpOnly\(c\)""").findAll(engine).count())
         assertTrue("MediaSecurity.verdict(state, encryption)" in engine)
+    }
+
+    @Test
+    fun theEngineKeepsCheckingAndEscalatesUntilTheCallHasEnded() {
+        // Every state is checked, also after the engine asked for the end:
+        // no guard on INSECURE_MEDIA turns the check off.
+        assertTrue("if (endIfInsecure(t, state)) return" in engine)
+        assertFalse(Regex("""intent\s*!=\s*Mapping\.LocalIntent\.INSECURE_MEDIA""").containsMatchIn(engine))
+        // A refused terminate() ends every call, then retries.
+        assertTrue("terminateAll = { core?.terminateAllCalls() ?: -1 }" in engine)
+        assertTrue("MediaSecurity.Ending.FAILED ->" in engine)
+        assertTrue(Regex("""main\.postDelayed\(\{[^}]*endIfInsecure\(t, now\)""").containsMatchIn(engine))
     }
 
     @Test
