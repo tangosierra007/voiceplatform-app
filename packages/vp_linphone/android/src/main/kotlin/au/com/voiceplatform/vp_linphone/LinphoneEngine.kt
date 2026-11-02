@@ -952,10 +952,15 @@ object LinphoneEngine {
         )
     }
 
+    /** The service's notification and types follow the calls ([ServiceNotice]). */
+    private fun updateService() {
+        service?.update(calls.values.map { ServiceNotice.Call(it.id, it.incoming, it.state) }, micGranted())
+    }
+
     private fun emitCall(t: Tracked) {
         val msg = snapshot(t)
         appContext?.let { TelecomBridge.onSnapshot(it, msg) }
-        if (msg.state == CallStateMsg.CONNECTED) service?.setInCall(true, micGranted())
+        updateService()
         listeners.forEach { it.onCall(msg) }
     }
 
@@ -965,6 +970,7 @@ object LinphoneEngine {
         if (state == Call.State.Released) {
             calls.remove(t.id)
             idByPointer.remove(call.nativePointer)
+            updateService()
             return
         }
         if (t.state == CallStateMsg.ENDED) return
@@ -1099,16 +1105,16 @@ object LinphoneEngine {
 
         override fun onFirstCallStarted(core: Core) {
             logFile?.beginCall()
-            // phoneCall only while ringing or dialling; microphone is added once
-            // a call is connected (the app may be in the background until then).
-            service?.setInCall(true, false)
+            // phoneCall while ringing or dialling; microphone is added once a
+            // call is up (the app may be in the background until then).
+            updateService()
             main.removeCallbacks(levelTick)
             main.post(levelTick)
         }
 
         override fun onLastCallEnded(core: Core) {
             main.removeCallbacks(levelTick)
-            service?.setInCall(false, false)
+            updateService()
             // A few seconds more so the call's teardown is in the log.
             main.postDelayed({ logFile?.endCall() }, 3000)
         }

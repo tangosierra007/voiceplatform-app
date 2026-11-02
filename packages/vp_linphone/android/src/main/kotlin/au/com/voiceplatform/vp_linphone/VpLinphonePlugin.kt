@@ -75,7 +75,12 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         LinphoneEngine.addListener(listener)
         VpPush.addAppListener(pushListener)
         TelecomBridge.uiListener = uiListener
-        PendingUiRequest.listener = { request -> send { it.onUiRequest(request) } }
+        PendingUiRequest.listener = { request ->
+            // The app's activity may already exist (backgrounded, then locked):
+            // it gets no new intent, so decide the lock screen here too.
+            handleIntent(null)
+            send { it.onUiRequest(request) }
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {

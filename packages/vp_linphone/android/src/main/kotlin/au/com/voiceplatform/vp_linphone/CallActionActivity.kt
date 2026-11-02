@@ -45,10 +45,10 @@ class CallActionActivity : Activity() {
         } else {
             UiRequestMsg(UiRequestKindMsg.SHOW_INCOMING, callId)
         }
+        // The app's own activity is already under this one: the notification's
+        // PendingIntent starts both (IncomingCallNotifier.activityIntent), so
+        // nothing here starts an activity from the background, which Android
+        // blocks on a locked or backgrounded phone.
         PendingUiRequest.post(request)
-        packageManager.getLaunchIntentForPackage(packageName)?.let {
-            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            startActivity(it)
-        }
     }
 }

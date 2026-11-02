@@ -277,6 +277,55 @@ Cause: `register()` set the account's server address to `sip:<domain>;transport=
 2. **The edge's TLS "unexpected eof" from 144.6.221.62 at 12:02:49** isn't explained by this fix: the engine never opened TLS to the edge. Not chased; check it only if this build doesn't register.
 3. `fix/engine-system-roots` (Android's system store) is held: trust was not the cause.
 
+## Incoming call on a locked or backgrounded phone `fix/incoming-call-ui`
+
+Branch `fix/incoming-call-ui` from `main` at `5cbba52`. One PR, not merged.
+
+### The fault (A53, job 5, 2 Nov)
+
+With the app swiped away and the phone locked, a push woke the engine and the phone vibrated, but no screen appeared and no notification had an Answer button: the call couldn't be answered. Two notifications were up at once, "Incoming call" and "Call in progress". App ops showed `USE_FULL_SCREEN_INTENT` and `SYSTEM_ALERT_WINDOW` rejected at the same moment, although Samsung's "Full screen alerts" page shows it allowed.
+
+### What the code did
+
+1. **The notification.** `IncomingCallNotifier.show` built CallStyle (Answer and Decline) and the full-screen intent only if `canUseFullScreenIntent()` was true. Otherwise it posted a plain notification with two `addAction` buttons, which Android collapses on the lock screen, and no full-screen intent. That branch is the likeliest source of the "Incoming call" notification with nothing to answer on.
+2. **The incoming screen.** The full-screen intent and the notification's tap and Answer targeted `CallActionActivity`, a translucent trampoline. It checked the token, then called `startActivity()` on the app's launcher activity from `onCreate` and finished at once. On a locked or backgrounded phone that second start is a background activity start, which Android blocks. Android checks `SYSTEM_ALERT_WINDOW` as an exemption, which matches the rejection in app ops. The app's activity also isn't show-when-locked until the plugin sets it.
+3. **Telecom.** The self-managed path is in use: `addNewIncomingCall` → `VpConnection.setRinging()` → Telecom calls `onShowIncomingCallUi()` → `IncomingCallNotifier.show`. Only if Telecom refuses the call is the notification posted directly.
+4. **"Call in progress" while ringing.** `onFirstCallStarted` switched the foreground service to "Call in progress" as soon as any call started, ringing included.
+5. **`canUseFullScreenIntent()`** is a preflight check. The plugin calls nothing else that notes the app op, so the `USE_FULL_SCREEN_INTENT` rejection was recorded by the system, either when the notification was posted or in the background-start check. The logcat below should say which. The Dart side already has `canUseFullScreenIntent()`, `openFullScreenIntentSettings()` (`ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT` for this package; app notification settings before Android 14) and the `fullScreenIntentDenied` stream. The prompt that uses them is WS4's.
+
+### What's built
+
+- **One incoming notification, the same in every state** (`IncomingSpec`, pure): CallStyle.forIncomingCall with Decline and Answer, CATEGORY_CALL, the high-importance ringtone channel (or its silent twin after the volume key), public on the lock screen, ongoing, insistent, and always the full-screen intent. If Android 14+ refuses the full-screen intent, it marks the notification "requested but denied" and shows it as a sticky heads-up. The CallStyle stays valid, and the app is still told (`onFullScreenIntentDenied`). The plain-actions fallback is gone.
+- **The incoming notification is the engine service's foreground notification** while that call rings (`ServiceNotice`, pure; `EngineService`): one notification, and a foreground-service CallStyle notification is valid whatever the full-screen access. Service notification by state:
+  - no call: "Ready for calls";
+  - an outgoing call not yet answered: "Calling";
+  - an incoming call ringing: the incoming notification itself;
+  - a call connected, held or being transferred: "Call in progress".
+  The type is `phoneCall`, plus `microphone` only while a call is up and RECORD_AUDIO is granted. A second call ringing during a call (call waiting) gets its own notification.
+- **No background activity start.** The notification's PendingIntents start the app's launcher activity with `CallActionActivity` on top, together (`PendingIntent.getActivities`), so the system starts both. The trampoline only checks the token and posts the UI request; it no longer starts anything. When the request arrives and the app's activity already exists (backgrounded, then locked), the plugin puts it over the lock screen at once, not only on a new intent.
+- **The call log** has `incoming notification: app <LOCKED|BACKGROUND|FOREGROUND>, full-screen <allowed|denied>, <as the service notification|posted>`.
+
+### Tests
+
+- `IncomingCallUiTest` (10):
+  - the notification has Decline and Answer, CATEGORY_CALL, the full-screen intent, lock-screen visibility, and the right channel, in every app state (killed, backgrounded, locked, foreground), with full-screen access allowed or denied, ringing or silenced;
+  - source checks: the notification is built from the spec, always as CallStyle; there's no `addAction` fallback; the channels are high importance and public; the PendingIntent starts both activities; the trampoline has no `startActivity`; the plugin puts the app over the lock screen when a request arrives;
+  - the service notice for no call, a ringing call (never "Call in progress"), a call up (with or without the microphone), an outgoing call, and call waiting; the service and engine follow it, with nothing switching to "in call" at the first ring.
+- Not done: a rendering test on a device (an instrumented test needs an emulator or the phone). The A53 re-run is the proof.
+
+### Handset test for TJ
+
+1. App swiped away, phone locked about 60 s, call in: the full-screen incoming screen, or at least a heads-up with Answer and Decline that stays; Answer works from it; one notification while it rings; "Call in progress" only after answering.
+2. The same with the app in the background and unlocked: a heads-up with Answer and Decline.
+3. With "Full screen alerts" switched off for the app: the sticky heads-up with Answer and Decline.
+4. A second call during a call: its own incoming notification; "Call in progress" stays.
+
+### Open
+
+1. **Play Console:** the full-screen intent declaration (calling app) is on mobile-lead's job 7 checklist.
+2. **WS4:** a prompt when `canUseFullScreenIntent()` is false, using `openFullScreenIntentSettings()`.
+3. **Security review (WS6):** the launcher activity is now started by the notification's own PendingIntent, under the token-checked trampoline, instead of by the trampoline. The launcher intent still carries no call extras, and the lock-screen decision still comes only from the in-memory request for a ringing call.
+
 ## 3.2 (Android) `feat/telecom-fcm`
 
 Branch `feat/telecom-fcm` from `main` at `89752d3`. One PR, not merged.

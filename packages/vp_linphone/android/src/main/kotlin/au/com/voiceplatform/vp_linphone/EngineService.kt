@@ -10,18 +10,31 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 
 /**
  * The foreground service that owns the liblinphone Core. Type `phoneCall`
- * while it runs, plus `microphone` during a call when RECORD_AUDIO is granted.
- * Started by CallEngine.start(), stopped by CallEngine.stop(); not sticky
- * (credentials are in memory only, so a restarted service would have nothing
- * to register with; 3.2 wakes it from FCM instead).
+ * while it runs, plus `microphone` while a call is up and RECORD_AUDIO is
+ * granted. Started by CallEngine.start(), stopped by CallEngine.stop(); not
+ * sticky (credentials are in memory only, so a restarted service would have
+ * nothing to register with; 3.2 wakes it from FCM instead).
+ *
+ * Its notification follows the calls ([ServiceNotice]): "Ready for calls",
+ * "Calling", the incoming-call notification itself while one rings, or
+ * "Call in progress" once a call is up. Never two at once for one call.
  */
-class EngineService : Service() {
+class EngineService : Service(), IncomingCallNotifier.RingHost {
 
-    private var inCall = false
+    private var calls: List<ServiceNotice.Call> = emptyList()
+    private var micGranted = false
+
+    /** Incoming-call notifications built for ringing calls: id and notification. */
+    private val ringing = LinkedHashMap<String, Pair<Int, Notification>>()
+
+    /** What is in the foreground now, and the incoming notification it is, if one. */
+    private var shown: ServiceNotice.Notice? = null
+    private var shownRing: Notification? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -30,10 +43,13 @@ class EngineService : Service() {
             // startForeground with the plain phoneCall type.
             goForeground = {
                 createChannel()
-                goForeground(inCall = false, mic = false)
+                apply()
             },
             // Then liblinphone: native libraries, the Core, its start.
-            setUp = { LinphoneEngine.onServiceCreated(this) },
+            setUp = {
+                IncomingCallNotifier.ringHost = this
+                LinphoneEngine.onServiceCreated(this)
+            },
             report = { LinphoneEngine.onServiceStartFailed(it) },
             stop = { stopSelf() },
         )
@@ -44,34 +60,73 @@ class EngineService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        if (IncomingCallNotifier.ringHost === this) IncomingCallNotifier.ringHost = null
         LinphoneEngine.onServiceDestroyed()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 
-    /** Called by the engine when the first call starts and the last one ends. */
-    private var micType = false
+    /** Called by the engine on every call change. */
+    fun update(calls: List<ServiceNotice.Call>, micGranted: Boolean) {
+        this.calls = calls
+        this.micGranted = micGranted
+        apply()
+    }
 
-    fun setInCall(inCall: Boolean, mic: Boolean) {
-        val wantMic = inCall && mic
-        if (this.inCall == inCall && micType == wantMic) return
-        this.inCall = inCall
+    override fun ring(callId: String, notificationId: Int, notification: Notification): Boolean {
+        ringing[callId] = notificationId to notification
+        apply()
+        return shown?.kind == ServiceNotice.Kind.INCOMING && shown?.callId == callId
+    }
+
+    override fun unring(callId: String) {
+        if (ringing.remove(callId) != null) apply()
+    }
+
+    private fun apply() {
+        val notice = ServiceNotice.decide(calls, micGranted, ringing.keys)
+        val ring = notice.callId?.let { ringing[it] }
+        if (notice == shown && ring?.second === shownRing) return
+        val before = shown
         try {
-            goForeground(inCall, wantMic)
-            micType = wantMic
+            if (notice.kind == ServiceNotice.Kind.INCOMING && ring != null) {
+                startForeground(ring.first, ring.second, notice.microphone)
+            } else {
+                startForeground(NOTIFICATION_ID, notification(notice.kind), notice.microphone)
+            }
+            shown = notice
+            shownRing = ring?.second
         } catch (e: RuntimeException) {
             // Keep the phoneCall type if the microphone type is refused.
-            micType = false
-            if (wantMic) goForeground(inCall, mic = false)
+            if (!notice.microphone) throw e
+            val plain = notice.copy(microphone = false)
+            if (plain.kind == ServiceNotice.Kind.INCOMING && ring != null) {
+                startForeground(ring.first, ring.second, false)
+            } else {
+                startForeground(NOTIFICATION_ID, notification(plain.kind), false)
+            }
+            shown = notice
+            shownRing = ring?.second
+        }
+        // Moving the foreground to another id removes the old notification: an
+        // incoming call that still rings keeps its own (call waiting).
+        val left = before?.takeIf { it.kind == ServiceNotice.Kind.INCOMING && it.callId != notice.callId }?.callId
+        val still = left?.let { ringing[it] }
+        if (still != null) {
+            try {
+                NotificationManagerCompat.from(this).notify(still.first, still.second)
+            } catch (e: RuntimeException) {
+                LinphoneEngine.logLine("TELECOM", "incoming notification refused: ${e.javaClass.simpleName}")
+            }
         }
     }
 
-    private fun goForeground(inCall: Boolean, mic: Boolean) {
+    private fun startForeground(id: Int, notification: Notification, mic: Boolean) {
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
         if (mic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         }
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(inCall), type)
+        ServiceCompat.startForeground(this, id, notification, type)
     }
 
     private fun createChannel() {
@@ -85,19 +140,24 @@ class EngineService : Service() {
         nm.createNotificationChannel(channel)
     }
 
-    private fun notification(inCall: Boolean): Notification {
+    private fun notification(kind: ServiceNotice.Kind): Notification {
         val launch = packageManager.getLaunchIntentForPackage(packageName)
         val content = launch?.let {
             PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         }
+        val text = when (kind) {
+            ServiceNotice.Kind.IN_CALL -> R.string.vp_linphone_notification_in_call
+            ServiceNotice.Kind.CALLING -> R.string.vp_linphone_notification_calling
+            else -> R.string.vp_linphone_notification_ready
+        }
+        val call = kind == ServiceNotice.Kind.IN_CALL || kind == ServiceNotice.Kind.CALLING
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.vp_linphone_ic_call)
             .setContentTitle(getString(R.string.vp_linphone_notification_title))
-            .setContentText(
-                getString(if (inCall) R.string.vp_linphone_notification_in_call else R.string.vp_linphone_notification_ready),
-            )
+            .setContentText(getString(text))
             .setOngoing(true)
-            .setCategory(if (inCall) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_SERVICE)
+            .setOnlyAlertOnce(true)
+            .setCategory(if (call) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(content)
             .build()
@@ -105,6 +165,6 @@ class EngineService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "vp_linphone_engine"
-        private const val NOTIFICATION_ID = 0x5650
+        const val NOTIFICATION_ID = 0x5650
     }
 }

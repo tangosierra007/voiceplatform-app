@@ -1,5 +1,7 @@
 package au.com.voiceplatform.vp_linphone
 
+import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,14 +20,15 @@ import androidx.core.app.Person
  * The incoming-call notification: CallStyle with Answer and Decline, ringing
  * on the ringtone channel, and a full-screen intent to the app's activity so a
  * locked phone shows the incoming screen (WS4's AppIncoming, reached through
- * VpLinphoneEngine.uiRequests). On Android 14+ without the full-screen intent
- * permission it falls back to a heads-up notification and reports it.
+ * VpLinphoneEngine.uiRequests). The same notification in every state (see
+ * [IncomingSpec]); on Android 14+ without full-screen access Android shows it
+ * as a sticky heads-up, and the app is told (onFullScreenIntentDenied).
  *
  * No caller facts beyond the name or number the screen shows (APP5).
  */
 object IncomingCallNotifier {
-    private const val CHANNEL_ID = "vp_linphone_incoming"
-    private const val CHANNEL_SILENT_ID = "vp_linphone_incoming_silent"
+    private const val CHANNEL_ID = IncomingSpec.CHANNEL_RING
+    private const val CHANNEL_SILENT_ID = IncomingSpec.CHANNEL_SILENT
     const val EXTRA_ACTION = "au.com.voiceplatform.vp_linphone.ACTION"
     const val ACTION_SHOW_INCOMING = "show_incoming"
     const val ACTION_ANSWER = "answer"
@@ -37,6 +40,18 @@ object IncomingCallNotifier {
     fun canUseFullScreenIntent(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < 34) return true
         return context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+    }
+
+    /** For the log and [IncomingSpec] (which gives the same notification in every state). */
+    private fun appState(context: Context): IncomingSpec.AppState {
+        val keyguard = context.getSystemService(KeyguardManager::class.java)
+        if (keyguard?.isKeyguardLocked == true) return IncomingSpec.AppState.LOCKED
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        return when {
+            info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND -> IncomingSpec.AppState.FOREGROUND
+            else -> IncomingSpec.AppState.BACKGROUND // or started by a push after the app was swiped away
+        }
     }
 
     private fun channels(context: Context) {
@@ -57,19 +72,28 @@ object IncomingCallNotifier {
         nm.createNotificationChannels(listOf(ring, silent))
     }
 
-    /** To the non-exported [CallActionActivity], with the call's token. */
+    /**
+     * The app's launcher activity with the non-exported [CallActionActivity]
+     * (and the call's token) on top, started together by the system from the
+     * notification: the token is checked on top, and the app's activity is
+     * already there underneath when it finishes. No activity is started from
+     * the background, which Android 10+ blocks (the trampoline's own
+     * `startActivity` was refused on a locked phone).
+     */
     private fun activityIntent(context: Context, action: String, callId: String, token: String): PendingIntent {
-        val launch = Intent(context, CallActionActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        val gate = Intent(context, CallActionActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
             .putExtra(EXTRA_ACTION, action)
             .putExtra(TelecomBridge.EXTRA_CALL_ID, callId)
             .putExtra(EXTRA_TOKEN, token)
-        return PendingIntent.getActivity(
-            context,
-            requestCode(callId, action),
-            launch,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val app = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        return if (app != null) {
+            PendingIntent.getActivities(context, requestCode(callId, action), arrayOf(app, gate), flags)
+        } else {
+            PendingIntent.getActivity(context, requestCode(callId, action), gate.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags)
+        }
     }
 
     fun show(context: Context, info: TelecomBridge.CallInfo, silent: Boolean = false) {
@@ -88,36 +112,29 @@ object IncomingCallNotifier {
                 .putExtra(EXTRA_TOKEN, token),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        // Always CallStyle with a full-screen intent. If Android 14+ refuses the
+        // full-screen intent, it keeps the notification, marks it "requested but
+        // denied" and shows it as a sticky heads-up; the CallStyle stays valid.
+        // As the engine service's foreground notification ([RingHost]) it is
+        // valid either way.
         val fullScreen = canUseFullScreenIntent(context)
-        val builder = NotificationCompat.Builder(context, if (silent) CHANNEL_SILENT_ID else CHANNEL_ID)
-            .setSmallIcon(R.drawable.vp_linphone_ic_call)
-            .setContentTitle(title)
-            .setContentText(context.getString(R.string.vp_linphone_incoming_text))
-        if (fullScreen) {
-            builder.setStyle(NotificationCompat.CallStyle.forIncomingCall(person, decline, answer))
-        } else {
-            // Android refuses a CallStyle notification without a full-screen intent
-            // (or a foreground service of its own): plain heads-up with two actions.
-            builder.addAction(0, context.getString(R.string.vp_linphone_decline), decline)
-            builder.addAction(0, context.getString(R.string.vp_linphone_answer), answer)
-        }
-        builder
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .setContentIntent(content)
-        if (fullScreen) {
-            builder.setFullScreenIntent(content, true)
-        } else {
-            LinphoneEngine.logLine("TELECOM", "full-screen intent not allowed; heads-up only")
+        val state = appState(context)
+        val spec = IncomingSpec.spec(state, fullScreen, silent)
+        val n = build(context, spec, title, person, content, answer, decline)
+        if (!fullScreen) {
+            LinphoneEngine.logLine("TELECOM", "full-screen intent not allowed; sticky heads-up")
             TelecomBridge.uiListener?.onFullScreenIntentDenied(info.callId)
         }
-        val n = builder.build()
-        if (!silent) n.flags = n.flags or Notification.FLAG_INSISTENT
+        val id = notificationId(info.callId)
+        val viaService = ringHost?.ring(info.callId, id, n) == true
+        LinphoneEngine.logLine(
+            "TELECOM",
+            "incoming notification: app $state, full-screen ${if (fullScreen) "allowed" else "denied"}, " +
+                if (viaService) "as the service notification" else "posted",
+        )
+        if (viaService) return
         try {
-            NotificationManagerCompat.from(context).notify(notificationId(info.callId), n)
+            NotificationManagerCompat.from(context).notify(id, n)
         } catch (e: RuntimeException) {
             // POST_NOTIFICATIONS refused (SecurityException) or the system refused the
             // style (IllegalArgumentException): Telecom still knows the call.
@@ -130,8 +147,52 @@ object IncomingCallNotifier {
 
     fun cancel(context: Context, callId: String) {
         gate.forget(callId)
+        // First move the service's foreground off it, then remove it.
+        ringHost?.unring(callId)
         NotificationManagerCompat.from(context).cancel(notificationId(callId))
     }
+
+    /**
+     * The incoming-call notification: CallStyle.forIncomingCall, the ringtone
+     * channel (high importance) or its silent twin, CATEGORY_CALL, public on
+     * the lock screen, and the full-screen intent to the incoming screen.
+     */
+    internal fun build(
+        context: Context,
+        spec: IncomingSpec.Spec,
+        title: String,
+        person: Person,
+        content: PendingIntent,
+        answer: PendingIntent,
+        decline: PendingIntent,
+    ): Notification {
+        check(spec.buttons == listOf(IncomingSpec.Button.DECLINE, IncomingSpec.Button.ANSWER))
+        val b = NotificationCompat.Builder(context, spec.channel)
+            .setSmallIcon(R.drawable.vp_linphone_ic_call)
+            .setContentTitle(title)
+            .setContentText(context.getString(R.string.vp_linphone_incoming_text))
+            .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, decline, answer))
+            .setCategory(spec.category)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(if (spec.publicOnLockScreen) NotificationCompat.VISIBILITY_PUBLIC else NotificationCompat.VISIBILITY_PRIVATE)
+            .setOngoing(spec.ongoing)
+            .setAutoCancel(false)
+            .setContentIntent(content)
+        if (spec.fullScreenIntent) b.setFullScreenIntent(content, true)
+        val n = b.build()
+        if (spec.insistent) n.flags = n.flags or Notification.FLAG_INSISTENT
+        return n
+    }
+
+    /** The engine's foreground service, which shows a ringing call's notification as its own. */
+    interface RingHost {
+        /** True if the service now shows [notification] as its foreground notification. */
+        fun ring(callId: String, notificationId: Int, notification: Notification): Boolean
+        fun unring(callId: String)
+    }
+
+    @Volatile
+    var ringHost: RingHost? = null
 
     private fun notificationId(callId: String) = 0x5700 + (callId.hashCode() and 0xff)
     private fun requestCode(callId: String, action: String) = (callId + action).hashCode()
