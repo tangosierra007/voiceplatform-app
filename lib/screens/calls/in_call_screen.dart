@@ -10,8 +10,10 @@ import '../../calls/directory.dart';
 import '../../calls/numbers.dart';
 import '../../engine/engine_provider.dart';
 import '../../nav/routes.dart';
+import '../../shell/layout.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_icons.dart';
+import 'call_details_panel.dart';
 import 'call_widgets.dart';
 
 /// AppInCall: the line called, timer, Encrypted and HD tags, the live
@@ -52,132 +54,159 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
     final transfer = book.transfer;
     final isConsult = transfer != null && transfer.$2 == call.id;
 
-    return CallScaffold(
-      child: LayoutBuilder(
-        builder: (context, box) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: box.maxHeight),
-            child: IntrinsicHeight(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  28,
-                  24,
-                  28,
-                  20 + math.max(34, MediaQuery.viewPaddingOf(context).bottom),
-                ),
-                child: Column(
-                  children: [
-                    for (final o in others) ...[
-                      _HeldBar(
-                        call: o,
-                        matcher: matcher,
-                        isTransfer: isConsult && o.id == transfer.$1,
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    Text(
-                      _lineCalled(call, book),
-                      textAlign: TextAlign.center,
-                      style: callEyebrow(),
+    final column = LayoutBuilder(
+      builder: (context, box) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: box.maxHeight),
+          child: IntrinsicHeight(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                28,
+                24,
+                28,
+                20 + math.max(34, MediaQuery.viewPaddingOf(context).bottom),
+              ),
+              child: Column(
+                children: [
+                  for (final o in others) ...[
+                    _HeldBar(
+                      call: o,
+                      matcher: matcher,
+                      isTransfer: isConsult && o.id == transfer.$1,
                     ),
-                    const SizedBox(height: 10 + 18),
-                    CallAvatar(name: call.remoteName ?? local, size: 96),
-                    const SizedBox(height: 10 + 8),
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        callTitle(call, local),
-                        textAlign: TextAlign.center,
-                        style: callName,
-                      ),
-                    ),
-                    if (callSubtitle(call, local) case final sub?) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        sub,
-                        style: callText(16, colour: VpCallColours.soft),
-                      ),
-                    ],
-                    const SizedBox(height: 10 + 4),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        if (live && call.connectedAt != null)
-                          Semantics(
-                            label: 'Call time',
-                            child: CallTimer(since: call.connectedAt!),
-                          )
-                        else
-                          Text(
-                            _stateText(call.state),
-                            style: callText(18, weight: FontWeight.w700),
-                          ),
-                        if (held || call.state == CallState.heldByRemote)
-                          Text(
-                            held ? 'On hold' : 'Held by them',
-                            style: callText(
-                              14,
-                              weight: FontWeight.w700,
-                              colour: VpCallColours.muted,
-                            ),
-                          ),
-                        if (call.encrypted) const CallTag('ENCRYPTED'),
-                        if (call.hdAudio) const CallTag('HD'),
-                      ],
-                    ),
-                    const SizedBox(height: 10 + 6),
-                    if (connected)
-                      LiveWaveform(muted: call.muted)
-                    else
-                      const SizedBox(height: 30),
-                    const Spacer(),
-                    const SizedBox(height: 16),
-                    if (_keypad)
-                      _DtmfPad(
-                        sent: _dtmf,
-                        onDigit: (d) {
-                          setState(() => _dtmf += d);
-                          _engine.sendDtmf(call.id, d);
-                        },
-                        onHide: () => setState(() => _keypad = false),
-                      )
-                    else
-                      _Controls(
-                        call: call,
-                        others: others,
-                        audio: audio,
-                        isConsult: isConsult,
-                        onKeypad: connected
-                            ? () => setState(() => _keypad = true)
-                            : null,
-                        onCompleteTransfer: isConsult
-                            ? () => _engine.transferAttended(
-                                transfer.$1,
-                                transfer.$2,
-                              )
-                            : null,
-                      ),
-                    const SizedBox(height: 26),
-                    CallControl(
-                      label: '',
-                      semanticLabel: 'Hang up',
-                      icon: VpIcon.phone,
-                      rotate: true,
-                      size: 78,
-                      iconSize: 30,
-                      background: VpCallColours.hangUp,
-                      iconColour: VpCallColours.onControl,
-                      onPressed: () => _engine.hangup(call.id),
-                    ),
+                    const SizedBox(height: 10),
                   ],
-                ),
+                  Text(
+                    _lineCalled(call, book),
+                    textAlign: TextAlign.center,
+                    style: callEyebrow(),
+                  ),
+                  const SizedBox(height: 10 + 18),
+                  CallAvatar(name: call.remoteName ?? local, size: 96),
+                  const SizedBox(height: 10 + 8),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      callTitle(call, local),
+                      textAlign: TextAlign.center,
+                      style: callName,
+                    ),
+                  ),
+                  if (callSubtitle(call, local) case final sub?) ...[
+                    const SizedBox(height: 10),
+                    Text(sub, style: callText(16, colour: VpCallColours.soft)),
+                  ],
+                  const SizedBox(height: 10 + 4),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (live && call.connectedAt != null)
+                        Semantics(
+                          label: 'Call time',
+                          child: CallTimer(since: call.connectedAt!),
+                        )
+                      else
+                        Text(
+                          _stateText(call.state),
+                          style: callText(18, weight: FontWeight.w700),
+                        ),
+                      if (held || call.state == CallState.heldByRemote)
+                        Text(
+                          held ? 'On hold' : 'Held by them',
+                          style: callText(
+                            14,
+                            weight: FontWeight.w700,
+                            colour: VpCallColours.muted,
+                          ),
+                        ),
+                      if (call.encrypted) const CallTag('ENCRYPTED'),
+                      if (call.hdAudio) const CallTag('HD'),
+                    ],
+                  ),
+                  const SizedBox(height: 10 + 6),
+                  if (connected)
+                    LiveWaveform(muted: call.muted)
+                  else
+                    const SizedBox(height: 30),
+                  const Spacer(),
+                  const SizedBox(height: 16),
+                  if (_keypad)
+                    _DtmfPad(
+                      sent: _dtmf,
+                      onDigit: (d) {
+                        setState(() => _dtmf += d);
+                        _engine.sendDtmf(call.id, d);
+                      },
+                      onHide: () => setState(() => _keypad = false),
+                    )
+                  else
+                    _Controls(
+                      call: call,
+                      others: others,
+                      audio: audio,
+                      isConsult: isConsult,
+                      onKeypad: connected
+                          ? () => setState(() => _keypad = true)
+                          : null,
+                      onCompleteTransfer: isConsult
+                          ? () => _engine.transferAttended(
+                              transfer.$1,
+                              transfer.$2,
+                            )
+                          : null,
+                    ),
+                  const SizedBox(height: 26),
+                  CallControl(
+                    label: '',
+                    semanticLabel: 'Hang up',
+                    icon: VpIcon.phone,
+                    rotate: true,
+                    size: 78,
+                    iconSize: 30,
+                    background: VpCallColours.hangUp,
+                    iconColour: VpCallColours.onControl,
+                    onPressed: () => _engine.hangup(call.id),
+                  ),
+                ],
               ),
             ),
           ),
         ),
+      ),
+    );
+
+    return CallScaffold(
+      child: LayoutBuilder(
+        builder: (context, box) {
+          if (!isWideLayout(context)) return column;
+          // FoldInCall: the call stays phone width with its caller's
+          // details beside it ([phonePaneSplit]; a call has no rail).
+          final split = phonePaneSplit(box.maxWidth);
+          if (split == null) {
+            return Center(
+              child: SizedBox(
+                width: math.min(box.maxWidth, phonePaneMaxWidth),
+                child: column,
+              ),
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(width: split.phone, child: column),
+              Expanded(
+                child: CallDetailsPanel(
+                  call: call,
+                  localName: local,
+                  audio: audio,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -264,7 +293,9 @@ class _Controls extends ConsumerWidget {
         label: 'Speaker',
         icon: VpIcon.speaker,
         on: speakerOn,
-        semanticLabel: simpleRoutes ? 'Speaker' : 'Audio: ${_routeName(route)}',
+        semanticLabel: simpleRoutes
+            ? 'Speaker'
+            : 'Audio: ${audioRouteName(route)}',
         onPressed: () => simpleRoutes
             ? engine.setAudioRoute(
                 speakerOn ? AudioRoute.earpiece : AudioRoute.speaker,
@@ -316,7 +347,8 @@ class _Controls extends ConsumerWidget {
   }
 }
 
-String _routeName(AudioRoute r) => switch (r) {
+/// Where the call plays, in words.
+String audioRouteName(AudioRoute r) => switch (r) {
   AudioRoute.earpiece => 'Phone',
   AudioRoute.speaker => 'Speaker',
   AudioRoute.bluetooth => 'Bluetooth',
@@ -340,7 +372,7 @@ Future<void> showAudioRouteSheet(
         for (final r in AudioRoute.values)
           if (routes.contains(r))
             ListTile(
-              title: Text(_routeName(r)),
+              title: Text(audioRouteName(r)),
               trailing: r == current ? const Icon(Icons.check) : null,
               selected: r == current,
               onTap: () {

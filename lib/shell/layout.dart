@@ -39,3 +39,27 @@ bool isListDetailLayout(BuildContext context) =>
 /// to [listMinWidth].
 double listPaneWidth(double available) =>
     (available - detailMinWidth).clamp(listMinWidth, listMaxWidth);
+
+/// Keypad and in call (FoldKeypad, FoldInCall; TJ, 2 Nov): the keypad or
+/// the call stays phone width, [phonePaneMaxWidth] when there's room, down
+/// to [phonePaneMinWidth], never stretched; the side (the keypad's matches,
+/// the call's details) takes the rest, and shows only when it gets at least
+/// [phoneSideMinWidth]. Next to the rail that is 80 + 360 + 240 = 680 dp,
+/// the same window as [listDetailMinWidth]; a call has no rail, so it
+/// splits from 600 dp.
+const double phonePaneMaxWidth = 420;
+const double phonePaneMinWidth = 360;
+const double phoneSideMinWidth = 240;
+
+/// The keypad's or call's width and the side's, for [available] dp (the
+/// window less the rail, if any), or null when the side would be under
+/// [phoneSideMinWidth]: then the keypad or call is phone width
+/// ([phonePaneMaxWidth] at most) and centred, as on the phone.
+({double phone, double side})? phonePaneSplit(double available) {
+  final phone = (available - phoneSideMinWidth).clamp(
+    phonePaneMinWidth,
+    phonePaneMaxWidth,
+  );
+  final side = available - phone;
+  return side < phoneSideMinWidth ? null : (phone: phone, side: side);
+}

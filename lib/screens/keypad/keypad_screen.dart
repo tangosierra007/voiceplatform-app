@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:call_engine/call_engine.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,8 +15,10 @@ import '../../engine/engine_provider.dart';
 import '../../engine/fake_call_engine.dart';
 import '../../nav/routes.dart';
 import '../../net/api.dart';
+import '../../shell/layout.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_icons.dart';
+import 'keypad_matches.dart';
 
 /// The number on the keypad, kept while you switch tabs.
 final dialledProvider = NotifierProvider<DialledNotifier, String>(
@@ -50,9 +54,88 @@ class KeypadScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.vp;
+    final number = ref.watch(dialledProvider);
+    final picked = ref.watch(pickedMatchProvider);
+    return SafeArea(
+      bottom: false,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          // Under 600 dp: the phone's keypad, as AppKeypad.
+          if (!isWideLayout(context)) return const _KeypadPane(side: 20);
+          // FoldKeypad: the keypad at phone width beside its matches; with
+          // too little room for them, phone width and centred, with the
+          // inline match as on the phone ([phonePaneSplit]).
+          final split = phonePaneSplit(box.maxWidth);
+          if (split == null) {
+            return Center(
+              child: SizedBox(
+                width: math.min(box.maxWidth, phonePaneMaxWidth),
+                child: const _KeypadPane(side: 20, note: true),
+              ),
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: split.side,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    border: Border(right: BorderSide(color: c.border)),
+                  ),
+                  child: ClipRect(
+                    child: KeypadMatchesPane(
+                      // After a pick, the matches stay those for what was
+                      // typed, with the picked one marked.
+                      typed: picked?.number == number ? picked!.query : number,
+                      number: number,
+                      onPick: (n, label) {
+                        HapticFeedback.selectionClick();
+                        ref.read(pickedMatchProvider.notifier).set((
+                          number: n,
+                          label: label,
+                          query: picked?.number == number
+                              ? picked!.query
+                              : number,
+                        ));
+                        ref.read(dialledProvider.notifier).set(n);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: split.phone,
+                child: const _KeypadPane(side: 28, note: true),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The keypad itself: banners, the status and caller ID chips, the number
+/// with its match, the keys, the call button and Delete; in the wide
+/// layout, the emergency note under them (FoldKeypad).
+class _KeypadPane extends ConsumerWidget {
+  const _KeypadPane({required this.side, this.note = false});
+
+  /// The side padding: 20 on the phone, 28 beside the matches.
+  final double side;
+  final bool note;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.vp;
     final offline = ref.watch(offlineProvider);
     final number = ref.watch(dialledProvider);
-    final match = ref.watch(contactMatcherProvider).match(number);
+    final picked = ref.watch(pickedMatchProvider);
+    final matchLine =
+        ref.watch(contactMatcherProvider).match(number)?.line ??
+        (picked != null && picked.number == number ? picked.label : null);
     final calls = ref.watch(activeCallsProvider).value ?? const [];
     final current = calls
         .where(
@@ -72,122 +155,132 @@ class KeypadScreen extends ConsumerWidget {
       if (id != null || isEmergencyNumber(number)) dialled.set('');
     }
 
-    return SafeArea(
-      bottom: false,
-      child: LayoutBuilder(
-        builder: (context, box) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: box.maxHeight),
-            child: IntrinsicHeight(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (offline) const _OfflineBanner(),
-                  if (current != null) _BackToCall(call: current),
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        20,
-                        offline ? 12 : 6,
-                        20,
-                        12,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              _StatusChip(offline: offline),
-                              const SizedBox(width: 8),
-                              Expanded(child: _CallerIdChip(dim: offline)),
-                            ],
-                          ),
-                          Expanded(
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: offline ? 90 : 120,
-                              ),
-                              child: Center(
-                                child: offline
-                                    ? Text(
-                                        "For 000, use your phone's own dialler.\nIt works without the app.",
-                                        textAlign: TextAlign.center,
-                                        style: VpType.body.copyWith(
-                                          fontSize: 14,
-                                          height: 20 / 14,
-                                          color: c.textMuted,
-                                        ),
-                                      )
-                                    : _Display(number: number, match: match),
-                              ),
+    return LayoutBuilder(
+      builder: (context, box) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: box.maxHeight),
+          child: IntrinsicHeight(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (offline) const _OfflineBanner(),
+                if (current != null) _BackToCall(call: current),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      side,
+                      offline ? 12 : 6,
+                      side,
+                      12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            _StatusChip(offline: offline),
+                            const SizedBox(width: 8),
+                            Expanded(child: _CallerIdChip(dim: offline)),
+                          ],
+                        ),
+                        Expanded(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: offline ? 90 : 120,
+                            ),
+                            child: Center(
+                              child: offline
+                                  ? Text(
+                                      "For 000, use your phone's own dialler.\nIt works without the app.",
+                                      textAlign: TextAlign.center,
+                                      style: VpType.body.copyWith(
+                                        fontSize: 14,
+                                        height: 20 / 14,
+                                        color: c.textMuted,
+                                      ),
+                                    )
+                                  : _Display(number: number, line: matchLine),
                             ),
                           ),
-                          _Keys(
-                            enabled: !offline,
-                            onKey: press,
-                            onLongZero: () => press('+'),
-                          ),
-                          const SizedBox(height: 18),
-                          Row(
-                            children: [
-                              const Expanded(child: SizedBox()),
-                              Expanded(
-                                child: Center(
-                                  child: _CallButton(
-                                    offline: offline,
-                                    onPressed: offline || number.isEmpty
-                                        ? null
-                                        : call,
-                                  ),
+                        ),
+                        _Keys(
+                          enabled: !offline,
+                          onKey: press,
+                          onLongZero: () => press('+'),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            const Expanded(child: SizedBox()),
+                            Expanded(
+                              child: Center(
+                                child: _CallButton(
+                                  offline: offline,
+                                  onPressed: offline || number.isEmpty
+                                      ? null
+                                      : call,
                                 ),
                               ),
-                              Expanded(
-                                child: Center(
-                                  child: number.isEmpty || offline
-                                      ? const SizedBox(width: 48, height: 48)
-                                      : Semantics(
-                                          button: true,
-                                          label: 'Delete',
-                                          hint: 'Hold to clear',
-                                          excludeSemantics: true,
+                            ),
+                            Expanded(
+                              child: Center(
+                                child: number.isEmpty || offline
+                                    ? const SizedBox(width: 48, height: 48)
+                                    : Semantics(
+                                        button: true,
+                                        label: 'Delete',
+                                        hint: 'Hold to clear',
+                                        excludeSemantics: true,
+                                        onTap: () => dialled.set(
+                                          number.substring(
+                                            0,
+                                            number.length - 1,
+                                          ),
+                                        ),
+                                        child: InkResponse(
                                           onTap: () => dialled.set(
                                             number.substring(
                                               0,
                                               number.length - 1,
                                             ),
                                           ),
-                                          child: InkResponse(
-                                            onTap: () => dialled.set(
-                                              number.substring(
-                                                0,
-                                                number.length - 1,
-                                              ),
-                                            ),
-                                            onLongPress: () => dialled.set(''),
-                                            radius: 28,
-                                            child: SizedBox(
-                                              width: 48,
-                                              height: 48,
-                                              child: Center(
-                                                child: VpSvgIcon(
-                                                  VpIcon.backspace,
-                                                  size: 28,
-                                                  colour: c.textMuted,
-                                                ),
+                                          onLongPress: () => dialled.set(''),
+                                          radius: 28,
+                                          child: SizedBox(
+                                            width: 48,
+                                            height: 48,
+                                            child: Center(
+                                              child: VpSvgIcon(
+                                                VpIcon.backspace,
+                                                size: 28,
+                                                colour: c.textMuted,
                                               ),
                                             ),
                                           ),
                                         ),
-                                ),
+                                      ),
                               ),
-                            ],
+                            ),
+                          ],
+                        ),
+                        // Offline, the display already says where 000 goes.
+                        if (note && !offline) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            "For 000, 112 or 106 the phone's own dialler opens.",
+                            textAlign: TextAlign.center,
+                            style: VpType.body.copyWith(
+                              fontSize: 12,
+                              height: 16 / 12,
+                              color: c.textMuted,
+                            ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -197,9 +290,11 @@ class KeypadScreen extends ConsumerWidget {
 }
 
 class _Display extends StatelessWidget {
-  const _Display({required this.number, required this.match});
+  const _Display({required this.number, required this.line});
   final String number;
-  final ContactMatch? match;
+
+  /// Who the number is: "Jordan Price, Harbour Cafe".
+  final String? line;
 
   @override
   Widget build(BuildContext context) {
@@ -208,7 +303,7 @@ class _Display extends StatelessWidget {
       liveRegion: true,
       label: number.isEmpty
           ? 'No number entered'
-          : '${formatAuNumber(number)}${match == null ? '' : ', ${match!.line}'}',
+          : '${formatAuNumber(number)}${line == null ? '' : ', $line'}',
       excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -230,7 +325,7 @@ class _Display extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            match?.line ?? ' ',
+            line ?? ' ',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: VpType.body.copyWith(fontSize: 14, color: c.textMuted),
@@ -344,8 +439,11 @@ class _Key extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 1),
+                    // As tall as the letters at the text size, so large
+                    // text shrinks the key's face (FittedBox) rather than
+                    // cutting them off.
                     SizedBox(
-                      height: 10,
+                      height: MediaQuery.textScalerOf(context).scale(10),
                       child: Text(
                         letters,
                         style: VpType.body.copyWith(
