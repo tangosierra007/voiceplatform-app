@@ -18,7 +18,8 @@ import '../../shell/vp_tab_bar.dart';
 import 'thread_screen.dart';
 
 /// AppMessages: texts on the user's SMS lines, with a chip per line. At
-/// 600 dp and wider, FoldMessages: the list on the left, the conversation
+/// windows that split ([isListDetailLayout], about 680 dp), FoldMessages: the
+/// list on the left, the conversation
 /// beside it.
 class MessagesScreen extends ConsumerWidget {
   const MessagesScreen({super.key});
@@ -93,6 +94,7 @@ class _PhoneMessages extends ConsumerWidget {
                 } catch (_) {}
               },
               child: ListView(
+                key: const PageStorageKey('messages-threads'),
                 padding: EdgeInsets.zero,
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
@@ -105,10 +107,7 @@ class _PhoneMessages extends ConsumerWidget {
                   for (final t in items ?? const <Thread>[])
                     _ThreadRow(
                       thread: t,
-                      title:
-                          t.name ??
-                          matcher.match(t.number)?.name ??
-                          formatAuNumber(t.number),
+                      title: threadTitle(t, matcher),
                       when: recentsWhen(t.lastAt, now),
                     ),
                   if (items != null) const _WhatsAppCard(),
@@ -326,8 +325,7 @@ class _WideMessages extends ConsumerWidget {
     final picked = ref.watch(pickedThreadProvider);
     final items = page.value?.items;
     final shown = picked ?? items?.firstOrNull?.id;
-    String title(Thread t) =>
-        t.name ?? matcher.match(t.number)?.name ?? formatAuNumber(t.number);
+    String title(Thread t) => threadTitle(t, matcher);
     return SafeArea(
       bottom: false,
       child: ListDetailLayout(
@@ -360,6 +358,7 @@ class _WideMessages extends ConsumerWidget {
                   } catch (_) {}
                 },
                 child: ListView(
+                  key: const PageStorageKey('messages-threads'),
                   padding: EdgeInsets.zero,
                   physics: const AlwaysScrollableScrollPhysics(),
                   children: [
@@ -388,10 +387,13 @@ class _WideMessages extends ConsumerWidget {
         detail: shown == null
             ? const SizedBox.shrink()
             : ThreadView(
-                key: ValueKey((shown, picked != null)),
+                key: ValueKey(shown),
                 threadId: shown,
                 wide: true,
                 markRead: picked != null,
+                onEngaged: picked == null
+                    ? () => ref.read(pickedThreadProvider.notifier).pick(shown)
+                    : null,
               ),
       ),
     );
@@ -431,25 +433,51 @@ class _WideThreadRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: VpType.body.copyWith(
-                        fontSize: 15,
-                        height: 22 / 15,
-                        fontWeight: FontWeight.w700,
-                        fontVariations: const [FontVariation('wght', 700)],
-                        color: c.text,
-                      ),
+              // The name with the line pill beside it, both in full when there's
+              // room. With little room (large text, a narrow list) the pill
+              // moves under the name rather than squeezing it.
+              LayoutBuilder(
+                builder: (context, box) {
+                  final name = Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: VpType.body.copyWith(
+                      fontSize: 15,
+                      height: 22 / 15,
+                      fontWeight: FontWeight.w700,
+                      fontVariations: const [FontVariation('wght', 700)],
+                      color: c.text,
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(child: VpOffPill(t.lineLabel)),
-                ],
+                  );
+                  final pill = VpOffPill(t.lineLabel);
+                  if (box.maxWidth < 200) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        name,
+                        const SizedBox(height: 2),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: box.maxWidth),
+                          child: pill,
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Flexible(child: name),
+                      const SizedBox(width: 6),
+                      ConstrainedBox(
+                        // The name keeps at least 80 dp.
+                        constraints: BoxConstraints(
+                          maxWidth: box.maxWidth - 86,
+                        ),
+                        child: pill,
+                      ),
+                    ],
+                  );
+                },
               ),
               Text(
                 t.lastText,

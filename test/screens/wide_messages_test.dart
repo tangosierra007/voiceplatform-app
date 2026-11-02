@@ -1,8 +1,11 @@
-// Messages at 600 dp and wider (FoldMessages): the conversations on the
+// Messages in windows that split (FoldMessages; about 680 dp): the
 // left, the one picked beside them; and the picked conversation moving
 // between its own page (phone) and the pane when the window folds or
 // unfolds, with the half-typed reply.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/screens/messages/messages_screen.dart';
 import 'package:voiceplatform_app/screens/messages/thread_screen.dart';
@@ -10,6 +13,7 @@ import 'package:voiceplatform_app/shell/layout.dart';
 import 'package:voiceplatform_app/shell/list_detail.dart';
 import 'package:voiceplatform_app/shell/vp_nav_rail.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
+import 'package:voiceplatform_app/widgets/vp_wide.dart';
 
 import '../../tool/mock_server/fixtures.dart' as fx;
 import '../support/app_harness.dart';
@@ -98,7 +102,7 @@ void main() {
           )
           .first,
     );
-    expect(list.width, ListDetailLayout.listWidth);
+    expect(list.width, listMaxWidth);
     expect(find.text('From Sales mobile 0491 571 266'), findsOneWidget);
   });
 
@@ -176,7 +180,16 @@ void main() {
     expect(find.byType(ThreadScreen), findsNothing);
   });
 
-  for (final size in [_unfolded, const Size(600, 900), const Size(915, 412)]) {
+  for (final size in [
+    _unfolded,
+    const Size(679, 900),
+    const Size(680, 900),
+    const Size(690, 900),
+    const Size(744, 900),
+    const Size(852, 900),
+    const Size(600, 900),
+    const Size(915, 412),
+  ]) {
     testWidgets('text at 200% stays in its boxes, '
         '${size.width.toInt()} x ${size.height.toInt()}', (tester) async {
       _window(tester, size);
@@ -192,10 +205,37 @@ void main() {
         _paneThread(tester),
         size.width >= listDetailMinWidth ? olivia : null,
       );
+      if (size.width < listDetailMinWidth || size.height < 600) return;
+      // The reply box fits the pane: typed text, the send button and the
+      // count all inside it, nothing past its box.
+      final pane = tester.getRect(find.byType(ThreadView));
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(ThreadView),
+          matching: find.byType(TextField),
+        ),
+        'Sure, sending it now.',
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final f in [
+        find.descendant(
+          of: find.byType(ThreadView),
+          matching: find.byType(TextField),
+        ),
+        find.bySemanticsLabel('Send'),
+        find.text('21 of 160 characters · 1 part'),
+        find.text('From Sales mobile 0491 571 266'),
+      ]) {
+        final r = tester.getRect(f.last);
+        expect(r.left, greaterThanOrEqualTo(pane.left), reason: '$f');
+        expect(r.right, lessThanOrEqualTo(pane.right), reason: '$f');
+        expect(r.bottom, lessThanOrEqualTo(pane.bottom), reason: '$f');
+      }
     });
   }
 
-  for (final (width, split) in [(799.0, false), (800.0, true)]) {
+  for (final (width, split) in [(679.0, false), (680.0, true)]) {
     testWidgets('${width.toInt()} dp: '
         '${split ? 'list and detail' : 'the list, then the conversation'}', (
       tester,
@@ -215,6 +255,158 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ThreadScreen), split ? findsNothing : findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  }
+
+  Finder replyBox() => find.descendant(
+    of: find.byType(ThreadView),
+    matching: find.byType(TextField),
+  );
+
+  testWidgets('a reply that sends while another conversation is open never '
+      'comes back to send again', (tester) async {
+    _window(tester, _unfolded);
+    final sent = Completer<Object?>();
+    await tester.pumpWidget(
+      await appUnderTest(
+        clock: () => _now,
+        api: FakeApi({
+          for (final t in fx.threads)
+            'POST /messages/threads/${t['id']}/read': (_) => null,
+          'POST /messages/send': (_) => sent.future,
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Messages');
+    await tester.tap(find.text('Olivia Chen').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(replyBox(), 'Sending it now');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pump();
+    // Another conversation before the send answers: the first view goes.
+    await tester.tap(find.text('Jordan Price').first);
+    await tester.pumpAndSettle();
+    expect(_paneThread(tester), jordan);
+    sent.complete({
+      'id': 'm9',
+      'threadId': olivia,
+      'direction': 'out',
+      'at': '2026-10-27T04:40:00Z',
+      'kind': 'text',
+      'text': 'Sending it now',
+      'senderName': 'Ava',
+      'status': 'queued',
+    });
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Olivia Chen').first);
+    await tester.pumpAndSettle();
+    expect(_paneThread(tester), olivia);
+    expect(_reply(tester).controller!.text, isEmpty);
+  });
+
+  testWidgets('typing in the shown conversation picks it: read, and a fold '
+      'opens it', (tester) async {
+    _window(tester, _unfolded);
+    final read = <String>[];
+    await tester.pumpWidget(
+      await appUnderTest(clock: () => _now, api: api(read)),
+    );
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Messages');
+    expect(read, isEmpty);
+    await tester.enterText(replyBox(), 'On it');
+    await tester.pumpAndSettle();
+    expect(read, [olivia]);
+    expect(_reply(tester).controller!.text, 'On it', reason: 'kept typing');
+    await _resize(tester, _phone);
+    expect(find.byType(ThreadScreen), findsOneWidget);
+    expect(_reply(tester).controller!.text, 'On it');
+  });
+
+  testWidgets('focusing the reply box picks the shown conversation', (
+    tester,
+  ) async {
+    _window(tester, _unfolded);
+    final read = <String>[];
+    await tester.pumpWidget(
+      await appUnderTest(clock: () => _now, api: api(read)),
+    );
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Messages');
+    await tester.tap(replyBox());
+    await tester.pumpAndSettle();
+    expect(read, [olivia]);
+  });
+
+  testWidgets('the line pill shows in full when there is room', (tester) async {
+    _window(tester, _unfolded);
+    await tester.pumpWidget(
+      await appUnderTest(clock: () => _now, api: api([])),
+    );
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Messages');
+    for (final p in tester.widgetList<VpOffPill>(find.byType(VpOffPill))) {
+      final text = find.descendant(
+        of: find.byWidget(p),
+        matching: find.text(p.text),
+      );
+      final para = tester.renderObject<RenderParagraph>(text);
+      expect(para.didExceedMaxLines, isFalse, reason: p.text);
+    }
+  });
+
+  testWidgets('the list keeps its place across the split switch (680 dp)', (
+    tester,
+  ) async {
+    _window(tester, const Size(700, 420));
+    await tester.pumpWidget(
+      await appUnderTest(clock: () => _now, api: api([])),
+    );
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Messages');
+    final listView = find.byWidgetPredicate(
+      (w) => w is ListView && w.key == const PageStorageKey('messages-threads'),
+    );
+    final scrollable = find
+        .descendant(of: listView, matching: find.byType(Scrollable))
+        .first;
+    await tester.drag(scrollable, const Offset(0, -120));
+    await tester.pumpAndSettle();
+    final before = tester.state<ScrollableState>(scrollable).position.pixels;
+    expect(before, greaterThan(0));
+    await _resize(tester, const Size(679, 420));
+    final after = tester
+        .state<ScrollableState>(
+          find
+              .descendant(of: listView, matching: find.byType(Scrollable))
+              .first,
+        )
+        .position;
+    expect(after.pixels, greaterThan(0));
+    expect(after.pixels, before.clamp(0, after.maxScrollExtent));
+  });
+
+  for (final size in [_phone, const Size(360, 800)]) {
+    testWidgets('phone, 200% text: the count under the reply box fits, '
+        '${size.width.toInt()} x ${size.height.toInt()}', (tester) async {
+      _window(tester, size);
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpWidget(
+        await appUnderTest(clock: () => _now, api: api([])),
+      );
+      await tester.pumpAndSettle();
+      await _openTab(tester, 'Messages');
+      await tester.tap(find.text('Olivia Chen'));
+      await tester.pumpAndSettle();
+      await tester.enterText(replyBox(), 'Sure, sending it now.');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final count = tester.getRect(find.text('21 of 160 characters · 1 part'));
+      expect(count.right, lessThanOrEqualTo(size.width));
+      expect(count.bottom, lessThanOrEqualTo(size.height));
     });
   }
 

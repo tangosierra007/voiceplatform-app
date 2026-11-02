@@ -54,7 +54,9 @@ class FakeApi implements HttpClientAdapter {
         },
       );
     }
-    final out = handler(r);
+    var out = handler(r);
+    // A handler may answer later (a Future), to test what happens meanwhile.
+    if (out is Future) out = await out;
     if (out == null) return ResponseBody.fromString('', 204);
     if (out is (int, Object?)) {
       return ResponseBody.fromString(

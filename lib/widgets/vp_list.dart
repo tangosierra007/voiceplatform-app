@@ -185,11 +185,13 @@ class VpRowText extends StatelessWidget {
     required this.subtitle,
     this.titleColour,
     this.titleWeight = FontWeight.w700,
+    this.titleSize = 15,
   });
   final String title;
   final String? subtitle;
   final Color? titleColour;
   final FontWeight titleWeight;
+  final double titleSize;
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +205,7 @@ class VpRowText extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: VpType.body.copyWith(
-            fontSize: 15,
+            fontSize: titleSize,
             fontWeight: titleWeight,
             fontVariations: [
               FontVariation('wght', titleWeight.value.toDouble()),

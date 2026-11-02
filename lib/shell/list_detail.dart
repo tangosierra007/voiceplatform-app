@@ -5,12 +5,11 @@ import '../theme/app_theme.dart';
 import 'layout.dart';
 
 /// The wide layout's list and detail (FoldRecents, FoldContacts,
-/// FoldMessages): the list on the left, 360 dp on the surface with a 1 px
-/// right border, the selected item filling the rest on the canvas.
+/// FoldMessages): the list on the left on the surface with a 1 px right
+/// border, [listPaneWidth] wide (360 dp when there's room, down to 280),
+/// the selected item filling the rest on the canvas.
 class ListDetailLayout extends StatelessWidget {
   const ListDetailLayout({super.key, required this.list, required this.detail});
-
-  static const listWidth = 360.0;
 
   final Widget list;
   final Widget detail;
@@ -18,21 +17,25 @@ class ListDetailLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          width: listWidth,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: c.surface,
-              border: Border(right: BorderSide(color: c.border)),
+    return LayoutBuilder(
+      builder: (context, box) => Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: listPaneWidth(box.maxWidth),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: c.surface,
+                border: Border(right: BorderSide(color: c.border)),
+              ),
+              // Filter chips scroll sideways at large text; they never paint
+              // over the detail.
+              child: ClipRect(child: list),
             ),
-            child: list,
           ),
-        ),
-        Expanded(child: detail),
-      ],
+          Expanded(child: detail),
+        ],
+      ),
     );
   }
 }

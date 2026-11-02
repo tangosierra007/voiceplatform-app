@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../calls/directory.dart';
+import '../../calls/numbers.dart';
 import '../../net/api.dart';
 import '../../shell/list_detail.dart';
 import '../../shell/shell_status.dart';
@@ -23,7 +25,8 @@ class MessagesLineNotifier extends Notifier<String?> {
 }
 
 /// The conversation the person opened: full screen on the phone, beside the
-/// list at 600 dp and wider. Kept across fold and unfold.
+/// list when the window splits ([listDetailMinWidth], about 680 dp). Kept
+/// across fold and unfold.
 final pickedThreadProvider = NotifierProvider<PickedNotifier, String?>(
   PickedNotifier.new,
 );
@@ -191,11 +194,23 @@ SmsCount smsCount(String text) {
   return SmsCount(units: units, parts: parts, perPart: split, unicode: !gsm);
 }
 
-/// "42 / 160", "200 / 306 · 2 parts".
+/// "21 of 160 characters · 1 part", "200 of 306 characters · 2 parts"
+/// (FoldMessages; TJ, 2 Nov: both layouts).
 String smsCountText(SmsCount c) {
-  if (c.parts <= 1) return '${c.units} / ${c.perPart}';
+  if (c.parts <= 1) {
+    return '${c.units} of ${c.perPart} characters · 1 part';
+  }
   if (c.tooLong) {
     return '${c.parts} parts, up to $maxSmsParts. Shorten to send.';
   }
-  return '${c.units} / ${c.parts * c.perPart} · ${c.parts} parts';
+  return '${c.units} of ${c.parts * c.perPart} characters · '
+      '${c.parts} parts';
 }
+
+/// Who a conversation is with, in the scope's order (TJ, 2 Nov): a
+/// colleague, the shared phonebook, the phone's own contact (all matched on
+/// the device), then the name the API sends, else the number.
+String threadTitle(Thread t, ContactMatcher matcher) =>
+    matcher.match(t.number)?.name ??
+    (t.name == null || t.name!.isEmpty ? null : t.name) ??
+    formatAuNumber(t.number);

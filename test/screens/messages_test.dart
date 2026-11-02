@@ -72,8 +72,11 @@ void main() {
       expect(smsCount('a' * (153 * 10)).tooLong, isFalse);
       expect(smsCount('a' * (153 * 10 + 1)).tooLong, isTrue);
       expect(smsCount('ā' * (67 * 10 + 1)).tooLong, isTrue);
-      expect(smsCountText(smsCount('a' * 42)), '42 / 160');
-      expect(smsCountText(smsCount('a' * 200)), '200 / 306 · 2 parts');
+      expect(smsCountText(smsCount('a' * 42)), '42 of 160 characters · 1 part');
+      expect(
+        smsCountText(smsCount('a' * 200)),
+        '200 of 306 characters · 2 parts',
+      );
     });
   });
 
@@ -141,7 +144,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'See you Thursday');
     await _settle(tester);
-    expect(find.text('16 / 160'), findsOneWidget);
+    expect(find.text('16 of 160 characters · 1 part'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'a' * 1531);
     await _settle(tester);
     expect(find.text('11 parts, up to 10. Shorten to send.'), findsOneWidget);

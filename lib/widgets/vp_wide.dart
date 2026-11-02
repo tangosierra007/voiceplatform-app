@@ -28,7 +28,17 @@ class WideListHeader extends StatelessWidget {
             Expanded(
               child: Semantics(
                 header: true,
-                child: Text(title, style: vpTitle(context, size: 24, line: 30)),
+                // One line; large text shrinks it to fit rather than breaking
+                // the word.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: vpTitle(context, size: 24, line: 30),
+                  ),
+                ),
               ),
             ),
             ?trailing,

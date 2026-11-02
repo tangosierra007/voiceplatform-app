@@ -53,7 +53,7 @@ String _status(MessageStatus s) => switch (s) {
 
 /// AppThread on the phone: the conversation full screen, over the tabs.
 ///
-/// Unfolded (600 dp and wider) the conversation belongs beside the list
+/// When the window splits ([isListDetailLayout], about 680 dp) the conversation belongs beside the list
 /// (FoldMessages): this page closes and the Messages tab shows it there,
 /// with the half-typed reply. Back on the phone clears the pick.
 class ThreadScreen extends ConsumerStatefulWidget {
@@ -120,6 +120,7 @@ class ThreadView extends ConsumerStatefulWidget {
     required this.threadId,
     this.wide = false,
     this.markRead = true,
+    this.onEngaged,
   });
   final String threadId;
   final bool wide;
@@ -127,6 +128,11 @@ class ThreadView extends ConsumerStatefulWidget {
   /// False while the pane only shows the first conversation, unasked: it
   /// stays unread until the person picks it.
   final bool markRead;
+
+  /// Focusing the reply box, typing or sending: the person is in this
+  /// conversation, so the pane picks it (marking it read, and folding then
+  /// opens it). Null once picked.
+  final VoidCallback? onEngaged;
 
   @override
   ConsumerState<ThreadView> createState() => _ThreadViewState();
@@ -136,29 +142,43 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
   late final TextEditingController _text = TextEditingController(
     text: ref.read(threadDraftProvider(widget.threadId)),
   );
+  final _focus = FocusNode(debugLabel: 'reply');
   bool _sending = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _text.addListener(
-      () => ref
-          .read(threadDraftProvider(widget.threadId).notifier)
-          .set(_text.text),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final t = _thread();
-      if (widget.markRead && t != null && t.unread > 0) {
-        unawaited(ref.read(messageActionsProvider).markRead(t.id));
-      }
+    _text.addListener(() {
+      ref.read(threadDraftProvider(widget.threadId).notifier).set(_text.text);
+      if (_text.text.isNotEmpty) widget.onEngaged?.call();
     });
+    _focus.addListener(() {
+      if (_focus.hasFocus) widget.onEngaged?.call();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.markRead) _markRead();
+    });
+  }
+
+  void _markRead() {
+    final t = _thread();
+    if (t != null && t.unread > 0) {
+      unawaited(ref.read(messageActionsProvider).markRead(t.id));
+    }
+  }
+
+  @override
+  void didUpdateWidget(ThreadView old) {
+    super.didUpdateWidget(old);
+    // Picked after being shown (a tap on its row, or engaging with it).
+    if (widget.markRead && !old.markRead) _markRead();
   }
 
   @override
   void dispose() {
     _text.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -169,6 +189,9 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
   Future<void> _send(Thread t) async {
     final text = _text.text.trim();
     if (text.isEmpty || smsCount(text).tooLong) return;
+    widget.onEngaged?.call();
+    // Taken now: the view may be gone (another row, a fold) when it sends.
+    final draft = ref.read(threadDraftProvider(widget.threadId).notifier);
     setState(() {
       _sending = true;
       _error = null;
@@ -177,9 +200,10 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
       await ref
           .read(messageActionsProvider)
           .send(lineId: t.lineId, to: t.number, text: text);
-      _text.clear();
+      draft.set('');
+      if (mounted) _text.clear();
     } catch (_) {
-      _error = "The text didn't send. Try again.";
+      if (mounted) _error = "The text didn't send. Try again.";
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -196,11 +220,7 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
     final messages = ref.watch(threadMessagesProvider(widget.threadId));
     final matcher = ref.watch(contactMatcherProvider);
     final now = ref.watch(clockProvider)();
-    final title = thread == null
-        ? ''
-        : thread.name ??
-              matcher.match(thread.number)?.name ??
-              formatAuNumber(thread.number);
+    final title = thread == null ? '' : threadTitle(thread, matcher);
     final line = thread == null
         ? null
         : lines.where((l) => l.id == thread.lineId).firstOrNull;
@@ -321,6 +341,7 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
         if (thread != null)
           _ReplyBox(
             controller: _text,
+            focusNode: _focus,
             from: line == null
                 ? 'From ${thread.lineLabel}'
                 : 'From ${line.label} ${formatAuNumber(line.number)}',
@@ -359,7 +380,7 @@ class _WideHeader extends StatelessWidget {
           Expanded(
             child: Semantics(
               header: true,
-              child: VpRowText(title: title, subtitle: subtitle),
+              child: VpRowText(title: title, subtitle: subtitle, titleSize: 16),
             ),
           ),
           if (onCall != null) ...[
@@ -498,6 +519,7 @@ class _Bubble extends StatelessWidget {
 class _ReplyBox extends StatelessWidget {
   const _ReplyBox({
     required this.controller,
+    required this.focusNode,
     required this.from,
     required this.canSend,
     required this.sending,
@@ -507,6 +529,7 @@ class _ReplyBox extends StatelessWidget {
     this.wide = false,
   });
   final TextEditingController controller;
+  final FocusNode focusNode;
   final String from;
   final bool canSend;
   final bool sending;
@@ -514,8 +537,8 @@ class _ReplyBox extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback onSend;
 
-  /// FoldMessages: 22 px sides, "From" on its own line in 12 px, the count
-  /// under the box. AppThread: the count beside "From".
+  /// FoldMessages: 22 px sides and "From" in 12 px. Both layouts put the
+  /// count under the box ("21 of 160 characters · 1 part").
   final bool wide;
 
   @override
@@ -567,7 +590,6 @@ class _ReplyBox extends StatelessWidget {
                           ),
                   ),
                 ),
-                if (!wide && countText != null) countText,
               ],
             ),
           ),
@@ -577,6 +599,7 @@ class _ReplyBox extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: controller,
+                  focusNode: focusNode,
                   enabled: canSend,
                   minLines: 1,
                   maxLines: 5,
@@ -654,8 +677,11 @@ class _ReplyBox extends StatelessWidget {
                 style: VpType.caption.copyWith(color: c.statusBad),
               ),
             ),
-          if (wide && countText != null)
-            Padding(padding: const EdgeInsets.only(top: 6), child: countText),
+          if (countText != null)
+            Padding(
+              padding: EdgeInsets.only(top: 6, left: wide ? 0 : 6),
+              child: countText,
+            ),
         ],
       ),
     );
