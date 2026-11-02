@@ -33,7 +33,7 @@ class CallSettings {
   final bool? followMeConfirm;
   final CallSettingsThenTo thenTo;
 
-  /// E.164 or extension; null when off
+  /// E.164; absent when off
   final String? forwardAlwaysTo;
 
   Map<String, Object?> toJson() => _$CallSettingsToJson(this);

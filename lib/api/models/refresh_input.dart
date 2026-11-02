@@ -23,7 +23,7 @@ class RefreshInput {
   /// Within 2 minutes of server time
   final DateTime timestamp;
 
-  /// ECDSA P-256 SHA-256 over `deviceId.refreshToken.timestamp`, base64url
+  /// ECDSA P-256 SHA-256 over `deviceId.refreshToken.timestamp`, DER (X9.62) encoded, base64url
   final String signature;
 
   Map<String, Object?> toJson() => _$RefreshInputToJson(this);

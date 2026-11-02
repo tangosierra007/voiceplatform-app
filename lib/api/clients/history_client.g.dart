@@ -22,6 +22,7 @@ class _HistoryClient implements HistoryClient {
 
   @override
   Future<HistoryPage> getHistory({
+    String? number,
     String? before,
     HistoryFilter? filter = HistoryFilter.all,
     bool? mine = false,
@@ -29,6 +30,7 @@ class _HistoryClient implements HistoryClient {
   }) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{
+      r'number': number,
       r'before': before,
       r'filter': filter?.toJson(),
       r'mine': mine,

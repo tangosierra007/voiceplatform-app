@@ -22,6 +22,8 @@ class CallSettingsPatch {
   final String? followMeTo;
   final int? followMeSeconds;
   final bool? followMeConfirm;
+
+  /// E.164; null turns it off
   final String? forwardAlwaysTo;
 
   Map<String, Object?> toJson() => _$CallSettingsPatchToJson(this);
