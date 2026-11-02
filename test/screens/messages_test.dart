@@ -32,6 +32,33 @@ String _at(String iso) => clockTime(DateTime.parse(iso).toLocal());
 void main() {
   setUpAll(loadAppFonts);
 
+  test('after a send, the draft loses only the sent words at its start', () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    final draft = c.read(threadDraftProvider('t1').notifier);
+    String after(String now, String sent) {
+      draft.set(now);
+      draft.removeSent(sent);
+      return c.read(threadDraftProvider('t1'));
+    }
+
+    expect(after('Sending it now', 'Sending it now'), '');
+    expect(
+      after('Sending it now, see you at 3', 'Sending it now'),
+      ', see you at 3',
+    );
+    expect(after('Sending it now  see you', 'Sending it now'), 'see you');
+    // Sent trimmed; the box held spaces around it.
+    expect(
+      after('  Sending it now \nAnd more', '  Sending it now '),
+      'And more',
+    );
+    // Rewritten while it sent: left alone.
+    expect(after('And one more thing', 'Sending it now'), 'And one more thing');
+    expect(after('Sending it', 'Sending it now'), 'Sending it');
+    expect(after('', 'Sending it now'), '');
+  });
+
   group('SMS parts', () {
     test('GSM-7: 160 in one part, then 153 a part', () {
       expect(smsCount('a' * 160).parts, 1);

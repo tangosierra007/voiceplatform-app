@@ -186,6 +186,27 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
       .where((t) => t.id == widget.threadId)
       .firstOrNull;
 
+  /// Puts a draft changed elsewhere (a send taking its words off the front)
+  /// into this box. Only ever called when the draft differs from the box,
+  /// which typing here never causes (each keystroke sets the draft to the
+  /// box). The cursor stays on the same character of what is left.
+  void _followDraft(String draft) {
+    final old = _text.value;
+    if (draft == old.text) return;
+    final TextSelection selection;
+    if (old.text.endsWith(draft) && old.selection.isValid) {
+      final cut = old.text.length - draft.length;
+      int keep(int at) => (at - cut).clamp(0, draft.length);
+      selection = TextSelection(
+        baseOffset: keep(old.selection.baseOffset),
+        extentOffset: keep(old.selection.extentOffset),
+      );
+    } else {
+      selection = TextSelection.collapsed(offset: draft.length);
+    }
+    _text.value = TextEditingValue(text: draft, selection: selection);
+  }
+
   Future<void> _send(Thread t) async {
     final typed = _text.text;
     final text = typed.trim();
@@ -202,8 +223,8 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
           .read(messageActionsProvider)
           .send(lineId: t.lineId, to: t.number, text: text);
       // Every box on this conversation (this one, or a new one after a fold
-      // or a reopen) follows the draft when it empties: see build.
-      draft.clearIfStill(typed);
+      // or a reopen) follows the draft: see build.
+      draft.removeSent(typed);
     } catch (_) {
       if (mounted) _error = "The text didn't send. Try again.";
     } finally {
@@ -213,10 +234,11 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
 
   @override
   Widget build(BuildContext context) {
-    // The box follows the draft when a send empties it, even if this box
-    // appeared after the send started (a fold, an unfold, a reopen).
+    // The box follows the draft when a send takes its words off, even if
+    // this box appeared after the send started (a fold, an unfold, a
+    // reopen): emptied, or left with what was typed after them.
     ref.listen(threadDraftProvider(widget.threadId), (_, draft) {
-      if (draft.isEmpty && _text.text.isNotEmpty) _text.clear();
+      if (draft != _text.text) _followDraft(draft);
     });
     final c = context.vp;
     final threads = ref.watch(threadsProvider(null));

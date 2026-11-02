@@ -48,10 +48,15 @@ class ThreadDraftNotifier extends Notifier<String> {
 
   void set(String text) => state = text;
 
-  /// After a send: empties the draft only if it still holds what was sent,
-  /// so anything typed meanwhile (in a new box after a fold) stays.
-  void clearIfStill(String sent) {
-    if (state == sent) state = '';
+  /// After a send: takes the sent words off the front of the draft and keeps
+  /// anything typed after them meanwhile (in this box, or a new one after a
+  /// fold), trimmed at the start. A draft that no longer starts with them
+  /// was rewritten while it sent, so it stays as it is.
+  void removeSent(String sent) {
+    final s = sent.trim();
+    if (s.isEmpty) return;
+    final now = state.trimLeft();
+    if (now.startsWith(s)) state = now.substring(s.length).trimLeft();
   }
 }
 

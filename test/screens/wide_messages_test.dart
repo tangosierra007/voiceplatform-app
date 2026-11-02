@@ -317,55 +317,21 @@ void main() {
     'status': 'queued',
   };
 
-  for (final typeMore in [false, true]) {
-    testWidgets('unfold during a send: the new box empties when it sends'
-        '${typeMore ? ', keeping what was typed meanwhile' : ''}', (
-      tester,
-    ) async {
-      _window(tester, _phone);
-      final sent = Completer<Object?>();
-      await tester.pumpWidget(
-        await appUnderTest(
-          clock: () => _now,
-          api: FakeApi({
-            for (final t in fx.threads)
-              'POST /messages/threads/${t['id']}/read': (_) => null,
-            'POST /messages/send': (_) => sent.future,
-          }),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await _openTab(tester, 'Messages');
-      await tester.tap(find.text('Olivia Chen'));
-      await tester.pumpAndSettle();
-      await tester.enterText(replyBox(), 'Sending it now');
-      await tester.pump();
-      await tester.tap(find.bySemanticsLabel('Send'));
-      await tester.pump();
+  // What the person does in the box while it sends: nothing, adds to the
+  // end of the sent words (the rest stays, to send next), or rewrites it
+  // (it stays as it is).
+  const meanwhile = {
+    'nothing': (typed: null, left: ''),
+    'appended': (typed: 'Sending it now, see you at 3', left: ', see you at 3'),
+    'appended on a new line': (
+      typed: 'Sending it now\nSee you at 3',
+      left: 'See you at 3',
+    ),
+    'rewritten': (typed: 'And one more thing', left: 'And one more thing'),
+  };
 
-      // Unfold while it sends: a new box, beside the list, with the text.
-      await _resize(tester, _unfolded);
-      expect(find.byType(ThreadScreen), findsNothing);
-      expect(_paneThread(tester), olivia);
-      expect(_reply(tester).controller!.text, 'Sending it now');
-      if (typeMore) {
-        await tester.enterText(replyBox(), 'And one more thing');
-        await tester.pump();
-      }
-
-      sent.complete(sentMessage('Sending it now'));
-      await tester.pumpAndSettle();
-      expect(
-        _reply(tester).controller!.text,
-        typeMore ? 'And one more thing' : isEmpty,
-      );
-    });
-  }
-
-  testWidgets('fold during a send: the phone box empties when it sends', (
-    tester,
-  ) async {
-    _window(tester, _unfolded);
+  Future<Completer<Object?>> sendingApp(WidgetTester tester, Size at) async {
+    _window(tester, at);
     final sent = Completer<Object?>();
     await tester.pumpWidget(
       await appUnderTest(
@@ -379,16 +345,84 @@ void main() {
     );
     await tester.pumpAndSettle();
     await _openTab(tester, 'Messages');
+    return sent;
+  }
+
+  void expectCursorAtEnd(WidgetTester tester) {
+    final v = _reply(tester).controller!.value;
+    expect(v.selection, TextSelection.collapsed(offset: v.text.length));
+  }
+
+  for (final MapEntry(key: what, value: m) in meanwhile.entries) {
+    testWidgets('unfold during a send, $what meanwhile: the new box keeps '
+        'only what was not sent', (tester) async {
+      final sent = await sendingApp(tester, _phone);
+      await tester.tap(find.text('Olivia Chen'));
+      await tester.pumpAndSettle();
+      await tester.enterText(replyBox(), 'Sending it now');
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Send'));
+      await tester.pump();
+
+      // Unfold while it sends: a new box, beside the list, with the text.
+      await _resize(tester, _unfolded);
+      expect(find.byType(ThreadScreen), findsNothing);
+      expect(_paneThread(tester), olivia);
+      expect(_reply(tester).controller!.text, 'Sending it now');
+      if (m.typed != null) {
+        await tester.enterText(replyBox(), m.typed!);
+        await tester.pump();
+      }
+
+      sent.complete(sentMessage('Sending it now'));
+      await tester.pumpAndSettle();
+      expect(_reply(tester).controller!.text, m.left);
+      expectCursorAtEnd(tester);
+    });
+
+    testWidgets('fold during a send, $what meanwhile: the phone box keeps '
+        'only what was not sent', (tester) async {
+      final sent = await sendingApp(tester, _unfolded);
+      await tester.enterText(replyBox(), 'Sending it now');
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Send'));
+      await tester.pump();
+      await _resize(tester, _phone);
+      expect(find.byType(ThreadScreen), findsOneWidget);
+      expect(_reply(tester).controller!.text, 'Sending it now');
+      if (m.typed != null) {
+        await tester.enterText(replyBox(), m.typed!);
+        await tester.pump();
+      }
+      sent.complete(sentMessage('Sending it now'));
+      await tester.pumpAndSettle();
+      expect(_reply(tester).controller!.text, m.left);
+      expectCursorAtEnd(tester);
+    });
+  }
+
+  testWidgets('adding to the end while it sends, in the same box: the sent '
+      'words go, the rest stays with the cursor where it was', (tester) async {
+    final sent = await sendingApp(tester, _unfolded);
     await tester.enterText(replyBox(), 'Sending it now');
     await tester.pump();
     await tester.tap(find.bySemanticsLabel('Send'));
     await tester.pump();
-    await _resize(tester, _phone);
-    expect(find.byType(ThreadScreen), findsOneWidget);
-    expect(_reply(tester).controller!.text, 'Sending it now');
+    // Still typing: the cursor sits after "see", before " you at 3".
+    _reply(tester).controller!.value = const TextEditingValue(
+      text: 'Sending it now, see you at 3',
+      selection: TextSelection.collapsed(offset: 19),
+    );
+    await tester.pump();
     sent.complete(sentMessage('Sending it now'));
     await tester.pumpAndSettle();
-    expect(_reply(tester).controller!.text, isEmpty);
+    final v = _reply(tester).controller!.value;
+    expect(v.text, ', see you at 3');
+    expect(v.selection, const TextSelection.collapsed(offset: 5));
+    // Typing carries on from there.
+    await tester.enterText(replyBox(), ', see you at 3:30');
+    await tester.pump();
+    expect(_reply(tester).controller!.text, ', see you at 3:30');
   });
 
   testWidgets('typing in the shown conversation picks it: read, and a fold '
