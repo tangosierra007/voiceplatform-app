@@ -187,7 +187,8 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
       .firstOrNull;
 
   Future<void> _send(Thread t) async {
-    final text = _text.text.trim();
+    final typed = _text.text;
+    final text = typed.trim();
     if (text.isEmpty || smsCount(text).tooLong) return;
     widget.onEngaged?.call();
     // Taken now: the view may be gone (another row, a fold) when it sends.
@@ -200,8 +201,9 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
       await ref
           .read(messageActionsProvider)
           .send(lineId: t.lineId, to: t.number, text: text);
-      draft.set('');
-      if (mounted) _text.clear();
+      // Every box on this conversation (this one, or a new one after a fold
+      // or a reopen) follows the draft when it empties: see build.
+      draft.clearIfStill(typed);
     } catch (_) {
       if (mounted) _error = "The text didn't send. Try again.";
     } finally {
@@ -211,6 +213,11 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
 
   @override
   Widget build(BuildContext context) {
+    // The box follows the draft when a send empties it, even if this box
+    // appeared after the send started (a fold, an unfold, a reopen).
+    ref.listen(threadDraftProvider(widget.threadId), (_, draft) {
+      if (draft.isEmpty && _text.text.isNotEmpty) _text.clear();
+    });
     final c = context.vp;
     final threads = ref.watch(threadsProvider(null));
     final thread = (threads.value?.items ?? const <Thread>[])

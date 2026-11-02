@@ -306,6 +306,91 @@ void main() {
     expect(_reply(tester).controller!.text, isEmpty);
   });
 
+  Map<String, Object?> sentMessage(String text) => {
+    'id': 'm9',
+    'threadId': olivia,
+    'direction': 'out',
+    'at': '2026-10-27T04:40:00Z',
+    'kind': 'text',
+    'text': text,
+    'senderName': 'Ava',
+    'status': 'queued',
+  };
+
+  for (final typeMore in [false, true]) {
+    testWidgets('unfold during a send: the new box empties when it sends'
+        '${typeMore ? ', keeping what was typed meanwhile' : ''}', (
+      tester,
+    ) async {
+      _window(tester, _phone);
+      final sent = Completer<Object?>();
+      await tester.pumpWidget(
+        await appUnderTest(
+          clock: () => _now,
+          api: FakeApi({
+            for (final t in fx.threads)
+              'POST /messages/threads/${t['id']}/read': (_) => null,
+            'POST /messages/send': (_) => sent.future,
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _openTab(tester, 'Messages');
+      await tester.tap(find.text('Olivia Chen'));
+      await tester.pumpAndSettle();
+      await tester.enterText(replyBox(), 'Sending it now');
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Send'));
+      await tester.pump();
+
+      // Unfold while it sends: a new box, beside the list, with the text.
+      await _resize(tester, _unfolded);
+      expect(find.byType(ThreadScreen), findsNothing);
+      expect(_paneThread(tester), olivia);
+      expect(_reply(tester).controller!.text, 'Sending it now');
+      if (typeMore) {
+        await tester.enterText(replyBox(), 'And one more thing');
+        await tester.pump();
+      }
+
+      sent.complete(sentMessage('Sending it now'));
+      await tester.pumpAndSettle();
+      expect(
+        _reply(tester).controller!.text,
+        typeMore ? 'And one more thing' : isEmpty,
+      );
+    });
+  }
+
+  testWidgets('fold during a send: the phone box empties when it sends', (
+    tester,
+  ) async {
+    _window(tester, _unfolded);
+    final sent = Completer<Object?>();
+    await tester.pumpWidget(
+      await appUnderTest(
+        clock: () => _now,
+        api: FakeApi({
+          for (final t in fx.threads)
+            'POST /messages/threads/${t['id']}/read': (_) => null,
+          'POST /messages/send': (_) => sent.future,
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Messages');
+    await tester.enterText(replyBox(), 'Sending it now');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pump();
+    await _resize(tester, _phone);
+    expect(find.byType(ThreadScreen), findsOneWidget);
+    expect(_reply(tester).controller!.text, 'Sending it now');
+    sent.complete(sentMessage('Sending it now'));
+    await tester.pumpAndSettle();
+    expect(_reply(tester).controller!.text, isEmpty);
+  });
+
   testWidgets('typing in the shown conversation picks it: read, and a fold '
       'opens it', (tester) async {
     _window(tester, _unfolded);

@@ -47,6 +47,12 @@ class ThreadDraftNotifier extends Notifier<String> {
   String build() => '';
 
   void set(String text) => state = text;
+
+  /// After a send: empties the draft only if it still holds what was sent,
+  /// so anything typed meanwhile (in a new box after a fold) stays.
+  void clearIfStill(String sent) {
+    if (state == sent) state = '';
+  }
 }
 
 final threadsProvider = FutureProvider.family<ThreadPage, String?>((
