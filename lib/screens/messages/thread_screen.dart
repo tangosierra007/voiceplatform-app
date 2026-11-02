@@ -138,6 +138,39 @@ class ThreadView extends ConsumerStatefulWidget {
   ConsumerState<ThreadView> createState() => _ThreadViewState();
 }
 
+/// The reply box after a send took the sent words off the front of [old],
+/// leaving [draft]. The cursor (or selection) and the keyboard's composing
+/// range (a word being built, unconverted CJK letters) move back by the
+/// words taken, so typing carries on undisturbed; a composing range inside
+/// the sent words goes with them. A draft that is not the end of the box
+/// puts the cursor at its end.
+@visibleForTesting
+TextEditingValue followDraftValue(TextEditingValue old, String draft) {
+  if (!old.text.endsWith(draft)) {
+    return TextEditingValue(
+      text: draft,
+      selection: TextSelection.collapsed(offset: draft.length),
+    );
+  }
+  final cut = old.text.length - draft.length;
+  int keep(int at) => (at - cut).clamp(0, draft.length);
+  final selection = old.selection.isValid
+      ? TextSelection(
+          baseOffset: keep(old.selection.baseOffset),
+          extentOffset: keep(old.selection.extentOffset),
+        )
+      : TextSelection.collapsed(offset: draft.length);
+  final c = old.composing;
+  final composing = c.isValid && !c.isCollapsed && c.start >= cut
+      ? TextRange(start: c.start - cut, end: c.end - cut)
+      : TextRange.empty;
+  return TextEditingValue(
+    text: draft,
+    selection: selection,
+    composing: composing,
+  );
+}
+
 class _ThreadViewState extends ConsumerState<ThreadView> {
   late final TextEditingController _text = TextEditingController(
     text: ref.read(threadDraftProvider(widget.threadId)),
@@ -191,20 +224,8 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
   /// which typing here never causes (each keystroke sets the draft to the
   /// box). The cursor stays on the same character of what is left.
   void _followDraft(String draft) {
-    final old = _text.value;
-    if (draft == old.text) return;
-    final TextSelection selection;
-    if (old.text.endsWith(draft) && old.selection.isValid) {
-      final cut = old.text.length - draft.length;
-      int keep(int at) => (at - cut).clamp(0, draft.length);
-      selection = TextSelection(
-        baseOffset: keep(old.selection.baseOffset),
-        extentOffset: keep(old.selection.extentOffset),
-      );
-    } else {
-      selection = TextSelection.collapsed(offset: draft.length);
-    }
-    _text.value = TextEditingValue(text: draft, selection: selection);
+    if (draft == _text.text) return;
+    _text.value = followDraftValue(_text.value, draft);
   }
 
   Future<void> _send(Thread t) async {

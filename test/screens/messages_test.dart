@@ -57,6 +57,64 @@ void main() {
     expect(after('And one more thing', 'Sending it now'), 'And one more thing');
     expect(after('Sending it', 'Sending it now'), 'Sending it');
     expect(after('', 'Sending it now'), '');
+    // Only whole words come off: the last word carried on is a rewrite.
+    expect(after('Yesterday works', 'Yes'), 'Yesterday works');
+    expect(after('Yes, see you', 'Yes'), ', see you');
+    expect(after('Yes! See you', 'Yes'), '! See you');
+    expect(after('Yes\nSee you', 'Yes'), 'See you');
+  });
+
+  group('the box after a send takes the sent words off', () {
+    const sent = 'Sending it now';
+    const draft = ', see you at 3';
+    const cut = sent.length;
+
+    test('the composing word moves with the text and stays composing', () {
+      // "Sending it now, see yo|" with "yo" still being built.
+      const old = TextEditingValue(
+        text: '$sent$draft',
+        selection: TextSelection.collapsed(offset: cut + 9),
+        composing: TextRange(start: cut + 7, end: cut + 9),
+      );
+      final v = followDraftValue(old, draft);
+      expect(v.text, draft);
+      expect(v.selection, const TextSelection.collapsed(offset: 9));
+      expect(v.composing, const TextRange(start: 7, end: 9));
+    });
+
+    test('unconverted CJK letters stay composing', () {
+      const old = TextEditingValue(
+        text: '好的 にほんご',
+        selection: TextSelection.collapsed(offset: 7),
+        composing: TextRange(start: 3, end: 7),
+      );
+      final v = followDraftValue(old, 'にほんご');
+      expect(v.composing, const TextRange(start: 0, end: 4));
+      expect(v.selection, const TextSelection.collapsed(offset: 4));
+    });
+
+    test('a composing range in the sent words goes with them', () {
+      const old = TextEditingValue(
+        text: '$sent$draft',
+        selection: TextSelection.collapsed(offset: 3),
+        composing: TextRange(start: 0, end: 3),
+      );
+      final v = followDraftValue(old, draft);
+      expect(v.composing, TextRange.empty);
+      expect(v.selection, const TextSelection.collapsed(offset: 0));
+    });
+
+    test('a rewritten box: the cursor at the end, nothing composing', () {
+      const old = TextEditingValue(
+        text: 'Something else',
+        selection: TextSelection.collapsed(offset: 4),
+        composing: TextRange(start: 0, end: 4),
+      );
+      final v = followDraftValue(old, '');
+      expect(v.text, '');
+      expect(v.selection, const TextSelection.collapsed(offset: 0));
+      expect(v.composing, TextRange.empty);
+    });
   });
 
   group('SMS parts', () {
