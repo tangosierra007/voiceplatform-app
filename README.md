@@ -41,7 +41,7 @@ CI enforces this: `tool/check_phone_numbers.dart` (the `phone-numbers` job in `.
 
 - national: `04xx xxx xxx`, `(0x) xxxx xxxx`, `13 xx xx`, `13x xxx`;
 - international: `+61 4…`, `61 4…`, `0061 4…`, `0011 61 4…`, URL-encoded `%2B614…`;
-- separators: spaces (up to three), dots, dashes, or a dot or dash with spaces around it (` - `).
+- separators: spaces or no-break spaces (up to three), dots, dashes, slashes, en dashes, or one of those with spaces around it (` - `, ` / `).
 
 It checks every tracked text file, the commit messages and added lines of the pushed or pull request commits, and the pull request title and description. It prints each hit as file and line with the number masked.
 

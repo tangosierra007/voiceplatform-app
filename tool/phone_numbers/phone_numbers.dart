@@ -100,14 +100,19 @@ bool isAcmaFictional(String national) {
   return _fictional.contains(national);
 }
 
-// A separator between digits: nothing; or up to three spaces; or one dot or
-// dash with up to two spaces either side (" - ", " . ").
-const _s = r'(?: {0,2}[.\-] {0,2}| {1,3})?';
+// A space: an ordinary one or a no-break space (U+00A0).
+const _sp = r'[  ]';
 
-// Not glued to a word, a `+`, or a digit run joined by `.` or `-` (versions,
-// IDs, dates), on either side.
-const _before = r'(?<![\w+]|\d[.\-])';
-const _after = r'(?![\w]|[.\-]\d)';
+// A separator between digits: nothing; or up to three spaces; or one dot,
+// dash, slash or en dash (U+2013) with up to two spaces either side
+// (" - ", " / ").
+const _s = r'(?:[  ]{0,2}[.\-/–][  ]{0,2}|[  ]{1,3})?';
+
+// Not glued to a word, a `+`, or a digit run joined by a dot, dash, slash
+// or en dash (versions, IDs, dates), on either side; nor followed by `:`
+// and a digit (a date and time such as 07/08/2025 12:30).
+const _before = r'(?<![\w+]|\d[.\-/–])';
+const _after = r'(?![\w]|[.\-/–:]\d)';
 
 // URL-encoded plus (%2B). It needs no word boundary before it, so
 // tel%3A%2B61... in a URL is caught too.
@@ -128,8 +133,8 @@ final List<RegExp> _patterns = [
   // read as numbers; a bare 13xxxx is not read either. Not followed by more
   // spaced digits, so amounts such as 130 000 000 are not read either.
   RegExp(
-    '${_before}13(?: {1,2}\\d\\d {0,2}\\d\\d|\\d\\d {1,2}\\d\\d|\\d {1,2}\\d{3})'
-    '$_after(?! {1,3}\\d)',
+    '${_before}13(?:$_sp{1,2}\\d\\d$_sp{0,2}\\d\\d|\\d\\d$_sp{1,2}\\d\\d|'
+    '\\d$_sp{1,2}\\d{3})$_after(?!$_sp{1,3}\\d)',
   ),
 ];
 

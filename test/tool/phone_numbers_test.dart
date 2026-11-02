@@ -26,17 +26,39 @@ final _free = _n(['18', '00 ', '123 ', '456']);
 final _short13 = arbitrary13Number;
 final _d13 = arbitrary13Number.replaceAll(' ', '');
 
+// A failing expect prints its values to the CI log, so tests only ever hand
+// expect masked numbers (maskNumber), counts and booleans.
+
+/// The real numbers in [line], masked.
 List<String> _found(String line) =>
-    findRealAuPhoneNumbers(line).map((h) => h.national).toList();
+    findRealAuPhoneNumbers(line).map((h) => maskNumber(h.national)).toList();
+
+/// Expects exactly [nationals] (national digits, in order) as the real
+/// numbers in [line]. Compares in full; reports masked only.
+void _expectFound(String line, List<String> nationals, {String? why}) {
+  final got = findRealAuPhoneNumbers(line).map((h) => h.national).toList();
+  final masked = [
+    maskNumber(line),
+    if (why != null) maskNumber(why),
+  ].join('; ');
+  expect(got.length, nationals.length, reason: masked);
+  expect(
+    got.join(',') == nationals.join(','),
+    isTrue,
+    reason:
+        '$masked: found ${got.map(maskNumber).toList()}, '
+        'want ${nationals.map(maskNumber).toList()}',
+  );
+}
 
 void main() {
   group('finds real numbers', () {
     test('mobiles with any separator', () {
       for (final sep in ['', ' ', '.', '-']) {
         final s = _n(['04', '12', sep, '345', sep, '678']);
-        expect(_found('call $s now'), [_mobileTight], reason: 'sep "$sep"');
+        _expectFound('call $s now', [_mobileTight], why: 'sep "$sep"');
       }
-      expect(_found(_n(['0412', ' 345', '678'])), [_mobileTight]);
+      _expectFound(_n(['0412', ' 345', '678']), [_mobileTight]);
     });
 
     test('E.164 and bare 61 forms map to the national number', () {
@@ -47,19 +69,19 @@ void main() {
         _n(['+61', ' (0)', '412 ', '345 ', '678']),
         _n(['61', '412', '345', '678']),
       ]) {
-        expect(_found('"$s"'), [_mobileTight], reason: s);
+        _expectFound('"$s"', [_mobileTight], why: s);
       }
-      expect(_found(_n(['+61', ' 2 ', '9876 ', '5432'])), [
+      _expectFound(_n(['+61', ' 2 ', '9876 ', '5432']), [
         _n(['02', '9876', '5432']),
       ]);
     });
 
     test('geographic numbers in 02 03 07 08, with or without brackets', () {
-      expect(_found(_geo), [
+      _expectFound(_geo, [
         _n(['02', '9876', '5432']),
       ]);
       for (final a in ['03', '07', '08']) {
-        expect(_found(_n([a, ' 9876', ' 5432'])), [
+        _expectFound(_n([a, ' 9876', ' 5432']), [
           _n([a, '9876', '5432']),
         ]);
         expect(_found(_n([a, '.9876', '.5432'])), hasLength(1));
@@ -67,14 +89,14 @@ void main() {
     });
 
     test('1300, 1800 and 13 numbers', () {
-      expect(_found(_local), [
+      _expectFound(_local, [
         _n(['1300', '123456']),
       ]);
-      expect(_found(_free), [
+      _expectFound(_free, [
         _n(['1800', '123456']),
       ]);
-      expect(_found(_short13), [_d13]);
-      expect(_found('13 ${_d13.substring(2)}'), [_d13]);
+      _expectFound(_short13, [_d13]);
+      _expectFound('13 ${_d13.substring(2)}', [_d13]);
     });
 
     test('several numbers on one line, and the kind of each', () {
@@ -119,8 +141,8 @@ void main() {
         '+61 2 5550 1234',
         '61370109999',
       ]) {
-        expect(_found(s), isEmpty, reason: s);
-        expect(findAuPhoneNumbers(s), hasLength(1), reason: s);
+        expect(_found(s), isEmpty, reason: maskNumber(s));
+        expect(findAuPhoneNumbers(s), hasLength(1), reason: maskNumber(s));
       }
     });
 
@@ -132,7 +154,7 @@ void main() {
         '+61 491 579 455',
         '0491-578-888',
       ]) {
-        expect(_found(s), isEmpty, reason: s);
+        expect(_found(s), isEmpty, reason: maskNumber(s));
       }
     });
 
@@ -144,7 +166,7 @@ void main() {
         '1300 975 707',
         '1300 975 711',
       ]) {
-        expect(_found(s), isEmpty, reason: s);
+        expect(_found(s), isEmpty, reason: maskNumber(s));
       }
     });
 
@@ -163,7 +185,7 @@ void main() {
         _n(['0011 ', '61 ', '412 ', '345 ', '678']),
         _n(['00', '61 ', '(0)', '412 ', '345 ', '678']),
       ]) {
-        expect(_found(s), [_mobileTight], reason: s);
+        _expectFound(s, [_mobileTight], why: s);
       }
       expect(_found('0061 491 570 006'), isEmpty, reason: 'ACMA, 00 form');
     });
@@ -175,10 +197,32 @@ void main() {
         _n(['0412', ' . ', '345', ' . ', '678']),
         _n(['+61 ', '412', ' - ', '345', ' - ', '678']),
       ]) {
-        expect(_found(s), [_mobileTight], reason: s);
+        _expectFound(s, [_mobileTight], why: s);
       }
       expect(_found(_n(['(02)', '  9876', '  5432'])), hasLength(1));
       expect(_found(_n(['1800', ' - ', '123', ' - ', '456'])), hasLength(1));
+    });
+
+    test('slash, no-break space and en dash separators', () {
+      const nbsp = ' ', enDash = '–';
+      for (final sep in ['/', ' / ', nbsp, '$nbsp$nbsp', enDash, ' $enDash ']) {
+        _expectFound(_n(['0412', sep, '345', sep, '678']), [
+          _mobileTight,
+        ], why: 'separator U+${sep.codeUnits.map((c) => c.toRadixString(16))}');
+      }
+      _expectFound(_n(['03', '/', '9876', '/', '5432']), [
+        _n(['03', '9876', '5432']),
+      ]);
+      _expectFound(_n(['+61', nbsp, '412', nbsp, '345', nbsp, '678']), [
+        _mobileTight,
+      ]);
+      _expectFound(
+        _n(['13', nbsp, _d13.substring(2, 4), nbsp, _d13.substring(4)]),
+        [_d13],
+      );
+      for (final s in ['07/08/2025 12:30', '02/03/2026', '1.2/3.4']) {
+        expect(findAuPhoneNumbers(s), isEmpty, reason: maskNumber(s));
+      }
     });
 
     test('URL-encoded plus, with or without a tel: prefix', () {
@@ -187,7 +231,7 @@ void main() {
         _n(['tel%3A', '%2B', '61', '412345678']),
         _n(['%2b', '61', '412345678']),
       ]) {
-        expect(_found(s), [_mobileTight], reason: s);
+        _expectFound(s, [_mobileTight], why: s);
       }
       final h = findRealAuPhoneNumbers(
         _n(['tel%3A', '%2B', '61', '412345678']),
@@ -197,15 +241,15 @@ void main() {
 
     test('13x xxx, and still no dates or amounts', () {
       final head = _d13.substring(0, 3), tail = _d13.substring(3);
-      expect(_found('$head $tail'), [_d13]);
-      expect(_found('$head  $tail'), [_d13]);
+      _expectFound('$head $tail', [_d13]);
+      _expectFound('$head  $tail', [_d13]);
       for (final s in [
         '13-05-26',
         '$head-$tail',
         '130 000 000',
         '13 000 000',
       ]) {
-        expect(findAuPhoneNumbers(s), isEmpty, reason: s);
+        expect(findAuPhoneNumbers(s), isEmpty, reason: maskNumber(s));
       }
     });
   });
@@ -213,7 +257,7 @@ void main() {
   group('ignores what is not a phone number', () {
     test('emergency and short codes', () {
       for (final s in ['000', '112', '106', 'dial 000 now', '*121#']) {
-        expect(findAuPhoneNumbers(s), isEmpty, reason: s);
+        expect(findAuPhoneNumbers(s), isEmpty, reason: maskNumber(s));
       }
     });
 
@@ -231,7 +275,7 @@ void main() {
         '130526',
         'sha256:9f8e7d6c5b4a',
       ]) {
-        expect(findAuPhoneNumbers(s), isEmpty, reason: s);
+        expect(findAuPhoneNumbers(s), isEmpty, reason: maskNumber(s));
       }
     });
   });
@@ -252,7 +296,7 @@ void main() {
     test('a hit masks itself', () {
       final h = findRealAuPhoneNumbers('x $_mobile y').single;
       expect(h.masked, '04xx xxx 678');
-      expect(h.text, _mobile);
+      expect(h.text == _mobile, isTrue);
     });
   });
 
@@ -336,8 +380,9 @@ void main() {
           ),
         );
         expect(r.stdout, isNot(contains('b.png')));
-        expect(r.stdout, isNot(contains(_mobile)));
-        expect(r.stdout, isNot(contains(_mobileTight)));
+        final out = r.stdout as String;
+        expect(out.contains(_mobile), isFalse);
+        expect(out.contains(_mobileTight), isFalse);
       },
     );
 
@@ -366,7 +411,7 @@ void main() {
           '(02) xxxx x432',
         ),
       );
-      expect(out, isNot(contains(_geo)));
+      expect(out.contains(_geo), isFalse);
     });
 
     test('checks a text file such as a pull request description', () async {

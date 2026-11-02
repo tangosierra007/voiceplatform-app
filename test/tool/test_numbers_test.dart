@@ -21,7 +21,13 @@ const _forbidden = [
   'assets/',
   'docs/store/',
   'test/goldens/',
+  'android/',
+  'integration_test/',
 ];
+
+bool _isForbidden(String path) =>
+    _forbidden.any(path.startsWith) ||
+    RegExp(r'^packages/[^/]+/lib/').hasMatch(path); // packages' own code
 
 final _digits = arbitrary13Number.replaceAll(' ', '');
 
@@ -59,10 +65,10 @@ void main() {
     expect(list.allows('test/calls/x_test.dart', _digits), isFalse);
   });
 
-  test('never in lib/, tool/mock_server/, assets/, docs/store/ or goldens', () {
+  test('never in code, mock server, assets, store, goldens (_forbidden)', () {
     final bad = <String>[];
     for (final path in _tracked()) {
-      if (!_forbidden.any(path.startsWith)) continue;
+      if (!_isForbidden(path)) continue;
       final f = File(path);
       if (!f.existsSync()) continue;
       final bytes = f.readAsBytesSync();

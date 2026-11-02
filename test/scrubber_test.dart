@@ -335,7 +335,7 @@ void main() {
     test('phone numbers with up to three separator characters', () {
       expect(s.scrub('call 555 - 123 - 4567 now'), 'call [n] now');
       expect(s.scrub('call 03 - 5550 - 0123'), 'call [n]');
-      expect(s.scrub('call +61 / 3 / 9555 / 0123'), 'call [n]');
+      expect(s.scrub('call +61 / 3 / 5550 / 0123'), 'call [n]');
     });
   });
 
