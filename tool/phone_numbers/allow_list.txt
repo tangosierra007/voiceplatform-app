@@ -1,0 +1,8 @@
+# Allow-list for tool/check_phone_numbers.dart: digit strings that look like
+# an Australian phone number but are not one. Keep it small.
+#
+#   <path or commit:<short hash>>  <16 hex key>  # <reason, required>
+#
+# Get the key with `dart tool/check_phone_numbers.dart --print-allow-keys` on
+# your own machine. Never add a real phone number here: replace it with an
+# ACMA fictional number (README.md, Test data).
