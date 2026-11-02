@@ -196,6 +196,49 @@ void main() {
       );
     }
 
+    // APP6: the one rule reads +61, 61, 0061 and 0011 61 on the keypad too,
+    // and the phone's dialler gets the three digits.
+    for (final (typed, dial) in [
+      ('+61000', '000'),
+      ('61000', '000'),
+      ('+610000', '000'),
+      ('0061000', '000'),
+      ('001161000', '000'),
+      ('+61112', '112'),
+      ('0011610112', '112'),
+      ('61106', '106'),
+      ('0061106', '106'),
+    ]) {
+      testWidgets('$typed goes to AppEmergency and dials $dial, never the '
+          'engine', (tester) async {
+        usePhone(tester);
+        final e = await _engine();
+        final phone = FakePhone();
+        final mic = FakeMic(granted: false);
+        await tester.pumpWidget(
+          await appUnderTest(engine: e, mic: mic, phone: phone),
+        );
+        await _settle(tester);
+        if (typed.startsWith('+')) {
+          await tester.longPress(find.bySemanticsLabel(RegExp('^0, hold')));
+          await tester.pump();
+        }
+        await _type(tester, typed.replaceAll('+', ''));
+        await tester.tap(find.bySemanticsLabel('Call'));
+        await _settle(tester);
+        expect(
+          find.text("Emergency calls use your phone's own network"),
+          findsOneWidget,
+        );
+        expect(e.called, isEmpty);
+        expect(mic.requests, 0);
+        await tester.tap(find.text('Call $dial now'));
+        await _settle(tester);
+        expect(phone.dialled, [dial]);
+        expect(e.called, isEmpty);
+      });
+    }
+
     testWidgets('status chip opens the status sheet', (tester) async {
       usePhone(tester);
       await tester.pumpWidget(await appUnderTest(engine: await _engine()));
@@ -552,10 +595,13 @@ void main() {
   });
 
   group('Transfer', () {
-    Future<(SpyEngine, String)> toTransfer(WidgetTester tester) async {
+    Future<(SpyEngine, String)> toTransfer(
+      WidgetTester tester, {
+      FakePhone? phone,
+    }) async {
       usePhone(tester);
       final e = await _engine();
-      await tester.pumpWidget(await appUnderTest(engine: e));
+      await tester.pumpWidget(await appUnderTest(engine: e, phone: phone));
       await _settle(tester);
       late String id;
       await tester.runAsync(() async {
@@ -672,61 +718,34 @@ void main() {
       await _end(tester);
     });
 
-    test('transferEmergency reads every written form', () {
-      for (final (typed, want) in [
-        ('000', '000'),
-        ('+61 000', '000'),
-        ('+61000', '000'),
-        ('61 000', '000'),
-        ('+61 0 000', '000'),
-        ('0000', '000'),
-        ('+61 112', '112'),
-        ('61 112', '112'),
-        ('+61 106', '106'),
-        ('61 106', '106'),
-        ('0061 000', '000'),
-        ('0061000', '000'),
-        ('0011 61 000', '000'),
-        ('0011 61 112', '112'),
-        ('0061 112', '112'),
-        ('0061 106', '106'),
-        ('0011 61 106', '106'),
-      ]) {
-        expect(transferEmergency(typed), want, reason: typed);
-      }
-      for (final typed in [
-        '101',
-        '0491 570 737',
-        '+61 491 570 737',
-        '0011 61 3 5550 1200',
-        '61',
-      ]) {
-        expect(transferEmergency(typed), isNull, reason: typed);
-      }
-    });
-
-    // WS6 on #44: the +61 and bare 61 forms got past the refusal.
-    for (final n in [
-      '+61 000',
-      '61 000',
-      '+61 0 000',
-      '+61 112',
-      '61 112',
-      '+61 106',
-      '61 106',
-      '0061 000',
-      '0061000',
-      '0011 61 000',
-      '0061 112',
-      '0011 61 112',
-      '0061 106',
-      '0011 61 106',
+    // WS6 on #44, then APP6: every written form of 000, 112 and 106 is
+    // refused by the one shared rule, and the phone's dialler gets the three
+    // digits.
+    for (final (n, dial) in [
+      ('+61 000', '000'),
+      ('61 000', '000'),
+      ('+61 0 000', '000'),
+      ('+61 (0) 000', '000'),
+      ('+61 112', '112'),
+      ('61 112', '112'),
+      ('+61 (0) 112', '112'),
+      ('+61 106', '106'),
+      ('61 106', '106'),
+      ('+61 0 106', '106'),
+      ('0061 000', '000'),
+      ('0061000', '000'),
+      ('0011 61 000', '000'),
+      ('0061 112', '112'),
+      ('0011 61 112', '112'),
+      ('0061 106', '106'),
+      ('0011 61 106', '106'),
     ]) {
       for (final action in ['Send now', 'Talk first']) {
         testWidgets('$n, $action: refused; the phone\'s dialler sheet', (
           tester,
         ) async {
-          final (e, id) = await toTransfer(tester);
+          final phone = FakePhone();
+          final (e, id) = await toTransfer(tester, phone: phone);
           await tester.enterText(find.byType(TextField), n);
           await tester.pump();
           await tester.tap(find.bySemanticsLabel(RegExp('^Transfer to ')));
@@ -740,6 +759,11 @@ void main() {
             findsOneWidget,
           );
           expect(e.activeCalls.single.state, CallState.heldByMe);
+          await tester.tap(find.text('Call $dial now'));
+          await _settle(tester);
+          expect(phone.dialled, [dial]);
+          expect(e.transferredTo[id], isNull);
+          expect(e.called, hasLength(0));
           await _end(tester);
         });
       }

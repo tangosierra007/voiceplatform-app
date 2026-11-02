@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:call_engine/call_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,9 +11,13 @@ import '../theme/app_theme.dart';
 import '../widgets/vp_controls.dart';
 import '../widgets/vp_icons.dart';
 
-/// The number to put in the phone's dialler: the three emergency digits, with
-/// any trunk-access 0 dropped (0000 dials 000).
+/// The number to put in the phone's dialler: the three emergency digits,
+/// however they were written ("+61 000", "0011 61 112" and "0000" dial 000
+/// and 112; [emergencyNumberIn], the one rule). Anything the rule doesn't
+/// match keeps its digits, with a trunk 0 dropped.
 String emergencyDialString(String dialled) {
+  final known = emergencyNumberIn(dialled);
+  if (known != null) return known;
   final digits = dialled.replaceAll(RegExp(r'[^0-9]'), '');
   return digits.length == 4 && digits.startsWith('0')
       ? digits.substring(1)

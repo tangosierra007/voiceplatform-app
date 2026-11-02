@@ -212,13 +212,34 @@ final class EmergencyNumberUseDialler extends CallEngineError {
     : super('Emergency numbers use the phone dialler');
 }
 
-/// True for 000, 112 and 106, alone or with a leading 0, after removing
-/// spaces and punctuation. The one emergency rule for the UI and the engine.
-bool isEmergencyNumber(String dialled) {
-  final digits = dialled.replaceAll(RegExp(r'[^0-9]'), '');
-  const numbers = {'000', '112', '106', '0000', '0112', '0106'};
-  return numbers.contains(digits);
+/// The emergency number [dialled] dials, as the phone's dialler takes it
+/// ("000", "112" or "106"); null when it is not one. The one emergency rule
+/// for the UI and the engine; [isEmergencyNumber] is this != null.
+///
+/// Only the digits count, so spaces, punctuation, a "+", "*" or "#" don't
+/// hide one. Then, in order, each at most once:
+/// - an international prefix in front of 61: "0011 61" (from Australia) or
+///   "00 61";
+/// - the country code 61: "+61 000", "61 000", "0061 000";
+/// - a trunk 0: "0000", "+61 0 112", "+61 (0) 106".
+/// What is left must be exactly 000, 112 or 106: "0001", "1120" and
+/// "+61 0001" are not emergency numbers.
+String? emergencyNumberIn(String dialled) {
+  var d = dialled.replaceAll(RegExp(r'[^0-9]'), '');
+  for (final idd in ['0011', '00']) {
+    if (d.startsWith('${idd}61')) {
+      d = d.substring(idd.length);
+      break;
+    }
+  }
+  if (d.startsWith('61')) d = d.substring(2);
+  if (d.length == 4 && d.startsWith('0')) d = d.substring(1);
+  return const {'000', '112', '106'}.contains(d) ? d : null;
 }
+
+/// True for 000, 112 and 106 however they are written: alone, with a trunk
+/// 0, or after +61, 61, 0061 or 0011 61 ([emergencyNumberIn]).
+bool isEmergencyNumber(String dialled) => emergencyNumberIn(dialled) != null;
 
 final class NotRegistered extends CallEngineError {
   const NotRegistered() : super('Not registered');

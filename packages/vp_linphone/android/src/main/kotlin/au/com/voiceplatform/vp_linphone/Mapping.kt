@@ -170,14 +170,27 @@ object Mapping {
 object Rules {
     /**
      * A mirror of the contract's `isEmergencyNumber()` (packages/call_engine),
-     * which stays the one rule: only the digits count. The Dart engine refuses
-     * these before anything reaches Kotlin; this copy is the native backstop so
-     * no INVITE can ever be sent for one. Both are tested against the same
-     * table, `test/fixtures/emergency_numbers.txt`.
+     * which stays the one rule: only the digits count; then a 0011 or 00 in
+     * front of 61, the country code 61 and a trunk 0 are read past, each at
+     * most once, and what is left must be exactly 000, 112 or 106. The Dart
+     * engine refuses these before anything reaches Kotlin; this copy is the
+     * native backstop so no INVITE can ever be sent for one. Both are tested
+     * against the same table, `test/fixtures/emergency_numbers.txt`.
      */
-    fun isEmergency(number: String): Boolean = number.filter { it in '0'..'9' } in EMERGENCY
+    fun isEmergency(number: String): Boolean {
+        var d = number.filter { it in '0'..'9' }
+        for (idd in listOf("0011", "00")) {
+            if (d.startsWith("${idd}61")) {
+                d = d.substring(idd.length)
+                break
+            }
+        }
+        if (d.startsWith("61")) d = d.substring(2)
+        if (d.length == 4 && d.startsWith("0")) d = d.substring(1)
+        return d in EMERGENCY
+    }
 
-    private val EMERGENCY = setOf("000", "112", "106", "0000", "0112", "0106")
+    private val EMERGENCY = setOf("000", "112", "106")
 
     /**
      * The checks call() makes, in order, as an error code or null to place the

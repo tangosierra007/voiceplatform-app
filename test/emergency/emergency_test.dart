@@ -68,12 +68,24 @@ Future<(FakePhone, _SpyEngine)> _pump(
 void main() {
   setUpAll(loadAppFonts);
 
-  test('the dial string drops a trunk 0 and punctuation', () {
-    expect(emergencyDialString('000'), '000');
-    expect(emergencyDialString('0000'), '000');
-    expect(emergencyDialString('0112'), '112');
-    expect(emergencyDialString('(1) 0-6'), '106');
-    expect(emergencyDialString('1 1 2'), '112');
+  test('the dial string: the three digits, however they were written', () {
+    for (final (typed, want) in [
+      ('000', '000'),
+      ('0000', '000'),
+      ('0112', '112'),
+      ('(1) 0-6', '106'),
+      ('1 1 2', '112'),
+      ('+61 000', '000'),
+      ('+61000', '000'),
+      ('61 000', '000'),
+      ('+61 0 000', '000'),
+      ('+61 (0) 112', '112'),
+      ('0061 112', '112'),
+      ('0011 61 106', '106'),
+      ('0011 61 0 106', '106'),
+    ]) {
+      expect(emergencyDialString(typed), want, reason: typed);
+    }
   });
 
   for (final n in [
@@ -86,6 +98,11 @@ void main() {
     '1 1 2',
     '(000)',
     '000.',
+    '+61 000',
+    '61 112',
+    '0061 106',
+    '0011 61 000',
+    '+61 (0) 112',
   ]) {
     testWidgets('$n opens AppEmergency and never reaches the engine', (
       tester,
@@ -138,16 +155,20 @@ void main() {
     expect(engine.asked, isEmpty);
   });
 
-  testWidgets('any other number goes to the engine', (tester) async {
-    final (_, engine) = await _pump(tester, '0491 570 737');
-    await tester.tap(find.text('dial 0491 570 737'));
-    await tester.pumpAndSettle();
-    expect(engine.asked, ['0491 570 737']);
-    expect(
-      find.text("Emergency calls use your phone's own network"),
-      findsNothing,
-    );
-  });
+  for (final n in ['0491 570 737', '0006', '1120', '+61 0001', '0011 000']) {
+    testWidgets('$n is not an emergency number: it goes to the engine', (
+      tester,
+    ) async {
+      final (_, engine) = await _pump(tester, n);
+      await tester.tap(find.text('dial $n'));
+      await tester.pumpAndSettle();
+      expect(engine.asked, [n]);
+      expect(
+        find.text("Emergency calls use your phone's own network"),
+        findsNothing,
+      );
+    });
+  }
 
   testWidgets('the sheet: labelled controls, 200 % text fits', (tester) async {
     final h = tester.ensureSemantics();

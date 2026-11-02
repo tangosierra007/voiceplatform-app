@@ -75,10 +75,10 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   Future<void> _sendNow() async {
     final target = _target;
     if (target == null) return;
-    // Emergency numbers go to the phone's dialler, never through a transfer.
-    final emergency = transferEmergency(target);
-    if (emergency != null) {
-      await showEmergencySheet(context, emergency);
+    // Emergency numbers, however written, go to the phone's dialler, never
+    // through a transfer (isEmergencyNumber, the one rule).
+    if (isEmergencyNumber(target)) {
+      await showEmergencySheet(context, target);
       return;
     }
     try {
@@ -101,13 +101,8 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   Future<void> _talkFirst() async {
     final target = _target;
     if (target == null) return;
-    // Emergency numbers, however written: the phone's dialler, never a
-    // consult call (startCall's own check doesn't see "+61 000").
-    final emergency = transferEmergency(target);
-    if (emergency != null) {
-      await showEmergencySheet(context, emergency);
-      return;
-    }
+    // startCall opens the phone's dialler for an emergency number, however
+    // written, and returns null: never a consult call.
     final consult = await startCall(context, ref, target);
     if (consult != null) {
       ref.read(callBookProvider.notifier).startTransfer(widget.callId, consult);
@@ -397,35 +392,6 @@ String? typedTransferTarget(String query, List<Colleague> colleagues) {
         (c.mobile != null && nationalDigits(c.mobile!) == national),
   );
   return someone ? null : dialDigits(raw);
-}
-
-/// The emergency number in a transfer target, however it was written
-/// ("000", "+61 000", "61 112", "+61 0 106", "0011 61 000", "0061 112"), as the phone's dialler takes
-/// it; null when it is not one. The shared [isEmergencyNumber] only drops
-/// what isn't a digit, so "+61000" gets past it (WS6 on #44): a transfer
-/// also reads the national form and a bare "61" country code. Whether the
-/// keypad should do the same is a question for TJ (APP6).
-String? transferEmergency(String target) {
-  var d = dialDigits(target).replaceAll('+', '');
-  // An international prefix in front of the country code: "0011 61" (from
-  // Australia) or "00 61".
-  for (final idd in ['0011', '00']) {
-    if (d.startsWith('${idd}61')) {
-      d = d.substring(idd.length);
-      break;
-    }
-  }
-  for (final c in [
-    d,
-    nationalDigits(target),
-    if (d.startsWith('61')) d.substring(2),
-  ]) {
-    if (c.isNotEmpty && isEmergencyNumber(c)) {
-      // "0000" (a trunk 0 in front) is 000 to the dialler.
-      return c.length == 4 && c.startsWith('0') ? c.substring(1) : c;
-    }
-  }
-  return null;
 }
 
 /// "Transfer to 101", "Transfer to 0491 570 737": the typed target.
