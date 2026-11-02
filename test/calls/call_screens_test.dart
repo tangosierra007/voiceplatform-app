@@ -672,6 +672,59 @@ void main() {
       await _end(tester);
     });
 
+    test('transferEmergency reads every written form', () {
+      for (final (typed, want) in [
+        ('000', '000'),
+        ('+61 000', '000'),
+        ('+61000', '000'),
+        ('61 000', '000'),
+        ('+61 0 000', '000'),
+        ('0000', '000'),
+        ('+61 112', '112'),
+        ('61 112', '112'),
+        ('+61 106', '106'),
+        ('61 106', '106'),
+      ]) {
+        expect(transferEmergency(typed), want, reason: typed);
+      }
+      for (final typed in ['101', '0491 570 737', '+61 491 570 737', '61']) {
+        expect(transferEmergency(typed), isNull, reason: typed);
+      }
+    });
+
+    // WS6 on #44: the +61 and bare 61 forms got past the refusal.
+    for (final n in [
+      '+61 000',
+      '61 000',
+      '+61 0 000',
+      '+61 112',
+      '61 112',
+      '+61 106',
+      '61 106',
+    ]) {
+      for (final action in ['Send now', 'Talk first']) {
+        testWidgets('$n, $action: refused; the phone\'s dialler sheet', (
+          tester,
+        ) async {
+          final (e, id) = await toTransfer(tester);
+          await tester.enterText(find.byType(TextField), n);
+          await tester.pump();
+          await tester.tap(find.bySemanticsLabel(RegExp('^Transfer to ')));
+          await tester.pump();
+          await tester.tap(find.text(action));
+          await _settle(tester);
+          expect(e.transferredTo[id], isNull);
+          expect(e.called, hasLength(0), reason: 'no consult call');
+          expect(
+            find.text("Emergency calls use your phone's own network"),
+            findsOneWidget,
+          );
+          expect(e.activeCalls.single.state, CallState.heldByMe);
+          await _end(tester);
+        });
+      }
+    }
+
     for (final n in ['000', '112', '106']) {
       testWidgets('$n: refused as a transfer; the phone\'s dialler sheet', (
         tester,
