@@ -30,7 +30,7 @@ Never use a real person's, business's or public service's number, your own inclu
 
 - It's an arbitrary shape, never a real business's or public service's number.
 - It's defined in one place. The call_engine package can't import the app's `test/` folder, so it keeps a copy in `packages/call_engine/test/support/test_numbers.dart`, and `test/tool/test_numbers_test.dart` checks the two match.
-- It's data only, for formatting, normalisation and matching. It is never dialled, never sent anywhere (the mock server included), and never in screenshots, goldens or store material. The same test fails if it appears in `lib/`, `tool/mock_server/`, `assets/`, `docs/store/` or `test/goldens/`.
+- It's data only, for formatting, normalisation and matching. It is never dialled, never sent anywhere (the mock server included), and never in screenshots, goldens or store material. The same test fails if it appears in `lib/`, `packages/*/lib/`, `tool/mock_server/`, `assets/`, `docs/store/`, `test/goldens/`, `android/` or `integration_test/`.
 - The phone number check allows it in those two files only. Any other 13 number, anywhere, fails CI.
 
 1300 and 1800 tests use ACMA's fictional numbers.
