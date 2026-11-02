@@ -282,6 +282,29 @@ object LinphoneEngine {
         override fun supports(encryption: MediaEncryption) = c.isMediaEncryptionSupported(encryption)
     }
 
+    /** [AccountSetup.Params] on liblinphone's AccountParams. */
+    private class LinphoneAccountParams(
+        private val p: org.linphone.core.AccountParams,
+        private val factory: Factory,
+    ) : AccountSetup.Params {
+        override fun setIdentity(uri: String, displayName: String) {
+            val a = factory.createAddress(uri) ?: throw VpFlutterError("invalid_state", "Bad account identity")
+            a.setDisplayName(displayName)
+            check(p.setIdentityAddress(a) == 0) { "Identity refused" }
+        }
+
+        override fun setServer(uri: String) {
+            val a = factory.createAddress(uri) ?: throw VpFlutterError("invalid_state", "Bad outbound proxy")
+            check(p.setServerAddress(a) == 0) { "Outbound proxy refused" }
+        }
+
+        override var outboundProxyEnabled: Boolean
+            get() = p.isOutboundProxyEnabled
+            set(value) {
+                p.isOutboundProxyEnabled = value
+            }
+    }
+
     private class CallEncryption(private val p: CallParams) : MediaSecurity.Settings {
         override var encryption: MediaEncryption
             get() = p.mediaEncryption
@@ -328,6 +351,8 @@ object LinphoneEngine {
         pushParam: String?,
     ) {
         requireCore()
+        val plan = AccountSetup.plan(authUsername, sipDomain, outboundProxy)
+            ?: throw VpFlutterError("invalid_state", "Bad SIP account: identity or outbound proxy")
         val uuid = Rules.instanceUuid(instanceId)
             ?: throw VpFlutterError("invalid_state", "instanceId must be urn:uuid:<uuid>")
         lastInstance = uuid
@@ -348,22 +373,10 @@ object LinphoneEngine {
         scrubber.addSecret(password)
         scrubber.addSecret(pushPrid)
         val factory = Factory.instance()
-        val identity = factory.createAddress("sip:$authUsername@$sipDomain")
-            ?: throw VpFlutterError("invalid_state", "Bad account identity")
-        identity.setDisplayName(displayName)
-        // Request-URI is the tenant domain; every request goes through the
-        // outbound proxy over TLS with plain sip: URIs (decision 70).
-        val server = factory.createAddress("sip:$sipDomain;transport=tls")
-            ?: throw VpFlutterError("invalid_state", "Bad SIP domain")
-        val proxy = factory.createAddress(outboundProxy)
-            ?: throw VpFlutterError("invalid_state", "Bad outbound proxy")
-        if (proxy.transport != TransportType.Tls) proxy.setTransport(TransportType.Tls)
-        proxy.setUriParam("lr", null)
-
+        // The identity is the tenant domain; REGISTER and every other request
+        // go to the outbound proxy over TLS with plain sip: URIs (decision 70).
         val params = c.createAccountParams()
-        params.setIdentityAddress(identity)
-        params.setServerAddress(server)
-        params.setRoutesAddresses(arrayOf(proxy))
+        AccountSetup.apply(plan, displayName, LinphoneAccountParams(params, factory))
         params.isRegisterEnabled = true
         params.expires = expiresSeconds
         params.isPublishEnabled = false

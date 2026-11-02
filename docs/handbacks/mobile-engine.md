@@ -233,6 +233,50 @@ Branch `feat/srtp-mandatory` from `main` at `cbce9a0`, rebased onto `main` at `e
 2. **Store copy:** `docs/store/listing.md` now says every call is encrypted (TLS signalling, SRTP audio). **Do not merge** until main #125 has merged; merged first, every app call fails with 488.
 3. **Guardrail APP13** is already in main's `docs/guardrails.md` (decision 146). Proposed to mobile-lead: its test column cite the app's `MediaSecurityTest` (`packages/vp_linphone/android/src/test/.../MediaSecurityTest.kt`) by name, in place of "encryption-mandatory test". Status: partial until the handset test.
 
+## REGISTER through the outbound proxy `fix/engine-outbound-proxy`
+
+Branch `fix/engine-outbound-proxy` from `main` at `fe96871`. One PR, not merged.
+
+### The fault (A53, 2 Nov)
+
+The engine never registered. The A53's TLS log (a local, never-committed debug build) showed the channel opened to `peer_cname=<tenant SIP domain>` and `Register refresher [503] reason [io error]`: the tenant's SIP domain has no A, SRV or NAPTR record, so nothing was sent. The edge is the outbound proxy the API returns.
+
+Cause: `register()` set the account's server address to `sip:<domain>;transport=tls` and put the outbound proxy in the account's routes. In liblinphone 5.5.39, `SalRegisterOp::sendRegister()` calls `setRouteAddress(<server address>)`, which replaces the op's routes, so REGISTER always goes to the server address. The account's routes apply only to other requests (calls, SUBSCRIBE). The UI said "No internet on this phone" because the failure is 503 `IOError`, which `registrationFailure` maps to `network`.
+
+### What's built
+
+- `AccountSetup.kt` (pure, JVM-tested) turns a `SipAccount` into the account's addresses:
+  - identity `sip:<authUsername>@<domain>` (From, To, and the REGISTER Request-URI's domain);
+  - server address = the outbound proxy, always `sip:<host>[:<port>];transport=tls` (`sips:` or another transport is rewritten; the port is kept);
+  - outbound proxy enabled, so liblinphone makes the server address the single route for every other request (it adds `lr` itself). The TLS connection and its name check go to the proxy's host.
+  - An unusable user, domain or outbound proxy is refused (`invalid_state`) before the old account is dropped, never sent to the domain.
+- `register()` applies the plan to liblinphone's `AccountParams` (server address before outbound proxy, as liblinphone requires). The RFC 8599 push parameters stay on the same account params, so they ride on the REGISTER's Contact through the proxy. Calls and SUBSCRIBE use the account's route: the proxy.
+- TLS verification and the CN check are unchanged.
+
+### Tests
+
+- `AccountSetupTest` (7):
+  - REGISTER's server address is the proxy, never the tenant domain; the outbound proxy is enabled;
+  - the identity stays the tenant domain with the display name;
+  - the server is set before the outbound proxy is enabled;
+  - the TLS host is the proxy's;
+  - the proxy is always plain `sip:` over TLS, whatever form the API gives;
+  - an unusable account is refused;
+  - source checks: the plan is checked before the old account is dropped; no server address from the domain and no `setRoutesAddresses`; verification stays on.
+- Kotlin JVM 93 pass; `flutter analyze` and `flutter test` (root and packages): see the PR.
+
+### Handset test for TJ
+
+1. Sign in on the A53: the app registers (an app contact in `opensips.location`, from the edge's address), and the status isn't "No internet".
+2. A call each way through the edge.
+3. A push wake: the contact keeps the RFC 8599 params, and the call rings.
+
+### Open
+
+1. **"No internet on this phone"** for a 503 `IOError` from the SIP side is misleading when the phone is online. Proposed follow-up: report it as `unknown` (or a new SIP-unreachable reason) once the network monitor says the phone is online. That needs a contract change, which is for mobile-lead.
+2. **The edge's TLS "unexpected eof" from 144.6.221.62 at 12:02:49** isn't explained by this fix: the engine never opened TLS to the edge. Not chased; check it only if this build doesn't register.
+3. `fix/engine-system-roots` (Android's system store) is held: trust was not the cause.
+
 ## 3.2 (Android) `feat/telecom-fcm`
 
 Branch `feat/telecom-fcm` from `main` at `89752d3`. One PR, not merged.
