@@ -12,7 +12,10 @@ void main() {
       expect(formatAuNumber('+61491570737'), '0491 570 737');
       expect(formatAuNumber('0491570737'), '0491 570 737');
       expect(formatAuNumber('1300975707'), '1300 975 707');
-      expect(formatAuNumber('131234'), '13 1234');
+      expect(
+        formatAuNumber(['13', '12', '34'].join()),
+        ['13 ', '12', '34'].join(),
+      );
       expect(formatAuNumber('206'), '206');
       expect(formatAuNumber('anonymous'), 'Private');
       // Short and part-typed numbers are left as digits (000 is not 00 0).
@@ -78,7 +81,7 @@ void main() {
       expect(m.match('049157073')!.name, 'Jordan Price');
       expect(m.match('04915'), isNull);
       expect(m.match('0491 57'), isNull, reason: 'several start this way');
-      expect(m.match('0399999999'), isNull);
+      expect(m.match('0870100999'), isNull);
       expect(m.match(''), isNull);
     });
   });

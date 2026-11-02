@@ -23,7 +23,7 @@ Finder _tab(String label) =>
 
 const _book = [
   PhoneContact('Kim Bell', ['03 5550 1142']),
-  PhoneContact('Dr Rowan Achebe', ['0491 579 999', '+61 3 5550 1777']),
+  PhoneContact('Dr Rowan Achebe', ['0491 573 770', '+61 3 5550 1777']),
 ];
 
 void main() {
@@ -130,8 +130,8 @@ void main() {
       'Bell',
       'Rowan',
       'Achebe',
-      '0491579999',
-      '0491 579 999',
+      '0491573770',
+      '0491 573 770',
       '55501777',
     ];
     for (final r in api.requests) {

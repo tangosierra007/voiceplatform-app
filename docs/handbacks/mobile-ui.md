@@ -65,7 +65,7 @@ TJ, 27 Oct: `tokens.json` and the sample data win over the artboard. The build f
 
 - **Badge colour, AppKeypad and AppKeypadDark.** The artboards draw #b42318 with white. The app uses the nearest token, `danger-600` (#c62828), with `white`: 5.6:1. No new token.
 - **Dark tab bar, AppKeypadDark.** The artboard draws #1a1613. The app uses the nearest token, `charcoal-850` (#1f1b18), also the dark theme's navigation colour. The light tab bar stays `surface`. No new token.
-- **AppRecents.** "03 9555 0142" is not an ACMA fictional number. It is now 03 5550 1142, which is unused in the sample data.
+- **AppRecents.** The artboard's 03 number is not an ACMA fictional number. It is now 03 5550 1142, which is unused in the sample data.
 - **AppContacts.** The header shows the real free count, counted from presence, never a fixed "4". With the fixture's presence that is 3 (Mia, Priya, Tom on mobile).
 - **AppContacts.** Extension 201 shows "Reception", as in the sample data, not "Jess Rowe".
 - **AppMessages.** The filter chip says "Service mobile", not "Service".

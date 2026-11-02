@@ -17,7 +17,7 @@ String nationalDigits(String s) {
   return d.replaceAll('+', '');
 }
 
-/// `03 5550 1987`, `0491 570 737`, `1300 975 707`, `13 1234`; extensions,
+/// `03 5550 1987`, `0491 570 737`, `1300 975 707`, `13 xx xx`; extensions,
 /// short numbers (000) and part-typed numbers as their digits.
 String formatAuNumber(String raw) {
   if (raw == 'anonymous') return 'Private';

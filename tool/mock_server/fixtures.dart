@@ -321,7 +321,7 @@ const greetings = [
 ];
 
 /// AppRecents, newest first. 03 5550 1142 replaces the artboard's
-/// 03 9555 0142, which is not an ACMA fictional number (TJ, 27 Oct).
+/// 03 number, which is not an ACMA fictional number (TJ, 27 Oct).
 final history = [
   {
     'id': 'h1',
