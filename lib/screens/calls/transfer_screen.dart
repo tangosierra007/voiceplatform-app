@@ -400,13 +400,21 @@ String? typedTransferTarget(String query, List<Colleague> colleagues) {
 }
 
 /// The emergency number in a transfer target, however it was written
-/// ("000", "+61 000", "61 112", "+61 0 106"), as the phone's dialler takes
+/// ("000", "+61 000", "61 112", "+61 0 106", "0011 61 000", "0061 112"), as the phone's dialler takes
 /// it; null when it is not one. The shared [isEmergencyNumber] only drops
 /// what isn't a digit, so "+61000" gets past it (WS6 on #44): a transfer
 /// also reads the national form and a bare "61" country code. Whether the
 /// keypad should do the same is a question for TJ (APP6).
 String? transferEmergency(String target) {
-  final d = dialDigits(target).replaceAll('+', '');
+  var d = dialDigits(target).replaceAll('+', '');
+  // An international prefix in front of the country code: "0011 61" (from
+  // Australia) or "00 61".
+  for (final idd in ['0011', '00']) {
+    if (d.startsWith('${idd}61')) {
+      d = d.substring(idd.length);
+      break;
+    }
+  }
   for (final c in [
     d,
     nationalDigits(target),
