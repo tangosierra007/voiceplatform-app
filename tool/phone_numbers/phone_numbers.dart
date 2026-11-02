@@ -113,8 +113,10 @@ final List<RegExp> _patterns = [
   RegExp('$_before\\(?0[2-478]\\)?(?:$_s\\d){8}$_after'),
   // E.164 and bare 61: +61 4xx xxx xxx, +61 (0)2 xxxx xxxx, 61 3..., and
   // +61 1300/1800 forms.
-  RegExp('$_before\\+?61$_s(?:\\(0\\)$_s)?'
-      '(?:[2-478](?:$_s\\d){8}|1[38]00(?:$_s\\d){6})$_after'),
+  RegExp(
+    '$_before\\+?61$_s(?:\\(0\\)$_s)?'
+    '(?:[2-478](?:$_s\\d){8}|1[38]00(?:$_s\\d){6})$_after',
+  ),
   // 1300 xxx xxx and 1800 xxx xxx.
   RegExp('${_before}1[38]00(?:$_s\\d){6}$_after'),
   // 13 xx xx. Spaces only, so dates such as 13-05-26 are not read as numbers.
@@ -130,13 +132,15 @@ List<PhoneHit> findAuPhoneNumbers(String line) {
       final national = _national(m[0]!);
       final kind = _kind(national);
       if (kind == null) continue;
-      hits.add(PhoneHit(
-        start: m.start,
-        end: m.end,
-        text: m[0]!,
-        national: national,
-        kind: kind,
-      ));
+      hits.add(
+        PhoneHit(
+          start: m.start,
+          end: m.end,
+          text: m[0]!,
+          national: national,
+          kind: kind,
+        ),
+      );
     }
   }
   hits.sort((a, b) => a.start.compareTo(b.start));

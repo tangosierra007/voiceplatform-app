@@ -46,23 +46,36 @@ void main() {
       ]) {
         expect(_found('"$s"'), [_mobileTight], reason: s);
       }
-      expect(_found(_n(['+61', ' 2 ', '9876 ', '5432'])),
-          [_n(['02', '9876', '5432'])]);
+      expect(_found(_n(['+61', ' 2 ', '9876 ', '5432'])), [
+        _n(['02', '9876', '5432']),
+      ]);
     });
 
     test('geographic numbers in 02 03 07 08, with or without brackets', () {
-      expect(_found(_geo), [_n(['02', '9876', '5432'])]);
+      expect(_found(_geo), [
+        _n(['02', '9876', '5432']),
+      ]);
       for (final a in ['03', '07', '08']) {
-        expect(_found(_n([a, ' 9876', ' 5432'])), [_n([a, '9876', '5432'])]);
+        expect(_found(_n([a, ' 9876', ' 5432'])), [
+          _n([a, '9876', '5432']),
+        ]);
         expect(_found(_n([a, '.9876', '.5432'])), hasLength(1));
       }
     });
 
     test('1300, 1800 and 13 numbers', () {
-      expect(_found(_local), [_n(['1300', '123456'])]);
-      expect(_found(_free), [_n(['1800', '123456'])]);
-      expect(_found(_short13), [_n(['13', '2468'])]);
-      expect(_found(_n(['13', ' 2468'])), [_n(['13', '2468'])]);
+      expect(_found(_local), [
+        _n(['1300', '123456']),
+      ]);
+      expect(_found(_free), [
+        _n(['1800', '123456']),
+      ]);
+      expect(_found(_short13), [
+        _n(['13', '2468']),
+      ]);
+      expect(_found(_n(['13', ' 2468'])), [
+        _n(['13', '2468']),
+      ]);
     });
 
     test('several numbers on one line, and the kind of each', () {
@@ -76,15 +89,24 @@ void main() {
 
     test('just outside the ACMA lists', () {
       expect(_found(_n(['0491 ', '570 ', '007'])), hasLength(1));
-      expect(_found(_n(['0491 ', '579 ', '999'])), hasLength(1),
-          reason: 'ACMA lists single mobiles, not a 570 006 to 579 999 range');
+      expect(
+        _found(_n(['0491 ', '579 ', '999'])),
+        hasLength(1),
+        reason: 'ACMA lists single mobiles, not a 570 006 to 579 999 range',
+      );
       expect(_found(_n(['02 ', '5551 ', '0000'])), hasLength(1));
-      expect(_found(_n(['04 ', '5550 ', '1234'])), hasLength(1),
-          reason: '5550 blocks are geographic only');
+      expect(
+        _found(_n(['04 ', '5550 ', '1234'])),
+        hasLength(1),
+        reason: '5550 blocks are geographic only',
+      );
       expect(_found(_n(['1800 ', '975 ', '712'])), hasLength(1));
       expect(_found(_n(['1300 ', '160 ', '401'])), hasLength(1));
-      expect(_found(_n(['1900 ', '654 ', '321'])), isEmpty,
-          reason: '190x numbers are not scanned');
+      expect(
+        _found(_n(['1900 ', '654 ', '321'])),
+        isEmpty,
+        reason: '190x numbers are not scanned',
+      );
     });
   });
 
@@ -164,8 +186,10 @@ void main() {
     test('keeps the prefix, the last three digits and the spacing', () {
       expect(maskNumber(_mobile), '04xx xxx 678');
       expect(maskNumber(_mobileTight), '04xxxxx678');
-      expect(maskNumber(_n(['+61', ' 412 ', '345 ', '678'])),
-          '+61 4xx xxx 678');
+      expect(
+        maskNumber(_n(['+61', ' 412 ', '345 ', '678'])),
+        '+61 4xx xxx 678',
+      );
       expect(maskNumber(_geo), '(02) xxxx x432');
       expect(maskNumber(_free), '1800 xxx 456');
       expect(maskNumber(_short13), '13 xx 68');
@@ -189,10 +213,11 @@ void main() {
 
     test('every entry needs a reason and a 16 hex key', () {
       final key = allowKey(_mobileTight);
-      expect(() => AllowList.parse('lib/a.dart $key\n'),
-          throwsFormatException);
-      expect(() => AllowList.parse('lib/a.dart abc # why\n'),
-          throwsFormatException);
+      expect(() => AllowList.parse('lib/a.dart $key\n'), throwsFormatException);
+      expect(
+        () => AllowList.parse('lib/a.dart abc # why\n'),
+        throwsFormatException,
+      );
     });
 
     test('the repo allow-list parses', () {
@@ -205,23 +230,19 @@ void main() {
     final tool = File('tool/check_phone_numbers.dart').absolute.path;
     late Directory repo;
 
-    Future<ProcessResult> git(List<String> args) => Process.run(
-          'git',
-          [
-            '-c', 'user.name=test', //
-            '-c', 'user.email=test@users.noreply.github.com',
-            '-c', 'commit.gpgsign=false',
-            ...args,
-          ],
-          workingDirectory: repo.path,
-        );
+    Future<ProcessResult> git(List<String> args) => Process.run('git', [
+      '-c', 'user.name=test', //
+      '-c', 'user.email=test@users.noreply.github.com',
+      '-c', 'commit.gpgsign=false',
+      ...args,
+    ], workingDirectory: repo.path);
 
     Future<ProcessResult> check(List<String> args) => Process.run(
-          'dart',
-          [tool, ...args],
-          workingDirectory: repo.path,
-          runInShell: Platform.isWindows,
-        );
+      'dart',
+      [tool, ...args],
+      workingDirectory: repo.path,
+      runInShell: Platform.isWindows,
+    );
 
     setUp(() async {
       repo = await Directory.systemTemp.createTemp('phone_numbers_');
@@ -238,20 +259,27 @@ void main() {
       expect(r.exitCode, 0, reason: '${r.stdout}');
     });
 
-    test('fails with file, line and the masked number, never in full',
-        () async {
-      File('${repo.path}/a.md')
-          .writeAsStringSync('fine\nCall $_mobile today.\n');
-      File('${repo.path}/b.png').writeAsStringSync('$_mobile\n');
-      await git(['add', '.']);
-      final r = await check([]);
-      expect(r.exitCode, 1);
-      expect(r.stdout, contains('a.md:2: real Australian mobile number '
-          '04xx xxx 678'));
-      expect(r.stdout, isNot(contains('b.png')));
-      expect(r.stdout, isNot(contains(_mobile)));
-      expect(r.stdout, isNot(contains(_mobileTight)));
-    });
+    test(
+      'fails with file, line and the masked number, never in full',
+      () async {
+        File('${repo.path}/a.md')
+            .writeAsStringSync('fine\nCall $_mobile today.\n');
+        File('${repo.path}/b.png').writeAsStringSync('$_mobile\n');
+        await git(['add', '.']);
+        final r = await check([]);
+        expect(r.exitCode, 1);
+        expect(
+          r.stdout,
+          contains(
+            'a.md:2: real Australian mobile number '
+            '04xx xxx 678',
+          ),
+        );
+        expect(r.stdout, isNot(contains('b.png')));
+        expect(r.stdout, isNot(contains(_mobile)));
+        expect(r.stdout, isNot(contains(_mobileTight)));
+      },
+    );
 
     test('checks commit messages and added lines in a range', () async {
       File('${repo.path}/a.md').writeAsStringSync('ok\n');
@@ -271,8 +299,13 @@ void main() {
       final out = r.stdout as String;
       expect(out, contains('message:1: real Australian 1800 number'));
       expect(out, contains('message:3: real Australian mobile number'));
-      expect(out, contains(' a.md:2: real Australian geographic number '
-          '(02) xxxx x432'));
+      expect(
+        out,
+        contains(
+          ' a.md:2: real Australian geographic number '
+          '(02) xxxx x432',
+        ),
+      );
       expect(out, isNot(contains(_geo)));
     });
 
@@ -287,7 +320,8 @@ void main() {
     test('an allow-list entry silences its hit', () async {
       File('${repo.path}/a.md').writeAsStringSync('$_mobile\n');
       File('${repo.path}/allow.txt').writeAsStringSync(
-          'a.md ${allowKey(_mobileTight)} # a made-up build ID\n');
+        'a.md ${allowKey(_mobileTight)} # a made-up build ID\n',
+      );
       await git(['add', 'a.md']);
       final r = await check(['--allow', 'allow.txt']);
       expect(r.exitCode, 0, reason: '${r.stdout}');

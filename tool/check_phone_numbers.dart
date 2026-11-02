@@ -97,25 +97,32 @@ Future<void> main(List<String> args) async {
       .toList();
   final gha = Platform.environment['GITHUB_ACTIONS'] == 'true';
   for (final f in kept) {
-    final msg = 'real Australian ${f.hit.kind.label} number '
+    final msg =
+        'real Australian ${f.hit.kind.label} number '
         '${f.hit.masked} (not an ACMA fictional number)';
     stdout.writeln('${f.where}:${f.line}: $msg');
     if (printKeys) {
-      stdout.writeln('    allow-list key: ${f.path ?? f.where} '
-          '${allowKey(f.hit.national)}');
+      stdout.writeln(
+        '    allow-list key: ${f.path ?? f.where} '
+        '${allowKey(f.hit.national)}',
+      );
     }
     if (gha) {
       final file = f.where == f.path ? 'file=${f.path},line=${f.line},' : '';
-      stdout.writeln('::error ${file}title=Real phone number::'
-          '${f.where}:${f.line}: $msg');
+      stdout.writeln(
+        '::error ${file}title=Real phone number::'
+        '${f.where}:${f.line}: $msg',
+      );
     }
   }
   if (kept.isEmpty) {
     stdout.writeln('No real Australian phone numbers found.');
     exit(0);
   }
-  stdout.writeln('\n${kept.length} real Australian phone number(s) found. '
-      'Use ACMA fictional numbers (see README.md, Test data).');
+  stdout.writeln(
+    '\n${kept.length} real Australian phone number(s) found. '
+    'Use ACMA fictional numbers (see README.md, Test data).',
+  );
   exit(1);
 }
 
@@ -150,8 +157,9 @@ Future<List<_Finding>> _scanCommits(String range) async {
     final lines = rec.substring(sep + 1).split('\n');
     for (var n = 0; n < lines.length; n++) {
       for (final h in findRealAuPhoneNumbers(lines[n])) {
-        out.add(_Finding('commit $hash message', n + 1, h,
-            path: 'commit:$hash'));
+        out.add(
+          _Finding('commit $hash message', n + 1, h, path: 'commit:$hash'),
+        );
       }
     }
   }
@@ -185,8 +193,11 @@ Future<List<_Finding>> _scanCommits(String range) async {
 }
 
 Future<String> _git(List<String> args) async {
-  final r = await Process.run('git', args,
-      stdoutEncoding: const Utf8Codec(allowMalformed: true));
+  final r = await Process.run(
+    'git',
+    args,
+    stdoutEncoding: const Utf8Codec(allowMalformed: true),
+  );
   if (r.exitCode != 0) {
     stderr.writeln('git ${args.first} failed: ${r.stderr}');
     exit(2);
@@ -196,8 +207,10 @@ Future<String> _git(List<String> args) async {
 
 Never _usage(String? error) {
   if (error != null) stderr.writeln('check_phone_numbers: $error');
-  stderr.writeln('usage: dart tool/check_phone_numbers.dart [--tree] '
-      '[--commits <range>]... [--text <label>=<file>]... [--allow <file>] '
-      '[--print-allow-keys]');
+  stderr.writeln(
+    'usage: dart tool/check_phone_numbers.dart [--tree] '
+    '[--commits <range>]... [--text <label>=<file>]... [--allow <file>] '
+    '[--print-allow-keys]',
+  );
   exit(error == null ? 0 : 2);
 }
