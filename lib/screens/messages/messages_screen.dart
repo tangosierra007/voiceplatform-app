@@ -433,9 +433,7 @@ class _WideThreadRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // The name with the line pill beside it, both in full when there's
-              // room. With little room (large text, a narrow list) the pill
-              // moves under the name rather than squeezing it.
+              // The name and the line pill (see the Wrap below).
               LayoutBuilder(
                 builder: (context, box) {
                   final name = Text(
@@ -451,28 +449,19 @@ class _WideThreadRow extends StatelessWidget {
                     ),
                   );
                   final pill = VpOffPill(t.lineLabel);
-                  if (box.maxWidth < 200) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        name,
-                        const SizedBox(height: 2),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: box.maxWidth),
-                          child: pill,
-                        ),
-                      ],
-                    );
-                  }
-                  return Row(
+                  // The pill beside the name when both fit in full, else on
+                  // the next line; neither is ever cut short for the other.
+                  return Wrap(
+                    spacing: 6,
+                    runSpacing: 2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Flexible(child: name),
-                      const SizedBox(width: 6),
                       ConstrainedBox(
-                        // The name keeps at least 80 dp.
-                        constraints: BoxConstraints(
-                          maxWidth: box.maxWidth - 86,
-                        ),
+                        constraints: BoxConstraints(maxWidth: box.maxWidth),
+                        child: name,
+                      ),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: box.maxWidth),
                         child: pill,
                       ),
                     ],
