@@ -33,6 +33,13 @@ class ContactsTabNotifier extends Notifier<ContactsTab> {
   void set(ContactsTab t) => state = t;
 }
 
+/// Each Contacts tab's place in its list, kept (in memory, for this run of
+/// the app) across fold, unfold and rotation, a contact's page and back,
+/// and a call: the screen's lists are rebuilt each time.
+final contactsListPlacesProvider = Provider<Map<ContactsTab, double>>(
+  (ref) => {},
+);
+
 /// Whether READ_CONTACTS has been asked for. Asked once, the first time the
 /// Phone contacts tab opens; never from anywhere else.
 const contactsAskedKey = 'contacts.permission_asked';
@@ -74,6 +81,9 @@ class PhoneAccessNotifier extends Notifier<PhoneAccess> {
 class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key});
 
+  /// The tab's list (Colleagues, Teams or Phone contacts), in either layout.
+  static const listKey = ValueKey('contacts.list');
+
   @override
   ConsumerState<ContactsScreen> createState() => _ContactsScreenState();
 }
@@ -94,6 +104,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   @override
   void dispose() {
     _query.dispose();
+    _list?.dispose();
     super.dispose();
   }
 
@@ -151,20 +162,112 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     onChanged: _select,
   );
 
-  /// FoldContacts: the list (280 to 360 dp) and the colleague picked beside
-  /// it; until one is picked, the first colleague other than you. The
-  /// Teams and Phone contacts tabs keep the colleague beside them; a team
-  /// member picked from Teams shows too.
-  Widget _wide(BuildContext context, ContactsTab tab, String q) {
+  /// The phone's contacts, when the person allowed them.
+  List<PhoneContact> _phoneContacts() =>
+      ref.watch(phoneAccessProvider) == PhoneAccess.granted
+      ? ref.watch(phoneContactsProvider).value ?? const <PhoneContact>[]
+      : const <PhoneContact>[];
+
+  /// The latest pick shows: a colleague, or a phone contact.
+  void _pickColleague(String? id) {
+    ref.read(pickedPhoneContactProvider.notifier).pick(null);
+    ref.read(pickedColleagueProvider.notifier).pick(id);
+  }
+
+  void _pickPhone(String? key) {
+    ref.read(pickedColleagueProvider.notifier).pick(null);
+    ref.read(pickedPhoneContactProvider.notifier).pick(key);
+  }
+
+  /// Back to the list (the phone's page), with nothing picked.
+  void _back() {
+    ref.read(pickedColleagueProvider.notifier).pick(null);
+    ref.read(pickedPhoneContactProvider.notifier).pick(null);
+  }
+
+  /// Each tab's place in its list ([contactsListPlacesProvider]): the lists
+  /// are new each time, so each new one starts where that tab's last one
+  /// was.
+  Map<ContactsTab, double> get _offsets => ref.read(contactsListPlacesProvider);
+  ScrollController? _list;
+  (ContactsTab, bool)? _listFor;
+
+  ScrollController _listController(ContactsTab tab, {required bool wide}) {
+    if (_list == null || _listFor != (tab, wide)) {
+      _dropList();
+      final next = ScrollController(initialScrollOffset: _offsets[tab] ?? 0);
+      next.addListener(() {
+        if (next.hasClients) _offsets[tab] = next.offset;
+      });
+      _list = next;
+      _listFor = (tab, wide);
+    }
+    return _list!;
+  }
+
+  /// The list has gone (a contact's page shows): the next one gets a new
+  /// controller, from the place kept.
+  void _dropList() {
+    final old = _list;
+    _list = null;
+    _listFor = null;
+    if (old != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
+  }
+
+  Widget _tabList(
+    ContactsTab tab,
+    String q, {
+    required bool wide,
+    _Shown? shown,
+  }) {
+    final controller = _listController(tab, wide: wide);
+    return switch (tab) {
+      ContactsTab.colleagues => _Colleagues(
+        query: q,
+        controller: controller,
+        shownId: shown?.colleague?.userId,
+        onPick: _pickColleague,
+      ),
+      ContactsTab.teams => _Teams(
+        query: q,
+        controller: controller,
+        shownId: shown?.colleague?.userId,
+        onPick: _pickColleague,
+      ),
+      ContactsTab.phone => _PhoneContacts(
+        query: q,
+        controller: controller,
+        shownKey: shown?.phone?.key,
+        onPick: _pickPhone,
+      ),
+    };
+  }
+
+  /// FoldContacts: the list (280 to 360 dp) and the contact picked beside
+  /// it; until one is picked, the first colleague other than you. A team
+  /// member picked from Teams shows, and a phone contact picked from Phone
+  /// contacts (TJ, 3 Nov); otherwise each tab keeps the last one beside it.
+  Widget _wide(
+    BuildContext context,
+    ContactsTab tab,
+    String q,
+    Colleague? colleague,
+    PhoneContact? phone,
+  ) {
     final me = ref.watch(meProvider).value;
     final colleagues = ref.watch(colleaguesProvider).value ?? const [];
-    final picked = ref.watch(pickedColleagueProvider);
-    final shown =
-        colleagues.where((x) => x.userId == picked).firstOrNull ??
-        colleagues
-            .where((x) => x.extensionValue != me?.extensionValue)
-            .firstOrNull;
-    void pick(String id) => ref.read(pickedColleagueProvider.notifier).pick(id);
+    final shown = phone != null
+        ? _Shown(phone: phone)
+        : _Shown(
+            colleague:
+                colleague ??
+                colleagues
+                    .where((x) => x.extensionValue != me?.extensionValue)
+                    .firstOrNull,
+          );
+    final col = shown.colleague;
     return SafeArea(
       bottom: false,
       child: ListDetailLayout(
@@ -175,26 +278,22 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               title: 'Contacts',
               children: [_search(context, me?.tenantName), _tabs(tab)],
             ),
-            Expanded(
-              child: switch (tab) {
-                ContactsTab.colleagues => _Colleagues(
-                  query: q,
-                  shownId: shown?.userId,
-                  onPick: pick,
-                ),
-                ContactsTab.teams => _Teams(
-                  query: q,
-                  shownId: shown?.userId,
-                  onPick: pick,
-                ),
-                ContactsTab.phone => _PhoneContacts(query: q),
-              },
-            ),
+            Expanded(child: _tabList(tab, q, wide: true, shown: shown)),
           ],
         ),
-        detail: shown == null
+        detail: phone != null
+            ? PhoneContactDetail(
+                key: ValueKey('phone:${phone.key}'),
+                contact: phone,
+                wide: true,
+              )
+            : col == null
             ? const SizedBox.shrink()
-            : ColleagueDetail(key: ValueKey(shown.userId), colleague: shown),
+            : ColleagueDetail(
+                key: ValueKey(col.userId),
+                colleague: col,
+                wide: true,
+              ),
       ),
     );
   }
@@ -204,7 +303,45 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     final tab = ref.watch(contactsTabProvider);
     final me = ref.watch(meProvider).value;
     final q = _query.text.trim();
-    if (isListDetailLayout(context)) return _wide(context, tab, q);
+    final colleagueId = ref.watch(pickedColleagueProvider);
+    final phoneKey = ref.watch(pickedPhoneContactProvider);
+    final colleague = colleagueId == null
+        ? null
+        : (ref.watch(colleaguesProvider).value ?? const <Colleague>[])
+              .where((x) => x.userId == colleagueId)
+              .firstOrNull;
+    final phone = phoneKey == null
+        ? null
+        : _phoneContacts().where((p) => p.key == phoneKey).firstOrNull;
+    if (isListDetailLayout(context)) {
+      return _wide(context, tab, q, colleague, phone);
+    }
+    if (colleague != null || phone != null) {
+      // The contact's own page on the phone (TJ, 3 Nov): the same detail,
+      // full screen; folding with one picked lands here. Back returns to
+      // the list where it was.
+      _dropList();
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _back();
+        },
+        child: SafeArea(
+          bottom: false,
+          child: phone != null
+              ? PhoneContactDetail(
+                  key: ValueKey('phone:${phone.key}'),
+                  contact: phone,
+                  onBack: _back,
+                )
+              : ColleagueDetail(
+                  key: ValueKey(colleague!.userId),
+                  colleague: colleague,
+                  onBack: _back,
+                ),
+        ),
+      );
+    }
     return SafeArea(
       bottom: false,
       child: Column(
@@ -223,17 +360,18 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               ],
             ),
           ),
-          Expanded(
-            child: switch (tab) {
-              ContactsTab.colleagues => _Colleagues(query: q),
-              ContactsTab.teams => _Teams(query: q),
-              ContactsTab.phone => _PhoneContacts(query: q),
-            },
-          ),
+          Expanded(child: _tabList(tab, q, wide: false)),
         ],
       ),
     );
   }
+}
+
+/// The contact beside the list: a colleague or a phone contact.
+class _Shown {
+  const _Shown({this.colleague, this.phone});
+  final Colleague? colleague;
+  final PhoneContact? phone;
 }
 
 bool _matches(String q, List<String?> fields) {
@@ -252,10 +390,17 @@ bool _matches(String q, List<String?> fields) {
 bool _isFree(Presence p) => presenceLook(p) == PresenceLook.free;
 
 class _Colleagues extends ConsumerWidget {
-  const _Colleagues({required this.query, this.shownId, this.onPick});
+  const _Colleagues({
+    required this.query,
+    required this.controller,
+    this.shownId,
+    this.onPick,
+  });
   final String query;
+  final ScrollController controller;
 
-  /// Beside the detail: the colleague shown, and a tap to show another.
+  /// Beside the detail, the colleague shown; a tap shows another there, or
+  /// on the phone opens their page.
   final String? shownId;
   final ValueChanged<String>? onPick;
 
@@ -288,6 +433,8 @@ class _Colleagues extends ConsumerWidget {
         } catch (_) {}
       },
       child: ListView(
+        key: ContactsScreen.listKey,
+        controller: controller,
         padding: EdgeInsets.zero,
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
@@ -329,8 +476,8 @@ class ColleagueRow extends ConsumerWidget {
   /// Beside the detail (FoldContacts): the one shown, on the brand tint.
   final bool selected;
 
-  /// Beside the detail, a tap shows the colleague; the phone has no page
-  /// for one, so there the row only calls.
+  /// A tap shows the colleague: beside the list when it splits, else their
+  /// own page (TJ, 3 Nov). The call button calls their extension.
   final VoidCallback? onTap;
 
   @override
@@ -430,8 +577,14 @@ class _PresenceLineState extends ConsumerState<_PresenceLine> {
 }
 
 class _Teams extends ConsumerStatefulWidget {
-  const _Teams({required this.query, this.shownId, this.onPick});
+  const _Teams({
+    required this.query,
+    required this.controller,
+    this.shownId,
+    this.onPick,
+  });
   final String query;
+  final ScrollController controller;
   final String? shownId;
   final ValueChanged<String>? onPick;
 
@@ -464,6 +617,8 @@ class _TeamsState extends ConsumerState<_Teams> {
         } catch (_) {}
       },
       child: ListView(
+        key: ContactsScreen.listKey,
+        controller: widget.controller,
         padding: EdgeInsets.zero,
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
@@ -570,8 +725,19 @@ class _TeamsState extends ConsumerState<_Teams> {
 }
 
 class _PhoneContacts extends ConsumerWidget {
-  const _PhoneContacts({required this.query});
+  const _PhoneContacts({
+    required this.query,
+    required this.controller,
+    this.shownKey,
+    this.onPick,
+  });
   final String query;
+  final ScrollController controller;
+
+  /// The phone contact shown beside the list; a tap on one shows it there,
+  /// or on the phone opens its page. The shared phonebook's rows only call.
+  final String? shownKey;
+  final ValueChanged<String>? onPick;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -594,6 +760,8 @@ class _PhoneContacts extends ConsumerWidget {
         if (_matches(query, [p.name, ...p.numbers])) p,
     ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return ListView(
+      key: ContactsScreen.listKey,
+      controller: controller,
       padding: EdgeInsets.zero,
       children: [
         if (sharedShown.isNotEmpty) ...[
@@ -624,6 +792,8 @@ class _PhoneContacts extends ConsumerWidget {
                   name: p.name,
                   detail: formatAuNumber(p.numbers.first),
                   number: p.numbers.first,
+                  selected: p.key == shownKey,
+                  onTap: onPick == null ? null : () => onPick!(p.key),
                 ),
             ],
           ),
@@ -663,16 +833,29 @@ class _NumberRow extends ConsumerWidget {
     required this.detail,
     required this.number,
     this.inTheApps = false,
+    this.selected = false,
+    this.onTap,
   });
   final String name;
   final String detail;
   final String number;
   final bool inTheApps;
 
+  /// Beside the detail: the one shown, on the brand tint.
+  final bool selected;
+
+  /// A phone contact: shows it (beside the list, or its own page).
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.vp;
+    // Large text: the tag goes under the name rather than squeeze it.
+    final tagBelow =
+        inTheApps && MediaQuery.textScalerOf(context).scale(10) > 13;
     return VpRow(
+      onTap: onTap,
+      background: selected ? c.brandTint : null,
       children: [
         Container(
           width: 40,
@@ -701,10 +884,19 @@ class _NumberRow extends ConsumerWidget {
           child: Semantics(
             label: '$name, $detail${inTheApps ? ', in the apps' : ''}',
             excludeSemantics: true,
-            child: VpRowText(title: name, subtitle: detail),
+            child: tagBelow
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      VpRowText(title: name, subtitle: detail),
+                      const SizedBox(height: 4),
+                      _Tag('In the apps'),
+                    ],
+                  )
+                : VpRowText(title: name, subtitle: detail),
           ),
         ),
-        if (inTheApps) ...[
+        if (inTheApps && !tagBelow) ...[
           const SizedBox(width: 8),
           ExcludeSemantics(child: _Tag('In the apps')),
         ],

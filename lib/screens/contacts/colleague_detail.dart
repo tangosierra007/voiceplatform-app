@@ -12,12 +12,20 @@ import '../../shell/list_detail.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
+import '../../widgets/vp_list.dart';
 import '../recents/recent_detail.dart';
 
-/// The colleague picked in Contacts (by user id), shown beside the list from
-/// about 680 dp ([listDetailMinWidth]; FoldContacts). Kept across fold and
-/// unfold; until one is picked, the first colleague other than you shows.
+/// The colleague picked in Contacts (by user id): beside the list from
+/// about 680 dp ([listDetailMinWidth]; FoldContacts), else on its own page.
+/// Kept across fold and unfold; until one is picked, the wide layout shows
+/// the first colleague other than you and the phone layout shows the list.
 final pickedColleagueProvider = NotifierProvider<PickedNotifier, String?>(
+  PickedNotifier.new,
+);
+
+/// The phone contact picked in Contacts ([PhoneContact.key]), shown as a
+/// colleague is. Picking one clears the other: the latest pick shows.
+final pickedPhoneContactProvider = NotifierProvider<PickedNotifier, String?>(
   PickedNotifier.new,
 );
 
@@ -34,15 +42,36 @@ String colleagueCallLine(HistoryEntry h, String first) {
   return callWithLine(h);
 }
 
+/// "mobile" as a field's label: "Mobile". Labels that start with a
+/// capital already ("iPhone", "ISDN") stay as they are.
+String labelTitle(String label) {
+  if (label.isEmpty) return label;
+  final a = label[0];
+  final b = label.length > 1 ? label[1] : '';
+  if (a.toLowerCase() != a || (b.toUpperCase() == b && b.toLowerCase() != b)) {
+    return label;
+  }
+  return a.toUpperCase() + label.substring(1);
+}
+
 /// FoldContacts' detail: the colleague with presence, Call (extension) and
 /// Call mobile, their contact details and teams, and the calls with them.
+/// Beside the list when [wide]; on the phone, the same detail as its own
+/// page with Back ([onBack]).
 ///
 /// What the app can't show yet, never as a dead button:
 /// - "Send to voicemail" (A5: no direct-to-voicemail call in the contract);
 /// - an email address (not in the directory's colleague).
 class ColleagueDetail extends ConsumerWidget {
-  const ColleagueDetail({super.key, required this.colleague});
+  const ColleagueDetail({
+    super.key,
+    required this.colleague,
+    this.wide = false,
+    this.onBack,
+  });
   final Colleague colleague;
+  final bool wide;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -74,116 +103,194 @@ class ColleagueDetail extends ConsumerWidget {
       if (mobile != null) ...?ref.watch(callsWithProvider(mobile)).value,
     ]..sort((a, b) => b.at.compareTo(a.at));
 
-    final children = <Widget>[
-      Row(
-        children: [
-          ExcludeSemantics(
-            child: _BigAvatar(name: col.name, presence: p),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Semantics(
-                  header: true,
-                  child: VpWordSafeText(
-                    col.name,
-                    maxLines: 2,
-                    style: vpTitle(context, size: 24, line: 30),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  sub,
-                  style: VpType.body.copyWith(fontSize: 14, color: c.textMuted),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          IntrinsicWidth(
-            child: VpButton(
+    return DetailFrame(
+      wide: wide,
+      backLabel: 'Back to Contacts',
+      onBack: onBack,
+      children: [
+        _Header(name: col.name, sub: sub, presence: p),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _CallButton(
               label: 'Call ${col.extensionValue}',
-              icon: VpIcon.phone,
-              large: false,
-              height: VpSize.controlHeight + 8,
               onPressed: () => dialNumber(context, ref, col.extensionValue),
             ),
-          ),
-          if (mobile != null)
-            IntrinsicWidth(
-              child: VpButton(
+            if (mobile != null)
+              _CallButton(
                 label: 'Call mobile',
-                kind: VpButtonKind.outline,
-                large: false,
-                height: VpSize.controlHeight + 8,
+                primary: false,
                 onPressed: () => dialNumber(context, ref, mobile),
               ),
-            ),
-        ],
-      ),
-      // GAP(A5): "Send to voicemail" goes here once the contract can call a
-      // colleague's voicemail without ringing them.
-      DetailCard(
-        title: 'Contact',
-        children: [
-          _Field('Extension', col.extensionValue),
-          if (mobile != null) _Field('Mobile', formatAuNumber(mobile)),
-          if (teams.isNotEmpty) _Field('Teams', teams.join(', ')),
-        ],
-      ),
-      DetailCard(
-        title: 'Calls with $first',
-        children: [
-          if (calls.isEmpty)
-            Text(
-              'No calls with $first yet.',
-              style: VpType.body.copyWith(fontSize: 13, color: c.textMuted),
-            ),
-          for (final x in calls)
-            DetailCallLine(
-              missed: historyIsMissed(x),
-              text: colleagueCallLine(x, first),
-              when: callWhen(x.at, now),
-            ),
-        ],
-      ),
-    ];
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 22, 28, 22),
-      children: [
-        for (final (i, w) in children.indexed) ...[
-          if (i > 0) const SizedBox(height: 18),
-          w,
-        ],
+          ],
+        ),
+        // GAP(A5): "Send to voicemail" goes here once the contract can call a
+        // colleague's voicemail without ringing them.
+        DetailCard(
+          title: 'Contact',
+          children: [
+            _Field('Extension', col.extensionValue),
+            if (mobile != null) _Field('Mobile', formatAuNumber(mobile)),
+            if (teams.isNotEmpty) _Field('Teams', teams.join(', ')),
+          ],
+        ),
+        DetailCard(
+          title: 'Calls with $first',
+          children: [
+            if (calls.isEmpty)
+              Text(
+                'No calls with $first yet.',
+                style: VpType.body.copyWith(fontSize: 13, color: c.textMuted),
+              ),
+            for (final x in calls)
+              DetailCallLine(
+                missed: historyIsMissed(x),
+                text: colleagueCallLine(x, first),
+                when: callWhen(x.at, now),
+              ),
+          ],
+        ),
       ],
     );
   }
 }
 
-/// A 60 px avatar on the surface with a border (FoldContacts), and the
-/// presence dot.
-class _BigAvatar extends StatelessWidget {
-  const _BigAvatar({required this.name, required this.presence});
+/// A contact from the phone's own address book, laid out as a colleague
+/// (TJ, 3 Nov): the name, Call for the first number, and every number with
+/// its label (mobile, work, home…), each one a call. Every call goes the
+/// one way ([dialNumber]), so an emergency number opens AppEmergency.
+///
+/// No "Calls with": that needs `GET /history?number=` with the contact's
+/// number, and the address book never leaves the phone (APP12).
+class PhoneContactDetail extends ConsumerWidget {
+  const PhoneContactDetail({
+    super.key,
+    required this.contact,
+    this.wide = false,
+    this.onBack,
+  });
+  final PhoneContact contact;
+  final bool wide;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = contact;
+    return DetailFrame(
+      wide: wide,
+      backLabel: 'Back to Contacts',
+      onBack: onBack,
+      children: [
+        _Header(name: p.name, sub: 'On this phone'),
+        if (p.numbers.isNotEmpty)
+          Wrap(
+            children: [
+              _CallButton(
+                label: 'Call ${p.labelAt(0)}',
+                onPressed: () => dialNumber(context, ref, p.numbers.first),
+              ),
+            ],
+          ),
+        DetailCard(
+          title: p.numbers.length == 1 ? 'Number' : 'Numbers',
+          children: [
+            for (final (i, n) in p.numbers.indexed)
+              _NumberLine(
+                label: labelTitle(p.labelAt(i)),
+                number: formatAuNumber(n),
+                onCall: () => dialNumber(context, ref, n),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// The avatar, the name (a heading) and the line under it.
+class _Header extends StatelessWidget {
+  const _Header({required this.name, required this.sub, this.presence});
   final String name;
-  final PresenceEntry presence;
+  final String sub;
+  final PresenceEntry? presence;
 
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
-    final dot = switch (presenceLook(presence.presence)) {
-      PresenceLook.free => c.statusOk,
-      PresenceLook.onCall => c.brand,
-      PresenceLook.dnd => c.statusBad,
-      PresenceLook.away => c.borderStrong,
-    };
+    return Row(
+      children: [
+        ExcludeSemantics(
+          child: _BigAvatar(name: name, presence: presence),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Semantics(
+                header: true,
+                child: VpWordSafeText(
+                  name,
+                  maxLines: 2,
+                  style: vpTitle(context, size: 24, line: 30),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                sub,
+                style: VpType.body.copyWith(fontSize: 14, color: c.textMuted),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CallButton extends StatelessWidget {
+  const _CallButton({
+    required this.label,
+    required this.onPressed,
+    this.primary = true,
+  });
+  final String label;
+  final VoidCallback onPressed;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) => IntrinsicWidth(
+    child: VpButton(
+      label: label,
+      icon: primary ? VpIcon.phone : null,
+      kind: primary ? VpButtonKind.primary : VpButtonKind.outline,
+      large: false,
+      height: VpSize.controlHeight + 8,
+      onPressed: onPressed,
+    ),
+  );
+}
+
+/// A 60 px avatar on the surface with a border (FoldContacts), and the
+/// presence dot for a colleague.
+class _BigAvatar extends StatelessWidget {
+  const _BigAvatar({required this.name, this.presence});
+  final String name;
+  final PresenceEntry? presence;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
+    final p = presence;
+    final dot = p == null
+        ? null
+        : switch (presenceLook(p.presence)) {
+            PresenceLook.free => c.statusOk,
+            PresenceLook.onCall => c.brand,
+            PresenceLook.dnd => c.statusBad,
+            PresenceLook.away => c.borderStrong,
+          };
     return SizedBox(
       width: 60,
       height: 60,
@@ -211,19 +318,20 @@ class _BigAvatar extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: dot,
-                shape: BoxShape.circle,
-                border: Border.all(color: c.canvas, width: 3),
+          if (dot != null)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: dot,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: c.canvas, width: 3),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -233,9 +341,12 @@ class _BigAvatar extends StatelessWidget {
 /// `.kv`: the label muted on the left, the value bold on the right; at
 /// large text the value goes under its label.
 class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
+  const _Field(this.label, this.value, {this.trailing});
   final String label;
   final String value;
+
+  /// A phone contact's number: its call button, at the end of the row.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -255,24 +366,73 @@ class _Field extends StatelessWidget {
         color: c.text,
       ),
     );
+    final kv = large
+        ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [l, v])
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              l,
+              const SizedBox(width: 12),
+              Expanded(child: v),
+            ],
+          );
+    final t = trailing;
     return Semantics(
       label: '$label: $value',
       excludeSemantics: true,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: large
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [l, v],
-              )
+        padding: EdgeInsets.symmetric(vertical: t == null ? 6 : 0),
+        child: t == null
+            ? kv
             : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  l,
-                  const SizedBox(width: 12),
-                  Expanded(child: v),
+                  Expanded(child: kv),
+                  const SizedBox(width: 8),
+                  t,
                 ],
               ),
+      ),
+    );
+  }
+}
+
+/// One of a phone contact's numbers: "Mobile 0491 570 156" as a [_Field],
+/// and its call button; tapping the row calls it too.
+class _NumberLine extends StatelessWidget {
+  const _NumberLine({
+    required this.label,
+    required this.number,
+    required this.onCall,
+  });
+  final String label;
+  final String number;
+  final VoidCallback onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Call $label, $number',
+      excludeSemantics: true,
+      onTap: onCall,
+      child: InkWell(
+        onTap: onCall,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: c.border)),
+          ),
+          child: _Field(
+            label,
+            number,
+            trailing: VpRoundIconButton(
+              icon: VpIcon.phone,
+              label: 'Call $label',
+              onPressed: onCall,
+            ),
+          ),
+        ),
       ),
     );
   }

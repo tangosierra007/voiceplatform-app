@@ -72,14 +72,76 @@ class PresenceNotifier extends Notifier<Map<String, PresenceEntry>> {
   }
 }
 
-/// A phone contact from the device's address book: name and numbers only,
-/// held in memory, never sent anywhere (APP12).
+/// A phone contact from the device's address book: name, numbers and each
+/// number's label (mobile, work, home…), held in memory, never sent
+/// anywhere (APP12).
 @immutable
 class PhoneContact {
-  const PhoneContact(this.name, this.numbers);
+  const PhoneContact(
+    this.name,
+    this.numbers, {
+    this.labels = const [],
+    this.id,
+  });
   final String name;
   final List<String> numbers;
+
+  /// The label of the number at the same place in [numbers] ("mobile",
+  /// "work", or the person's own); shorter when the phone gave none.
+  final List<String> labels;
+
+  /// The address book's own id for the contact, when the phone gave one.
+  final String? id;
+
+  /// Which contact is picked in Contacts (in memory only, like the rest).
+  String get key => id ?? '$name\n${numbers.join('\n')}';
+
+  /// The label of the number at [i]: the phone's, else "phone".
+  String labelAt(int i) =>
+      i < labels.length && labels[i].trim().isNotEmpty ? labels[i] : 'phone';
 }
+
+/// The labels [phoneLabelText] gives the phone's standard kinds.
+final standardPhoneLabels = {
+  for (final l in PhoneLabel.values)
+    if (l != PhoneLabel.custom) phoneLabelText(l, null),
+  'phone',
+};
+
+/// A number's label in the words the phone's own Contacts app uses; the
+/// person's own label as they wrote it (Apple's `_$!<…>!$_` markers off).
+String phoneLabelText(PhoneLabel label, String? custom) => switch (label) {
+  PhoneLabel.custom => () {
+    final own = (custom ?? '')
+        .replaceAll(r'_$!<', '')
+        .replaceAll(r'>!$_', '')
+        .trim();
+    return own.isEmpty ? 'phone' : own;
+  }(),
+  PhoneLabel.appleWatch => 'Apple Watch',
+  PhoneLabel.assistant => 'assistant',
+  PhoneLabel.callback => 'callback',
+  PhoneLabel.car => 'car',
+  PhoneLabel.companyMain => 'company main',
+  PhoneLabel.home => 'home',
+  PhoneLabel.homeFax => 'home fax',
+  PhoneLabel.iPhone => 'iPhone',
+  PhoneLabel.isdn => 'ISDN',
+  PhoneLabel.main => 'main',
+  PhoneLabel.mobile => 'mobile',
+  PhoneLabel.mms => 'MMS',
+  PhoneLabel.other => 'other',
+  PhoneLabel.otherFax => 'other fax',
+  PhoneLabel.pager => 'pager',
+  PhoneLabel.radio => 'radio',
+  PhoneLabel.school => 'school',
+  PhoneLabel.telex => 'telex',
+  PhoneLabel.ttyTdd => 'TTY',
+  PhoneLabel.work => 'work',
+  PhoneLabel.workFax => 'work fax',
+  PhoneLabel.workMobile => 'work mobile',
+  PhoneLabel.workPager => 'work pager',
+};
 
 /// The device's address book. Read only when READ_CONTACTS is granted, and
 /// asked for only when the Phone contacts tab is first opened ([request]).
@@ -127,7 +189,15 @@ class DevicePhoneContacts implements PhoneContactsSource {
       return [
         for (final c in all)
           if ((c.displayName ?? '').isNotEmpty && c.phones.isNotEmpty)
-            PhoneContact(c.displayName!, [for (final p in c.phones) p.number]),
+            PhoneContact(
+              c.displayName!,
+              [for (final p in c.phones) p.number],
+              labels: [
+                for (final p in c.phones)
+                  phoneLabelText(p.label.label, p.label.customLabel),
+              ],
+              id: c.id,
+            ),
       ];
     } catch (_) {
       return const [];
@@ -146,8 +216,15 @@ final addressBookScrubberProvider = Provider<void Function(Iterable<String>)>(
 
 final phoneContactsProvider = FutureProvider<List<PhoneContact>>((ref) async {
   final list = await ref.watch(phoneContactsSourceProvider).readIfAllowed();
+  // The person's own labels can carry a name ("Sam's work"); the phone's
+  // standard words can't, and stay readable in logs.
   ref.read(addressBookScrubberProvider)([
-    for (final p in list) ...[p.name, ...p.numbers],
+    for (final p in list) ...[
+      p.name,
+      ...p.numbers,
+      for (final l in p.labels)
+        if (!standardPhoneLabels.contains(l)) l,
+    ],
   ]);
   return list;
 });

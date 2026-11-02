@@ -261,6 +261,36 @@ class RecentDetail extends ConsumerWidget {
       ),
     ];
 
+    return DetailFrame(
+      wide: wide,
+      backLabel: 'Back to Recents',
+      onBack: onBack,
+      children: children,
+    );
+  }
+}
+
+/// A detail's blocks, spaced and scrolling: beside the list (wide, 28 22
+/// padding, 18 apart), or as its own page on the phone with Back above
+/// ([backLabel] read out) and 20 8 padding, 16 apart. Recents' call and
+/// Contacts' colleague and phone contact.
+class DetailFrame extends StatelessWidget {
+  const DetailFrame({
+    super.key,
+    required this.wide,
+    required this.backLabel,
+    required this.onBack,
+    required this.children,
+  });
+
+  final bool wide;
+  final String backLabel;
+  final VoidCallback? onBack;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
     final list = ListView(
       padding: wide
           ? const EdgeInsets.fromLTRB(28, 22, 28, 22)
@@ -280,7 +310,7 @@ class RecentDetail extends ConsumerWidget {
           alignment: Alignment.centerLeft,
           child: Semantics(
             button: true,
-            label: 'Back to Recents',
+            label: backLabel,
             excludeSemantics: true,
             onTap: onBack,
             child: InkWell(
@@ -302,7 +332,7 @@ class RecentDetail extends ConsumerWidget {
 }
 
 /// `.vp-card` with padding 16 18 and a 14 px bold title (a call's or a
-/// colleague's detail).
+/// contact's detail).
 class DetailCard extends StatelessWidget {
   const DetailCard({super.key, required this.title, required this.children});
   final String title;

@@ -206,7 +206,7 @@ void main() {
     await _settle(tester);
     await _resize(tester, _phone);
     expect(find.byType(ListDetailLayout), findsNothing);
-    expect(find.byType(ColleagueDetail), findsNothing);
+    expect(_shown(tester), 'Mia Rossi', reason: 'her page, full screen');
     await _resize(tester, const Size(690, 1030));
     expect(_shown(tester), 'Mia Rossi');
     await _end(tester, e);
