@@ -199,7 +199,11 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
     Map<String, PresenceEntry> presence,
   ) {
     final c = context.vp;
-    final pickedFirst = _picked?.name.split(' ').first;
+    // "Talk to Mia first" (the artboard); a typed target by its number or
+    // extension: "Talk to 101 first", "Talk to 0491 570 737 first".
+    final talkTo =
+        _picked?.name.split(' ').first ??
+        (_typed == null ? null : formatAuNumber(_typed!));
     return Column(
       children: [
         Container(
@@ -342,9 +346,9 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                 children: [
                   Expanded(
                     child: VpButton(
-                      label: pickedFirst == null
+                      label: talkTo == null
                           ? 'Talk first'
-                          : 'Talk to $pickedFirst first',
+                          : 'Talk to $talkTo first',
                       kind: VpButtonKind.outline,
                       large: false,
                       height: VpSize.controlHeight,

@@ -679,10 +679,25 @@ void main() {
       expect(find.text('Send now'), findsOneWidget);
       await tester.tap(find.bySemanticsLabel('Transfer to 101'));
       await tester.pump();
-      expect(find.text('Talk first'), findsOneWidget);
+      expect(find.text('Talk to 101 first'), findsOneWidget);
       await tester.tap(find.text('Send now'));
       await _settle(tester);
       expect(e.transferredTo[id], '101');
+      await _end(tester);
+    });
+
+    testWidgets('an extension with no colleague: "Talk to 101 first" calls '
+        '101', (tester) async {
+      final (e, id) = await toTransfer(tester);
+      await tester.enterText(find.byType(TextField), '101');
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Transfer to 101'));
+      await tester.pump();
+      expect(find.bySemanticsLabel('Talk to 101 first'), findsOneWidget);
+      await tester.tap(find.text('Talk to 101 first'));
+      await _settle(tester);
+      expect(e.called.single.$1, '101');
+      expect(e.transferredTo[id], isNull);
       await _end(tester);
     });
 
@@ -696,20 +711,24 @@ void main() {
       await _end(tester);
     });
 
-    testWidgets('an outside number: formatted, and Talk first calls it', (
-      tester,
-    ) async {
-      final (e, id) = await toTransfer(tester);
-      await tester.enterText(find.byType(TextField), '0491 571 266');
-      await tester.pump();
-      expect(find.text('Transfer to 0491 571 266'), findsOneWidget);
-      await tester.tap(find.bySemanticsLabel('Transfer to 0491 571 266'));
-      await tester.pump();
-      await tester.tap(find.text('Talk first'));
-      await _settle(tester);
-      expect(e.called.last.$1, '0491571266');
-      await _end(tester);
-    });
+    testWidgets(
+      'an outside number: formatted, and "Talk to 0491 571 266 first" '
+      'calls it',
+      (tester) async {
+        final (e, id) = await toTransfer(tester);
+        await tester.enterText(find.byType(TextField), '0491 571 266');
+        await tester.pump();
+        expect(find.text('Transfer to 0491 571 266'), findsOneWidget);
+        await tester.tap(find.bySemanticsLabel('Transfer to 0491 571 266'));
+        await tester.pump();
+        expect(find.text('Talk first'), findsNothing);
+        expect(find.text('Send now'), findsOneWidget);
+        await tester.tap(find.text('Talk to 0491 571 266 first'));
+        await _settle(tester);
+        expect(e.called.last.$1, '0491571266');
+        await _end(tester);
+      },
+    );
 
     testWidgets('changing the search after picking a typed target unpicks '
         'it', (tester) async {
@@ -753,7 +772,7 @@ void main() {
       ('610106', '106'),
       ('1831 000', '000'),
     ]) {
-      for (final action in ['Send now', 'Talk first']) {
+      for (final action in ['Send now', 'Talk to <number> first']) {
         testWidgets('$n, $action: refused; the phone\'s dialler sheet', (
           tester,
         ) async {
@@ -768,7 +787,11 @@ void main() {
           await tester.pump();
           await tester.tap(find.bySemanticsLabel(RegExp('^Transfer to ')));
           await tester.pump();
-          await tester.tap(find.text(action));
+          await tester.tap(
+            action == 'Send now'
+                ? find.text(action)
+                : find.textContaining(RegExp(r'^Talk to .+ first$')),
+          );
           await _settle(tester);
           expect(e.transferredTo[id], isNull);
           expect(e.called, hasLength(0), reason: 'no consult call');
