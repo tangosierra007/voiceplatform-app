@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:call_engine/call_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/auth/links.dart';
@@ -137,5 +138,65 @@ void main() {
         reason: p,
       );
     }
+  });
+
+  group('a cold start with a call (the full-screen intent opened the app)', () {
+    String? goWith(String at, AuthState auth, String? call) => gateRedirect(
+      location: at,
+      auth: auth,
+      updateRequired: false,
+      hasPendingEmail: false,
+      liveCallRoute: call,
+    );
+
+    test('a call route shows while sign-in is still loading', () {
+      expect(
+        goWith('/incoming/c1', const AuthStarting(), '/incoming/c1'),
+        isNull,
+      );
+      expect(
+        goWith('/in-call/c1', const AuthStarting(), '/in-call/c1'),
+        isNull,
+      );
+      // Nothing else does.
+      expect(
+        goWith(Routes.keypad, const AuthStarting(), '/incoming/c1'),
+        Routes.starting,
+      );
+    });
+
+    test('signed in from the start screen with a ringing call opens AppIncoming, not the keypad', () {
+      expect(goWith(Routes.starting, signedIn, '/incoming/c1'), '/incoming/c1');
+      expect(goWith(Routes.starting, signedIn, '/in-call/c1'), '/in-call/c1');
+      expect(goWith(Routes.starting, signedIn, null), Routes.keypad);
+      // Already on the call: stays.
+      expect(goWith('/incoming/c1', signedIn, '/incoming/c1'), isNull);
+    });
+
+    test('signed out, a call route still goes to sign-in', () {
+      expect(goWith('/incoming/c1', signedOut, '/incoming/c1'), Routes.signIn);
+    });
+
+    CallSnapshot call(String id, CallState s) => CallSnapshot(
+      id: id,
+      direction: CallDirection.incoming,
+      state: s,
+      remoteNumber: '0491570737',
+      startedAt: DateTime.utc(2026, 11, 2),
+    );
+
+    test('the live call route: ringing first, then a call that is up', () {
+      expect(liveCallRoute(const []), isNull);
+      expect(liveCallRoute([call('a', CallState.incoming)]), '/incoming/a');
+      expect(
+        liveCallRoute([
+          call('a', CallState.connected),
+          call('b', CallState.incoming),
+        ]),
+        '/incoming/b',
+      );
+      expect(liveCallRoute([call('a', CallState.connected)]), '/in-call/a');
+      expect(liveCallRoute([call('a', CallState.ended)]), isNull);
+    });
   });
 }

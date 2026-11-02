@@ -353,7 +353,7 @@ On the plugin side, two ways a request could be lost, fixed here:
 2. In `gateRedirect`, when `SignedIn` on `/starting` or a sign-in route, go to the live call's route if there is one (the incoming screen of a ringing call, else the call screen of a call that is up) instead of the Keypad. `routerProvider` passes it from `callEngineProvider.activeCalls`.
 3. The black: the launch and normal window themes (`android/app/.../styles.xml`, Flutter's defaults, black at night) and AppIncoming's empty state (a blank `CallScaffold` until the call's snapshot arrives) should be AppIncoming's ink background.
 
-A tested patch for 1 and 2 (`lib/nav/routes.dart`, `test/auth/gate_test.dart`: 4 tests, root 502 pass) is ready but not committed. It needs mobile-lead's approval or goes to WS4. Item 3 is WS4's.
+**Made by WS3 with mobile-lead's approval (WS4 busy):** 1 and 2 in `lib/nav/routes.dart` (`gateRedirect` gets `liveCallRoute`; `liveCallRoute()` from the engine's active calls), with 4 tests in `test/auth/gate_test.dart`; and for 3, the window: `android/app/src/main/res/values/window_background.xml` (`vp_window_ink`, #14110F, the ink900 token) used as `windowBackground` by LaunchTheme and NormalTheme in `values/styles.xml` and `values-night/styles.xml`, with `test/platform/window_background_test.dart`. AppIncoming's empty `CallScaffold` state stays WS4's.
 
 ### Tests (plugin)
 

@@ -1,9 +1,11 @@
+import 'package:call_engine/call_engine.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/auth.dart';
 import '../auth/version.dart';
+import '../engine/engine_provider.dart';
 import '../screens/calls/in_call_screen.dart';
 import '../screens/calls/incoming_screen.dart';
 import '../screens/calls/transfer_screen.dart';
@@ -84,6 +86,7 @@ String? gateRedirect({
   required AuthState auth,
   required bool updateRequired,
   required bool hasPendingEmail,
+  String? liveCallRoute,
 }) {
   final inSignIn = location.startsWith(Routes.signIn);
   if (location == Routes.signedOut && auth is! SignedOutRemotely) {
@@ -94,7 +97,11 @@ String? gateRedirect({
   if (location == Routes.update) return Routes.starting;
   switch (auth) {
     case AuthStarting():
-      return location == Routes.starting ? null : Routes.starting;
+      // A call the engine already has (a push woke it, the full-screen intent
+      // opened the app) shows at once, without waiting for sign-in to load.
+      return location == Routes.starting || isCallRoute(location)
+          ? null
+          : Routes.starting;
     case LicenceRefused():
       return location == Routes.signInBasic ? null : Routes.signInBasic;
     case SignedOutRemotely():
@@ -106,7 +113,9 @@ String? gateRedirect({
       if (location == Routes.signInBasic) return Routes.signIn;
       return inSignIn ? null : Routes.signIn;
     case SignedIn():
-      return inSignIn || location == Routes.starting ? Routes.keypad : null;
+      return inSignIn || location == Routes.starting
+          ? (liveCallRoute ?? Routes.keypad)
+          : null;
   }
 }
 
@@ -129,6 +138,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       auth: ref.read(authProvider),
       updateRequired: ref.read(updateRequiredProvider) != null,
       hasPendingEmail: ref.read(pendingSignInProvider) != null,
+      liveCallRoute: liveCallRoute(ref.read(callEngineProvider).activeCalls),
     ),
     routes: [
       StatefulShellRoute.indexedStack(
@@ -258,3 +268,15 @@ class _Starting extends StatelessWidget {
 /// True for the full-screen call routes.
 bool isCallRoute(String location) =>
     location.startsWith('/incoming/') || location.startsWith('/in-call/');
+
+/// Where a live call wants the app: the incoming screen of the first call
+/// ringing, else the call screen of the first call up; null with no call.
+String? liveCallRoute(List<CallSnapshot> calls) {
+  for (final c in calls) {
+    if (c.state == CallState.incoming) return Routes.incoming(c.id);
+  }
+  for (final c in calls) {
+    if (c.state != CallState.ended) return Routes.inCall(c.id);
+  }
+  return null;
+}

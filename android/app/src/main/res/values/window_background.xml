@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AppIncoming's ink (token ink900, #14110F): the window behind Flutter at
+         launch and while the first frame draws, so a call opened from the lock
+         screen never shows black or white first. -->
+    <color name="vp_window_ink">#14110F</color>
+</resources>
