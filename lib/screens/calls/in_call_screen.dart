@@ -45,6 +45,7 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
     final book = ref.watch(callBookProvider);
     final matcher = ref.watch(contactMatcherProvider);
     final local = callerName(call, matcher);
+
     final audio = ref.watch(audioStateProvider).value;
     final connected = call.state == CallState.connected;
     final held = call.state == CallState.heldByMe;
@@ -52,127 +53,115 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
     final transfer = book.transfer;
     final isConsult = transfer != null && transfer.$2 == call.id;
 
-    final column = LayoutBuilder(
-      builder: (context, box) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: box.maxHeight),
-          child: IntrinsicHeight(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                28,
-                24,
-                28,
-                20 + math.max(34, MediaQuery.viewPaddingOf(context).bottom),
-              ),
-              child: Column(
-                children: [
-                  for (final o in others) ...[
-                    _HeldBar(
-                      call: o,
-                      matcher: matcher,
-                      isTransfer: isConsult && o.id == transfer.$1,
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  Text(
-                    _lineCalled(call, book),
-                    textAlign: TextAlign.center,
-                    style: callEyebrow(),
-                  ),
-                  const SizedBox(height: 10 + 18),
-                  CallAvatar(name: local, size: 96),
-                  const SizedBox(height: 10 + 8),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      callTitle(call, local),
-                      textAlign: TextAlign.center,
-                      style: callName,
-                    ),
-                  ),
-                  if (callSubtitle(call, local) case final sub?) ...[
-                    const SizedBox(height: 10),
-                    Text(sub, style: callText(16, colour: VpCallColours.soft)),
-                  ],
-                  const SizedBox(height: 10 + 4),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      if (live && call.connectedAt != null)
-                        Semantics(
-                          label: 'Call time',
-                          child: CallTimer(since: call.connectedAt!),
-                        )
-                      else
-                        Text(
-                          _stateText(call.state),
-                          style: callText(18, weight: FontWeight.w700),
-                        ),
-                      if (held || call.state == CallState.heldByRemote)
-                        Text(
-                          held ? 'On hold' : 'Held by them',
-                          style: callText(
-                            14,
-                            weight: FontWeight.w700,
-                            colour: VpCallColours.muted,
-                          ),
-                        ),
-                      if (call.encrypted) const CallTag('ENCRYPTED'),
-                      if (call.hdAudio) const CallTag('HD'),
-                    ],
-                  ),
-                  const SizedBox(height: 10 + 6),
-                  if (connected)
-                    LiveWaveform(muted: call.muted)
-                  else
-                    const SizedBox(height: 30),
-                  const Spacer(),
-                  const SizedBox(height: 16),
-                  if (_keypad)
-                    _DtmfPad(
-                      sent: _dtmf,
-                      onDigit: (d) {
-                        setState(() => _dtmf += d);
-                        _engine.sendDtmf(call.id, d);
-                      },
-                      onHide: () => setState(() => _keypad = false),
-                    )
-                  else
-                    _Controls(
-                      call: call,
-                      others: others,
-                      audio: audio,
-                      isConsult: isConsult,
-                      onKeypad: connected
-                          ? () => setState(() => _keypad = true)
-                          : null,
-                      onCompleteTransfer: isConsult
-                          ? () => _engine.transferAttended(
-                              transfer.$1,
-                              transfer.$2,
-                            )
-                          : null,
-                    ),
-                  const SizedBox(height: 26),
-                  CallControl(
-                    label: '',
-                    semanticLabel: 'Hang up',
-                    icon: VpIcon.phone,
-                    rotate: true,
-                    size: 78,
-                    iconSize: 30,
-                    background: VpCallColours.hangUp,
-                    iconColour: VpCallColours.onControl,
-                    onPressed: () => _engine.hangup(call.id),
-                  ),
-                ],
-              ),
+    // Hang up stays put above the system bar; the rest scrolls when it
+    // must (the keypad open on a small phone, large text).
+    final column = CallBody(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 26),
+      pinned: CallControl(
+        label: '',
+        semanticLabel: 'Hang up',
+        icon: VpIcon.phone,
+        rotate: true,
+        size: 78,
+        iconSize: 30,
+        background: VpCallColours.hangUp,
+        iconColour: VpCallColours.onControl,
+        onPressed: () => _engine.hangup(call.id),
+      ),
+      content: Column(
+        children: [
+          for (final o in others) ...[
+            _HeldBar(
+              call: o,
+              matcher: matcher,
+              isTransfer: isConsult && o.id == transfer.$1,
+            ),
+            const SizedBox(height: 10),
+          ],
+          Text(
+            _lineCalled(call, book),
+            textAlign: TextAlign.center,
+            style: callEyebrow(),
+          ),
+          // With the keypad open the avatar and the waveform make way, so
+          // the keys and Hide keypad fit above Hang up on a phone.
+          if (!_keypad) ...[
+            const SizedBox(height: 10 + 18),
+            CallAvatar(name: local, size: 96),
+          ],
+          const SizedBox(height: 10 + 8),
+          Semantics(
+            header: true,
+            child: Text(
+              callTitle(call, local),
+              textAlign: TextAlign.center,
+              style: callName,
             ),
           ),
-        ),
+          if (callSubtitle(call, local) case final sub?) ...[
+            const SizedBox(height: 10),
+            Text(sub, style: callText(16, colour: VpCallColours.soft)),
+          ],
+          const SizedBox(height: 10 + 4),
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              if (live && call.connectedAt != null)
+                Semantics(
+                  label: 'Call time',
+                  child: CallTimer(since: call.connectedAt!),
+                )
+              else
+                Text(
+                  _stateText(call.state),
+                  style: callText(18, weight: FontWeight.w700),
+                ),
+              if (held || call.state == CallState.heldByRemote)
+                Text(
+                  held ? 'On hold' : 'Held by them',
+                  style: callText(
+                    14,
+                    weight: FontWeight.w700,
+                    colour: VpCallColours.muted,
+                  ),
+                ),
+              if (call.encrypted) const CallTag('ENCRYPTED'),
+              if (call.hdAudio) const CallTag('HD'),
+            ],
+          ),
+          if (!_keypad) ...[
+            const SizedBox(height: 10 + 6),
+            if (connected)
+              LiveWaveform(muted: call.muted)
+            else
+              const SizedBox(height: 30),
+          ],
+          const Spacer(),
+          const SizedBox(height: 16),
+          if (_keypad)
+            _DtmfPad(
+              sent: _dtmf,
+              onDigit: (d) {
+                setState(() => _dtmf += d);
+                _engine.sendDtmf(call.id, d);
+              },
+              onHide: () => setState(() => _keypad = false),
+            )
+          else
+            _Controls(
+              call: call,
+              others: others,
+              audio: audio,
+              isConsult: isConsult,
+              onKeypad: connected ? () => setState(() => _keypad = true) : null,
+              onCompleteTransfer: isConsult
+                  ? () => _engine.transferAttended(transfer.$1, transfer.$2)
+                  : null,
+            ),
+        ],
       ),
     );
 
@@ -403,6 +392,7 @@ class _HeldBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final name = callTitle(call, callerName(call, matcher));
+
     final text = isTransfer
         ? '$name · on hold, to transfer'
         : '$name · on hold';

@@ -389,3 +389,56 @@ String callTitle(CallSnapshot c, String? name) =>
 /// The number under the name, or null when the title already is the number.
 String? callSubtitle(CallSnapshot c, String? name) =>
     name == null ? null : formatAuNumber(c.remoteNumber);
+
+/// A call screen's body (incoming, in call): [content] fills the height and
+/// scrolls only when it must (the in-call keypad on a small phone, large
+/// text); [pinned] (hang up, or decline and answer) stays at the bottom,
+/// always clear of Android's navigation bar: 48 dp of three buttons or a
+/// gesture handle, which edge-to-edge apps (Android 15 and later) draw
+/// under. At least [minBottom] below it, as the artboards' home indicator.
+class CallBody extends StatelessWidget {
+  const CallBody({
+    super.key,
+    required this.content,
+    required this.pinned,
+    required this.padding,
+    this.gap = 20,
+    this.minBottom = 34,
+  });
+
+  final Widget content;
+  final Widget pinned;
+
+  /// Around [content]; its bottom is the space above [pinned].
+  final EdgeInsets padding;
+
+  /// Below [pinned], above the larger of [minBottom] and the system bar.
+  final double gap;
+  final double minBottom;
+
+  @override
+  Widget build(BuildContext context) {
+    final bar = MediaQuery.viewPaddingOf(context).bottom;
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(padding: padding, child: content),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: padding.left),
+          child: pinned,
+        ),
+        SizedBox(height: gap + math.max(minBottom, bar)),
+      ],
+    );
+  }
+}

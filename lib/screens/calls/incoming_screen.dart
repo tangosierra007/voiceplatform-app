@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:call_engine/call_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +26,7 @@ class IncomingScreen extends ConsumerWidget {
     if (call == null) return const CallScaffold(child: SizedBox.expand());
     final engine = ref.read(callEngineProvider);
     final local = callerName(call, ref.watch(contactMatcherProvider));
+
     final info = call.incoming;
     final now = ref.read(clockProvider)();
     final label = info?.calledLabel;
@@ -56,114 +55,107 @@ class IncomingScreen extends ConsumerWidget {
     final lastAt = info?.lastAnsweredAt;
 
     return CallScaffold(
-      child: LayoutBuilder(
-        builder: (context, box) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: box.maxHeight),
-            child: IntrinsicHeight(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  28,
-                  40,
-                  28,
-                  40 + math.max(34, MediaQuery.viewPaddingOf(context).bottom),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      label == null
-                          ? 'INCOMING CALL'
-                          : 'INCOMING · ${label.toUpperCase()}',
-                      textAlign: TextAlign.center,
-                      style: callEyebrow(),
-                    ),
-                    const SizedBox(height: 10 + 40),
-                    CallAvatar(name: local, size: 112, rings: true),
-                    const SizedBox(height: 10 + 30),
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        callTitle(call, local),
-                        textAlign: TextAlign.center,
-                        style: callName,
-                      ),
-                    ),
-                    if (callSubtitle(call, local) case final sub?) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        sub,
-                        style: callText(16, colour: VpCallColours.soft),
-                      ),
-                    ],
-                    if (called != null) ...[
-                      const SizedBox(height: 10 + 6),
-                      Text(
-                        called,
-                        textAlign: TextAlign.center,
-                        style: callText(
-                          14,
-                          colour: VpCallColours.muted,
-                          height: 20 / 14,
-                        ),
-                      ),
-                    ],
-                    if ((repeat ?? 0) >= 2 || lastBy != null) ...[
-                      const SizedBox(height: 10 + 18),
-                      if ((repeat ?? 0) >= 2)
-                        RepeatCallerPill(
-                          text: '${ordinal(repeat!)} call this week',
-                          dark: true,
-                        ),
-                      if (lastBy != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          lastAt == null
-                              ? 'Last answered by $lastBy'
-                              : 'Last answered by $lastBy, ${whenShort(lastAt, now)}',
-                          textAlign: TextAlign.center,
-                          style: callText(13, colour: VpCallColours.muted),
-                        ),
-                      ],
-                    ],
-                    const Spacer(),
-                    const SizedBox(height: 24),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CallControl(
-                            label: 'Decline',
-                            icon: VpIcon.phone,
-                            rotate: true,
-                            iconSize: 30,
-                            background: VpCallColours.hangUp,
-                            iconColour: VpCallColours.onControl,
-                            onPressed: () => engine.decline(callId),
-                          ),
-                          CallControl(
-                            label: 'To voicemail',
-                            icon: VpIcon.voicemail,
-                            iconSize: 28,
-                            onPressed: () => engine.toVoicemail(callId),
-                          ),
-                          CallControl(
-                            label: 'Answer',
-                            icon: VpIcon.phone,
-                            iconSize: 30,
-                            background: VpCallColours.answer,
-                            iconColour: VpCallColours.onControl,
-                            onPressed: () => _answer(context, ref),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+      // Decline, To voicemail and Answer stay put above the system bar; the
+      // rest scrolls when it must (large text, a small phone).
+      child: CallBody(
+        padding: const EdgeInsets.fromLTRB(28, 40, 28, 24),
+        gap: 40,
+        pinned: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            // Each control may narrow (its label shrinks) on a small phone
+            // at large text, rather than run off the side.
+            children: [
+              Flexible(
+                child: CallControl(
+                  label: 'Decline',
+                  icon: VpIcon.phone,
+                  rotate: true,
+                  iconSize: 30,
+                  background: VpCallColours.hangUp,
+                  iconColour: VpCallColours.onControl,
+                  onPressed: () => engine.decline(callId),
                 ),
               ),
-            ),
+              Flexible(
+                child: CallControl(
+                  label: 'To voicemail',
+                  icon: VpIcon.voicemail,
+                  iconSize: 28,
+                  onPressed: () => engine.toVoicemail(callId),
+                ),
+              ),
+              Flexible(
+                child: CallControl(
+                  label: 'Answer',
+                  icon: VpIcon.phone,
+                  iconSize: 30,
+                  background: VpCallColours.answer,
+                  iconColour: VpCallColours.onControl,
+                  onPressed: () => _answer(context, ref),
+                ),
+              ),
+            ],
           ),
+        ),
+        content: Column(
+          children: [
+            Text(
+              label == null
+                  ? 'INCOMING CALL'
+                  : 'INCOMING · ${label.toUpperCase()}',
+              textAlign: TextAlign.center,
+              style: callEyebrow(),
+            ),
+            const SizedBox(height: 10 + 40),
+            CallAvatar(name: local, size: 112, rings: true),
+            const SizedBox(height: 10 + 30),
+            Semantics(
+              header: true,
+              child: Text(
+                callTitle(call, local),
+                textAlign: TextAlign.center,
+                style: callName,
+              ),
+            ),
+            if (callSubtitle(call, local) case final sub?) ...[
+              const SizedBox(height: 10),
+              Text(sub, style: callText(16, colour: VpCallColours.soft)),
+            ],
+            if (called != null) ...[
+              const SizedBox(height: 10 + 6),
+              Text(
+                called,
+                textAlign: TextAlign.center,
+                style: callText(
+                  14,
+                  colour: VpCallColours.muted,
+                  height: 20 / 14,
+                ),
+              ),
+            ],
+            if ((repeat ?? 0) >= 2 || lastBy != null) ...[
+              const SizedBox(height: 10 + 18),
+              if ((repeat ?? 0) >= 2)
+                RepeatCallerPill(
+                  text: '${ordinal(repeat!)} call this week',
+                  dark: true,
+                ),
+              if (lastBy != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  lastAt == null
+                      ? 'Last answered by $lastBy'
+                      : 'Last answered by $lastBy, ${whenShort(lastAt, now)}',
+                  textAlign: TextAlign.center,
+                  style: callText(13, colour: VpCallColours.muted),
+                ),
+              ],
+            ],
+            const Spacer(),
+          ],
         ),
       ),
     );
