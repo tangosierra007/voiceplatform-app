@@ -181,7 +181,7 @@ class _KeypadPane extends ConsumerWidget {
                           children: [
                             _StatusChip(offline: offline),
                             const SizedBox(width: 8),
-                            Expanded(child: _CallerIdChip(dim: offline)),
+                            Expanded(child: CallerIdChip(dim: offline)),
                           ],
                         ),
                         Expanded(
@@ -707,9 +707,14 @@ Future<void> showStatusSheet(
   ),
 );
 
-class _CallerIdChip extends ConsumerWidget {
-  const _CallerIdChip({required this.dim});
+/// "Calls show 03 5550 1200": the caller ID picker, on the keypad and in a
+/// call's detail (FoldRecents).
+class CallerIdChip extends ConsumerWidget {
+  const CallerIdChip({super.key, this.dim = false, this.alignEnd = true});
   final bool dim;
+
+  /// Right-aligned in the keypad's row; false where it sits in a wrap.
+  final bool alignEnd;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -721,6 +726,7 @@ class _CallerIdChip extends ConsumerWidget {
       opacity: dim ? 0.6 : 1,
       child: Align(
         alignment: Alignment.centerRight,
+        widthFactor: alignEnd ? null : 1,
         child: _Chip(
           label: callsShow(picked),
           semantics: '${callsShow(picked)}. Change caller ID',

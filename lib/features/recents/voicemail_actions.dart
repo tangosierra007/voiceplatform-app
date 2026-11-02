@@ -139,6 +139,7 @@ class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
     for (final f in RecentsFilter.values) {
       ref.invalidate(historyProvider(f));
     }
+    ref.invalidate(callsWithProvider);
     ref.read(liveBadgesProvider.notifier).forget();
     ref.invalidate(meProvider);
     await Future.wait<Object?>([

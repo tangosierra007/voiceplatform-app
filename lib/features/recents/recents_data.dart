@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/auth.dart';
+import '../../calls/numbers.dart';
 import '../../net/api.dart';
+import '../../shell/list_detail.dart';
 import '../../shell/shell_status.dart';
 
 /// The Recents filters (AppRecents): All, Missed, Voicemail, Mine only.
@@ -19,6 +21,13 @@ class RecentsFilterNotifier extends Notifier<RecentsFilter> {
   RecentsFilter build() => RecentsFilter.all;
   void set(RecentsFilter f) => state = f;
 }
+
+/// The call the person opened (by `HistoryEntry.id`): its own page on the
+/// phone, beside the list at 800 dp and wider (FoldRecents). Kept across
+/// fold and unfold.
+final pickedRecentProvider = NotifierProvider<PickedNotifier, String?>(
+  PickedNotifier.new,
+);
 
 /// One page of history for a filter (`GET /history`), newest first.
 final historyProvider = FutureProvider.family<HistoryPage, RecentsFilter>((
@@ -40,6 +49,29 @@ final historyProvider = FutureProvider.family<HistoryPage, RecentsFilter>((
     },
     mine: f == RecentsFilter.mine,
   );
+});
+
+/// "Calls with this number" for a call's detail (`GET /history?number=`),
+/// newest first. The app keeps only the entries with this number itself
+/// too, so a server that doesn't filter yet still gives the right list;
+/// if the request fails, the calls Recents has loaded stand in.
+final callsWithProvider = FutureProvider.family<List<HistoryEntry>, String>((
+  ref,
+  number,
+) async {
+  final digits = nationalDigits(number);
+  bool same(HistoryEntry h) => nationalDigits(h.number) == digits;
+  try {
+    if (ref.watch(accessTokenProvider) == null) throw StateError('signed out');
+    final page = await ref
+        .watch(appApiProvider)
+        .history
+        .getHistory(number: number);
+    return [...page.items.where(same)];
+  } catch (_) {
+    final all = await ref.watch(historyProvider(RecentsFilter.all).future);
+    return [...all.items.where(same)];
+  }
 });
 
 /// Opening Recents marks the missed calls seen up to now (`POST
@@ -107,6 +139,7 @@ void refreshRecents(WidgetRef ref) {
   for (final f in RecentsFilter.values) {
     ref.invalidate(historyProvider(f));
   }
+  ref.invalidate(callsWithProvider);
   ref.invalidate(voicemailBoxesProvider);
   ref.invalidate(voicemailMessagesProvider);
 }

@@ -205,10 +205,14 @@ class VoicemailPlayerCard extends ConsumerWidget {
     required this.message,
     required this.title,
     required this.when,
+    this.showCallBack = true,
   });
   final VoicemailMessage message;
   final String title;
   final String when;
+
+  /// False where Call back is already beside it (a call's detail).
+  final bool showCallBack;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -228,6 +232,7 @@ class VoicemailPlayerCard extends ConsumerWidget {
     final actions = ref.read(voicemailPlayerProvider.notifier);
     final number = isPrivateNumber(m.number) ? null : m.number;
     final sub = voicemailSubtitle(m, title);
+    final large = MediaQuery.textScalerOf(context).scale(10) > 13;
 
     return Semantics(
       container: true,
@@ -259,7 +264,7 @@ class VoicemailPlayerCard extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       title,
-                      maxLines: 1,
+                      maxLines: large ? 2 : 1,
                       overflow: TextOverflow.ellipsis,
                       style: VpType.body.copyWith(
                         fontSize: 16,
@@ -269,18 +274,28 @@ class VoicemailPlayerCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '$when · ${m.boxName} box',
-                    style: VpType.caption.copyWith(
-                      color: c.textMuted,
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+                  if (!large) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '$when · ${m.boxName} box',
+                      style: VpType.caption.copyWith(
+                        color: c.textMuted,
+                        fontWeight: FontWeight.w500,
+                        fontVariations: const [FontVariation('wght', 500)],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
+            // Large text: when and the box go under the caller.
+            if (large)
+              ExcludeSemantics(
+                child: Text(
+                  '$when · ${m.boxName} box',
+                  style: VpType.caption.copyWith(color: c.textMuted),
+                ),
+              ),
             if (number != null && sub.contains(' · '))
               ExcludeSemantics(
                 child: Text(
@@ -338,19 +353,21 @@ class VoicemailPlayerCard extends ConsumerWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: VpButton(
-                      label: 'Call back',
-                      icon: VpIcon.phone,
-                      large: false,
-                      dense: true,
-                      height: 40,
-                      onPressed: number == null
-                          ? null
-                          : () => dialNumber(context, ref, number),
+                  if (showCallBack) ...[
+                    Expanded(
+                      child: VpButton(
+                        label: 'Call back',
+                        icon: VpIcon.phone,
+                        large: false,
+                        dense: true,
+                        height: 40,
+                        onPressed: number == null
+                            ? null
+                            : () => dialNumber(context, ref, number),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: VpButton(
                       label: 'Speaker',

@@ -151,12 +151,22 @@ class VpButton extends StatelessWidget {
                       VpSvgIcon(icon!, size: dense ? 16 : 20, colour: fg),
                     if (busy || icon != null) const SizedBox(width: VpSpace.s2),
                     Flexible(
-                      child: Text(
-                        label,
-                        style: text,
-                        textAlign: TextAlign.center,
-                        softWrap: true,
-                      ),
+                      // At large text one word ("Speaker") shrinks rather
+                      // than breaks in a narrow button; otherwise, and with
+                      // several words, it wraps between words as before.
+                      child:
+                          label.contains(' ') ||
+                              MediaQuery.textScalerOf(context).scale(10) <= 13
+                          ? Text(
+                              label,
+                              style: text,
+                              textAlign: TextAlign.center,
+                              softWrap: true,
+                            )
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(label, style: text, maxLines: 1),
+                            ),
                     ),
                   ],
                 ),
@@ -165,6 +175,66 @@ class VpButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Text that wraps between words but never inside one (not for intrinsic
+/// sizing: it measures its box): at large text in a narrow box, a word wider than the box ("Speaker", "Westgate") shrinks to
+/// fit instead of breaking ("Speake / r"). At sizes where every word fits,
+/// it is plain [Text].
+class VpWordSafeText extends StatelessWidget {
+  const VpWordSafeText(
+    this.text, {
+    super.key,
+    required this.style,
+    this.textAlign,
+    this.maxLines,
+  });
+
+  final String text;
+  final TextStyle style;
+  final TextAlign? textAlign;
+  final int? maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final dir = Directionality.of(context);
+    final merged = DefaultTextStyle.of(context).style.merge(style);
+    return LayoutBuilder(
+      builder: (context, box) {
+        var fit = 1.0;
+        if (box.maxWidth.isFinite) {
+          for (final word in text.split(RegExp(r'\s+'))) {
+            if (word.isEmpty) continue;
+            final p = TextPainter(
+              text: TextSpan(text: word, style: merged),
+              textDirection: dir,
+              textScaler: scaler,
+              maxLines: 1,
+            )..layout();
+            if (p.width > box.maxWidth) {
+              fit = math.min(fit, box.maxWidth / p.width);
+            }
+            p.dispose();
+          }
+        }
+        final size = merged.fontSize ?? 14;
+        return Text(
+          text,
+          style: style,
+          textAlign: textAlign,
+          maxLines: maxLines,
+          overflow: maxLines == null ? null : TextOverflow.ellipsis,
+          softWrap: true,
+          // Shrunk just enough for the widest word to fit (floored a little
+          // so rounding never tips it over).
+          textScaler: fit >= 1
+              ? scaler
+              : TextScaler.linear(scaler.scale(size) / size * fit * 0.98),
+        );
+      },
     );
   }
 }

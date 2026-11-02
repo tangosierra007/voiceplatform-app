@@ -168,20 +168,25 @@ void main() {
     expect(find.text('03 5550 1142'), findsNothing);
   });
 
-  testWidgets('details sheet: Call back and Play voicemail', (tester) async {
+  testWidgets('details: the call\'s own page with Call back, the voicemail '
+      'and the recent calls; Back returns to the list', (tester) async {
     usePhone(tester);
-    await tester.pumpWidget(await appUnderTest());
+    await tester.pumpWidget(await appUnderTest(api: _api()));
     await _settle(tester);
     await openRecents(tester);
     await tester.tap(_button('Details for Westgate Supplies'));
     await _settle(tester);
-    expect(find.text('To the Sales line'), findsOneWidget);
-    await tester.tap(_button('Play voicemail'));
-    await _settle(tester);
-    // The voicemail view, with the message open in the player.
-    expect(find.text('All boxes'), findsOneWidget);
-    expect(find.text('Westgate Supplies'), findsOneWidget);
+    expect(find.textContaining('in the phonebook'), findsOneWidget);
+    expect(find.textContaining('to Sales'), findsOneWidget);
+    expect(find.text('Call back'), findsWidgets);
+    expect(find.text('Recent calls with Westgate Supplies'), findsOneWidget);
+    // The voicemail they left, in the player.
     expect(_button('Play'), findsOneWidget);
+    expect(_tab('Recents'), findsOneWidget, reason: 'the tabs stay');
+    await tester.tap(_button('Back to Recents'));
+    await _settle(tester);
+    expect(find.text('Recent calls with Westgate Supplies'), findsNothing);
+    expect(find.text('Mine only'), findsOneWidget);
   });
 
   testWidgets('Voicemail: boxes with counts, the player, the other messages', (
