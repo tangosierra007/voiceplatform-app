@@ -100,27 +100,37 @@ bool isAcmaFictional(String national) {
   return _fictional.contains(national);
 }
 
-// A separator between digits: nothing, or one space, dot or dash.
-const _s = r'[ .\-]?';
+// A separator between digits: nothing; or up to three spaces; or one dot or
+// dash with up to two spaces either side (" - ", " . ").
+const _s = r'(?: {0,2}[.\-] {0,2}| {1,3})?';
 
 // Not glued to a word, a `+`, or a digit run joined by `.` or `-` (versions,
 // IDs, dates), on either side.
 const _before = r'(?<![\w+]|\d[.\-])';
 const _after = r'(?![\w]|[.\-]\d)';
 
+// URL-encoded plus (%2B). It needs no word boundary before it, so
+// tel%3A%2B61... in a URL is caught too.
+const _encodedPlus = '%2[Bb]';
+
 final List<RegExp> _patterns = [
   // National mobile and geographic: 04xx xxx xxx, (02) xxxx xxxx, 0x.xxxx...
   RegExp('$_before\\(?0[2-478]\\)?(?:$_s\\d){8}$_after'),
-  // E.164 and bare 61: +61 4xx xxx xxx, +61 (0)2 xxxx xxxx, 61 3..., and
-  // +61 1300/1800 forms.
+  // International: +61, %2B61, 0061, 0011 61 and bare 61; with an optional
+  // (0); mobile, geographic, 1300 and 1800.
   RegExp(
-    '$_before\\+?61$_s(?:\\(0\\)$_s)?'
+    '(?:$_encodedPlus|$_before(?:\\+ ?|00(?:11)?$_s)?)61$_s(?:\\(0\\)$_s)?'
     '(?:[2-478](?:$_s\\d){8}|1[38]00(?:$_s\\d){6})$_after',
   ),
   // 1300 xxx xxx and 1800 xxx xxx.
   RegExp('${_before}1[38]00(?:$_s\\d){6}$_after'),
-  // 13 xx xx. Spaces only, so dates such as 13-05-26 are not read as numbers.
-  RegExp('${_before}13(?: \\d\\d ?\\d\\d|\\d\\d \\d\\d)$_after'),
+  // 13 xx xx and 13x xxx. Spaces only, so dates such as 13-05-26 are not
+  // read as numbers; a bare 13xxxx is not read either. Not followed by more
+  // spaced digits, so amounts such as 130 000 000 are not read either.
+  RegExp(
+    '${_before}13(?: {1,2}\\d\\d {0,2}\\d\\d|\\d\\d {1,2}\\d\\d|\\d {1,2}\\d{3})'
+    '$_after(?! {1,3}\\d)',
+  ),
 ];
 
 /// Every Australian phone number in [line], fictional or not.
@@ -151,9 +161,20 @@ List<PhoneHit> findAuPhoneNumbers(String line) {
 List<PhoneHit> findRealAuPhoneNumbers(String line) =>
     findAuPhoneNumbers(line).where((h) => !h.isFictional).toList();
 
+final _encodedPlusRe = RegExp(_encodedPlus);
+
+/// The digits of [text], with a URL-encoded plus not read as a 2.
+String _digits(String text) =>
+    text.replaceAll(_encodedPlusRe, '+').replaceAll(RegExp(r'\D'), '');
+
 String _national(String text) {
-  final digits = text.replaceAll(RegExp(r'\D'), '');
-  // No national form starts with 61, so a 61 start is always the E.164 form.
+  var digits = _digits(text);
+  // No national form starts with 00 or 61: those are international forms.
+  if (digits.startsWith('0011')) {
+    digits = digits.substring(4);
+  } else if (digits.startsWith('00')) {
+    digits = digits.substring(2);
+  }
   if (!digits.startsWith('61')) return digits;
   var rest = digits.substring(2);
   if (text.contains('(0)')) rest = rest.substring(1);
@@ -169,14 +190,16 @@ AuNumberKind? _kind(String n) {
   return null;
 }
 
-/// [text] with its digits masked: the prefix (`04`, `02`, `+614`, `1800`,
-/// `13`) and the last three digits stay, the rest become `x`. Spacing and
-/// brackets stay as written.
+/// [text] with its digits masked: the prefix (`04`, `02`, `+614`, `00614`,
+/// `1800`, `13`) and the last three digits stay, the rest become `x`.
+/// Spacing, brackets and a URL-encoded plus stay as written.
 String maskNumber(String text) {
-  final digits = text.replaceAll(RegExp(r'\D'), '');
+  final digits = _digits(text);
   final int keepHead;
-  if (digits.startsWith('61') && digits.length > 9) {
-    keepHead = digits.length - 9 + 1; // 61, an optional 0, the next digit
+  if ((digits.startsWith('61') || digits.startsWith('00')) &&
+      digits.length > 9) {
+    // The international prefix, 61, an optional 0 and the next digit.
+    keepHead = digits.length - 9 + 1;
   } else if (digits.startsWith('1') && digits.length == 10) {
     keepHead = 4;
   } else {
@@ -185,7 +208,14 @@ String maskNumber(String text) {
   final keepTail = digits.length >= 10 ? 3 : 2;
   final out = StringBuffer();
   var i = 0;
-  for (final c in text.split('')) {
+  for (var k = 0; k < text.length; k++) {
+    final m = _encodedPlusRe.matchAsPrefix(text, k);
+    if (m != null) {
+      out.write(m[0]);
+      k = m.end - 1;
+      continue;
+    }
+    final c = text[k];
     if (RegExp(r'\d').hasMatch(c)) {
       out.write(i < keepHead || i >= digits.length - keepTail ? c : 'x');
       i++;
