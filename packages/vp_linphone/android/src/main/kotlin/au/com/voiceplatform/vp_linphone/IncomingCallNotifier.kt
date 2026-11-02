@@ -128,7 +128,9 @@ object IncomingCallNotifier {
         val fullScreen = canUseFullScreenIntent(context)
         val state = appState(context)
         val isWaiting = LinphoneEngine.hasOtherCallUp(info.callId)
-        if (isWaiting) waitingCalls[info.callId] = info else waitingCalls.remove(info.callId)
+        // The call-waiting tone once per waiting call, not on every re-show.
+        val firstWait = if (isWaiting) waitingCalls.put(info.callId, info) == null else false
+        if (!isWaiting) waitingCalls.remove(info.callId)
         val spec = IncomingSpec.spec(silent, isWaiting)
         val n = build(context, spec, title, person, content, answer, decline)
         if (!fullScreen) {
@@ -142,7 +144,7 @@ object IncomingCallNotifier {
             "incoming notification: app $state, ${if (isWaiting) "waiting" else "ringing"}, full-screen ${if (fullScreen) "allowed" else "denied"}, " +
                 if (viaService) "as the service notification" else "posted",
         )
-        if (spec.waitingTone) playWaitingTone()
+        if (spec.waitingTone && firstWait) playWaitingTone()
         if (viaService) return
         try {
             NotificationManagerCompat.from(context).notify(id, n)
@@ -180,6 +182,11 @@ object IncomingCallNotifier {
 
     /** The ringer was silenced (volume key): same notification, no sound. */
     fun silence(context: Context, info: TelecomBridge.CallInfo) = show(context, info, silent = true)
+
+    /** The engine stopped: no call is waiting any more. */
+    fun reset() {
+        waitingCalls.clear()
+    }
 
     fun cancel(context: Context, callId: String) {
         gate.forget(callId)

@@ -224,6 +224,10 @@ object LinphoneEngine {
         c.removeListener(coreListener)
         c.terminateAllCalls()
         c.stop()
+        // The listener is gone, so liblinphone sends no End: tell the app, Telecom
+        // and the lock-screen flag that every call has ended (sign-out, revoked).
+        endTrackedCalls()
+        IncomingCallNotifier.reset()
         core = null
         account = null
         authInfo = null
@@ -234,6 +238,27 @@ object LinphoneEngine {
         log("core stopped")
     }
 
+
+    /** Every call not yet ended, as ended by us (the engine stopped). */
+    private fun endTrackedCalls() {
+        for (t in calls.values.toList()) {
+            if (t.state == CallStateMsg.ENDED) continue
+            t.state = CallStateMsg.ENDED
+            if (t.endReason == null) t.endReason = EndReasonMsg.LOCAL
+            emitCall(t)
+        }
+    }
+
+    /** What the incoming-call notification shows for [t]. */
+    private fun incomingInfo(t: Tracked): TelecomBridge.CallInfo {
+        val remote = t.call.remoteAddress
+        return TelecomBridge.CallInfo(
+            t.id,
+            true,
+            remote.username?.takeIf { it.isNotBlank() } ?: "anonymous",
+            remote.displayName?.takeIf { it.isNotBlank() },
+        )
+    }
 
     private fun configure(c: Core) {
         c.setUserAgent(USER_AGENT, VERSION)
@@ -581,11 +606,13 @@ object LinphoneEngine {
             val rc = t.call.acceptWithParams(params)
             if (rc != 0) throw VpFlutterError("invalid_state", "Answer failed")
         } catch (e: Throwable) {
-            // Not answered after all: the service shows the ringing call again.
-            if (t.answering) {
-                t.answering = false
-                updateService()
-            }
+            // Not answered after all (the microphone denied, say). The Answer tap
+            // took the notification away, so show it again: the call still rings,
+            // and the service shows it as ringing, not "Ready for calls".
+            val reshow = ServiceNotice.reshowAfterFailedAnswer(t.answering, t.state)
+            t.answering = false
+            if (reshow) appContext?.let { IncomingCallNotifier.show(it, incomingInfo(t)) }
+            updateService()
             throw e
         }
     }
@@ -1012,16 +1039,7 @@ object LinphoneEngine {
                 t.announced = true
                 appContext?.let { ctx ->
                     VpPush.get(ctx).onCallArrived()
-                    val remote = call.remoteAddress
-                    TelecomBridge.addIncoming(
-                        ctx,
-                        TelecomBridge.CallInfo(
-                            t.id,
-                            true,
-                            remote.username?.takeIf { it.isNotBlank() } ?: "anonymous",
-                            remote.displayName?.takeIf { it.isNotBlank() },
-                        ),
-                    )
+                    TelecomBridge.addIncoming(ctx, incomingInfo(t))
                 }
             }
         }

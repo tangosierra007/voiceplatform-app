@@ -147,7 +147,10 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         }
     }
 
+    // Stopping (sign-out, a revocation) ends every call: the app no longer
+    // shows over the lock screen.
     override suspend fun stop() = suspendCancellableCoroutine { cont ->
+        showOverLock(false)
         LinphoneEngine.requestStop(context) { cont.resume(Unit) }
     }
 
@@ -168,6 +171,8 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
     )
 
     override suspend fun unregister() = suspendCancellableCoroutine { cont ->
+        // Unregistering alone ends no call: only with none live.
+        if (!LinphoneEngine.hasLiveCall) showOverLock(false)
         LinphoneEngine.unregister { cont.resume(Unit) }
     }
 

@@ -56,6 +56,13 @@ object ServiceNotice {
         return Notice(Kind.READY)
     }
 
+    /**
+     * Answer from the notification failed: if that call still rings, its
+     * notification (taken away by the Answer tap) is shown again.
+     */
+    fun reshowAfterFailedAnswer(wasAnswering: Boolean, state: CallStateMsg): Boolean =
+        wasAnswering && state == CallStateMsg.INCOMING
+
     /** How [show] put the service in the foreground. */
     enum class Shown { WITH_MICROPHONE, PLAIN, FAILED }
 

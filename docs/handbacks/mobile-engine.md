@@ -340,6 +340,14 @@ Tests: `IncomingCallUiTest` now has 15 (the lock-screen policy in every state; t
 
 Handset test for TJ: Answer from the locked phone's notification shows the call screen over the lock screen; a second call during a call gives one short tone and a quiet heads-up with Answer and Decline; hanging up the first while the second still rings makes it ring normally.
 
+**Round 2 (WS6 on #38):**
+
+1. **Engine stop during a call** (sign-out, a revocation): `stopCore()` removes the Core listener before `terminateAllCalls()`, so no End reached the app and the lock-screen flag stayed on. Every call not yet ended is now sent as ENDED (end reason `local`) before the calls are forgotten, so the app, Telecom and the flag see it. The plugin also clears the flag on `stop()`, and on `unregister()` when no call is live (unregistering alone ends no call). `waitingCalls` is cleared.
+2. **A failed Answer from the notification** (the microphone denied, say): the Answer tap had removed the notification, so the call rang with nothing to answer on. If the call still rings, `answer()`'s catch now shows the incoming notification again (`IncomingCallNotifier.show`), and the service shows it as the ringing call.
+3. **The call-waiting tone plays once per waiting call**, not again when the same call is shown again (the volume key, say).
+
+Tests: `IncomingCallUiTest` 18 (a failed answer shows the call ringing again, and the service shows it as INCOMING; stopping ends every call before they're forgotten and clears the flag; the tone once). Kotlin JVM 111 pass.
+
 ## Incoming screen on a cold start `fix/incoming-call-cold-start`
 
 Branch `fix/incoming-call-cold-start` from `main` at `fc42cef` (#35 merged). One PR, not merged.

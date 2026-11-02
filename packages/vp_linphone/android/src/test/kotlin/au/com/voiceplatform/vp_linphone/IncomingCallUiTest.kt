@@ -215,7 +215,7 @@ class IncomingCallUiTest {
     @Test
     fun aWaitingCallIsQuietAndRingsOnceAlone() {
         assertTrue("val isWaiting = LinphoneEngine.hasOtherCallUp(info.callId)" in notifier)
-        assertTrue("if (spec.waitingTone) playWaitingTone()" in notifier)
+        assertTrue("if (spec.waitingTone && firstWait) playWaitingTone()" in notifier)
         assertTrue("ToneGenerator.TONE_SUP_CALL_WAITING" in notifier)
         val channels = notifier.substringAfter("private fun channels(").substringBefore("private fun activityIntent(")
         assertTrue("waiting.setSound(null, null)" in channels)
@@ -234,9 +234,55 @@ class IncomingCallUiTest {
         val bridge = src("TelecomBridge.kt")
         val answer = bridge.substringAfter("fun answerFromNotification(").substringBefore("fun declineFromNotification(")
         assertTrue(answer.indexOf("LinphoneEngine.markAnswering(callId)") < answer.indexOf("IncomingCallNotifier.cancel(context, callId)"))
-        // If the answer fails, the call shows as ringing again.
+        // If the answer fails, the call shows as ringing again: see aFailedAnswerShowsTheCallRingingAgain.
+    }
+
+    @Test
+    fun aFailedAnswerShowsTheCallRingingAgain() {
+        // Answer from the notification, then the answer fails (microphone denied):
+        // the call still rings, so its notification comes back...
+        assertTrue(ServiceNotice.reshowAfterFailedAnswer(wasAnswering = true, state = CallStateMsg.INCOMING))
+        // ...but not for a call that has moved on, or an in-app Answer (the notification is still up).
+        assertFalse(ServiceNotice.reshowAfterFailedAnswer(true, CallStateMsg.ENDED))
+        assertFalse(ServiceNotice.reshowAfterFailedAnswer(true, CallStateMsg.CONNECTED))
+        assertFalse(ServiceNotice.reshowAfterFailedAnswer(false, CallStateMsg.INCOMING))
+        // Shown again and no longer answering, the service shows it as the ringing call,
+        // not "Ready for calls" and not "Call in progress".
+        val ringingAgain = listOf(ServiceNotice.Call("a", true, CallStateMsg.INCOMING, answering = false))
+        assertEquals(ServiceNotice.Notice(ServiceNotice.Kind.INCOMING, "a"), ServiceNotice.decide(ringingAgain, true, setOf("a")))
+        // The engine does exactly that in answer()'s catch, before rethrowing.
         val engine = src("LinphoneEngine.kt")
-        val answerFn = engine.substringAfter("    fun answer(callId: String) {").substringBefore("    fun decline(")
-        assertTrue("t.answering = false" in answerFn)
+        val catchBlock = engine.substringAfter("    fun answer(callId: String) {").substringBefore("    fun decline(")
+            .substringAfter("} catch (e: Throwable) {")
+        val reshow = catchBlock.indexOf("val reshow = ServiceNotice.reshowAfterFailedAnswer(t.answering, t.state)")
+        val off = catchBlock.indexOf("t.answering = false")
+        val show = catchBlock.indexOf("if (reshow) appContext?.let { IncomingCallNotifier.show(it, incomingInfo(t)) }")
+        assertTrue(reshow in 0 until off && off < show && show < catchBlock.indexOf("throw e"))
+    }
+
+    @Test
+    fun stoppingTheEngineEndsEveryCallSoTheLockScreenFlagClears() {
+        val engine = src("LinphoneEngine.kt")
+        val stop = engine.substringAfter("private fun stopCore()").substringBefore("private fun endTrackedCalls()")
+        // Each call not yet ended is sent as ENDED before the calls are forgotten.
+        assertTrue(stop.indexOf("endTrackedCalls()") in 0 until stop.indexOf("calls.clear()"))
+        assertTrue("IncomingCallNotifier.reset()" in stop)
+        val end = engine.substringAfter("private fun endTrackedCalls()").substringBefore("private fun incomingInfo(")
+        assertTrue("t.state = CallStateMsg.ENDED" in end && "emitCall(t)" in end)
+        // The plugin clears the flag on ENDED with no live call, and on stop().
+        val plugin = src("VpLinphonePlugin.kt")
+        assertTrue("if (call.state == CallStateMsg.ENDED && !LinphoneEngine.hasLiveCall) showOverLock(false)" in plugin)
+        val stopFn = plugin.substringAfter("override suspend fun stop()").substringBefore("override fun register(")
+        assertTrue("showOverLock(false)" in stopFn)
+        val unreg = plugin.substringAfter("override suspend fun unregister()").substringBefore("override fun updatePush(")
+        assertTrue("if (!LinphoneEngine.hasLiveCall) showOverLock(false)" in unreg)
+    }
+
+    @Test
+    fun theWaitingToneIsPlayedOncePerWaitingCall() {
+        val show = notifier.substringAfter("fun show(").substringBefore("fun silence(")
+        assertTrue("val firstWait = if (isWaiting) waitingCalls.put(info.callId, info) == null else false" in show)
+        assertTrue("if (spec.waitingTone && firstWait) playWaitingTone()" in show)
+        assertTrue("waitingCalls.clear()" in notifier.substringAfter("fun reset()"))
     }
 }
