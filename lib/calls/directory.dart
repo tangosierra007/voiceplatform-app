@@ -195,6 +195,8 @@ class ContactMatcher {
   ];
 
   ContactMatch? match(String typed) {
+    // A service code ("*97") is nobody's number.
+    if (typed.contains(RegExp('[*#]'))) return null;
     final d = nationalDigits(typed);
     if (d.isEmpty) return null;
     final entries = _entries;

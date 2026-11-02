@@ -33,7 +33,7 @@ class CallDetailsPanel extends ConsumerWidget {
 
   final CallSnapshot call;
 
-  /// The name matched on this phone, when the engine has none.
+  /// The caller's best name ([callerName]), or null for a bare number.
   final String? localName;
   final AudioState? audio;
 
@@ -65,7 +65,7 @@ class CallDetailsPanel extends ConsumerWidget {
                 (s) => s.numbers.any((n) => nationalDigits(n.number) == digits),
               )
               .firstOrNull;
-    final name = call.remoteName ?? localName;
+    final name = localName;
     // "About Jordan" for a person; a company or a bare number in full.
     final person =
         colleague != null ||

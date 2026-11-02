@@ -44,9 +44,7 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
     ];
     final book = ref.watch(callBookProvider);
     final matcher = ref.watch(contactMatcherProvider);
-    final local = call.remoteName == null
-        ? matcher.match(call.remoteNumber)?.name
-        : null;
+    final local = callerName(call, matcher);
     final audio = ref.watch(audioStateProvider).value;
     final connected = call.state == CallState.connected;
     final held = call.state == CallState.heldByMe;
@@ -82,7 +80,7 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
                     style: callEyebrow(),
                   ),
                   const SizedBox(height: 10 + 18),
-                  CallAvatar(name: call.remoteName ?? local, size: 96),
+                  CallAvatar(name: local, size: 96),
                   const SizedBox(height: 10 + 8),
                   Semantics(
                     header: true,
@@ -223,7 +221,13 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
       final number = info.calledNumber == null
           ? null
           : formatAuNumber(info.calledNumber!);
-      return [label, number].whereType<String>().join(' · ').toUpperCase();
+      final line = [
+        label,
+        number,
+      ].whereType<String>().join(' · ').toUpperCase();
+      // The platform sends the line called in X-VP-Called (A7); until it
+      // does, the header still says what the call is, never blank.
+      return line.isEmpty ? 'INCOMING CALL' : line;
     }
     final id = book.callerIds[c.id];
     if (id == null) {
@@ -398,10 +402,7 @@ class _HeldBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final name = callTitle(
-      call,
-      call.remoteName == null ? matcher.match(call.remoteNumber)?.name : null,
-    );
+    final name = callTitle(call, callerName(call, matcher));
     final text = isTransfer
         ? '$name · on hold, to transfer'
         : '$name · on hold';

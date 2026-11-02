@@ -27,9 +27,7 @@ class IncomingScreen extends ConsumerWidget {
     final call = ref.watch(callSnapshotProvider(callId)).value;
     if (call == null) return const CallScaffold(child: SizedBox.expand());
     final engine = ref.read(callEngineProvider);
-    final local = call.remoteName == null
-        ? ref.watch(contactMatcherProvider).match(call.remoteNumber)?.name
-        : null;
+    final local = callerName(call, ref.watch(contactMatcherProvider));
     final info = call.incoming;
     final now = ref.read(clockProvider)();
     final label = info?.calledLabel;
@@ -80,11 +78,7 @@ class IncomingScreen extends ConsumerWidget {
                       style: callEyebrow(),
                     ),
                     const SizedBox(height: 10 + 40),
-                    CallAvatar(
-                      name: call.remoteName ?? local,
-                      size: 112,
-                      rings: true,
-                    ),
+                    CallAvatar(name: local, size: 112, rings: true),
                     const SizedBox(height: 10 + 30),
                     Semantics(
                       header: true,

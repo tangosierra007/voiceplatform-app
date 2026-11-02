@@ -108,9 +108,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
     final colleagues = ref.watch(colleaguesProvider).value ?? const [];
     final presence = ref.watch(presenceProvider);
     final matcher = ref.watch(contactMatcherProvider);
-    final local = call == null || call.remoteName != null
-        ? null
-        : matcher.match(call.remoteNumber)?.name;
+    final local = call == null ? null : callerName(call, matcher);
     final caller = call == null ? '' : callTitle(call, local);
     final first = caller.split(' ').first;
     final q = _query.text.trim().toLowerCase();

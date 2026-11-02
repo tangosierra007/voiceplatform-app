@@ -5,6 +5,7 @@ import 'package:call_engine/call_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../calls/directory.dart';
 import '../../calls/numbers.dart';
 import '../../auth/auth.dart';
 import '../../engine/engine_provider.dart';
@@ -362,13 +363,29 @@ class _LiveWaveformState extends ConsumerState<LiveWaveform> {
   }
 }
 
-/// The name to show for a call: the engine's, a match on this phone, or the
-/// number itself.
-String callTitle(CallSnapshot c, String? localName) =>
-    c.remoteName ?? localName ?? formatAuNumber(c.remoteNumber);
+/// The network's name for the caller, unless it is only a number (the
+/// carrier often sends "+61491579760" as the display name) or says nothing.
+String? networkName(String? remoteName) {
+  final n = remoteName?.trim() ?? '';
+  if (n.isEmpty || !n.contains(RegExp('[A-Za-z]'))) return null;
+  if (const {'anonymous', 'unknown', 'unavailable'}.contains(n.toLowerCase())) {
+    return null;
+  }
+  return n;
+}
+
+/// Who is on a call, in the app's order (APP_DESIGN_SCOPE, Phone contacts):
+/// a colleague, the shared phonebook, the phone's own contact (all matched
+/// on this phone), then the network's name. Null when only the number is
+/// known.
+String? callerName(CallSnapshot c, ContactMatcher matcher) =>
+    matcher.match(c.remoteNumber)?.name ?? networkName(c.remoteName);
+
+/// The title for a call: its [name] (from [callerName]), else the number as
+/// people read it, once.
+String callTitle(CallSnapshot c, String? name) =>
+    name ?? formatAuNumber(c.remoteNumber);
 
 /// The number under the name, or null when the title already is the number.
-String? callSubtitle(CallSnapshot c, String? localName) =>
-    c.remoteName == null && localName == null
-    ? null
-    : formatAuNumber(c.remoteNumber);
+String? callSubtitle(CallSnapshot c, String? name) =>
+    name == null ? null : formatAuNumber(c.remoteNumber);

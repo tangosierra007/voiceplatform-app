@@ -21,6 +21,8 @@ String nationalDigits(String s) {
 /// short numbers (000) and part-typed numbers as their digits.
 String formatAuNumber(String raw) {
   if (raw == 'anonymous') return 'Private';
+  // Service codes keep their star and hash: "*97", "#31#".
+  if (raw.contains(RegExp('[*#]'))) return raw.replaceAll(RegExp(r'\s'), '');
   final d = nationalDigits(raw);
   if (d.isEmpty) return raw;
   if (d.length <= 4 && !d.startsWith('0')) return d; // extension

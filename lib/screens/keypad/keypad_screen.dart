@@ -17,6 +17,7 @@ import '../../nav/routes.dart';
 import '../../net/api.dart';
 import '../../shell/layout.dart';
 import '../../theme/app_theme.dart';
+import '../calls/call_widgets.dart' show callTitle, callerName;
 import '../../widgets/vp_icons.dart';
 import 'keypad_matches.dart';
 
@@ -849,10 +850,10 @@ class _BackToCall extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.vp;
-    final m = call.remoteName == null
-        ? ref.watch(contactMatcherProvider).match(call.remoteNumber)?.name
-        : null;
-    final name = call.remoteName ?? m ?? formatAuNumber(call.remoteNumber);
+    final name = callTitle(
+      call,
+      callerName(call, ref.watch(contactMatcherProvider)),
+    );
     final held = call.state == CallState.heldByMe;
     final text = held ? '$name · on hold' : '$name · on a call';
     return Semantics(
