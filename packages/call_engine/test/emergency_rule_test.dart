@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:call_engine/call_engine.dart';
 import 'package:test/test.dart';
 
@@ -48,6 +50,20 @@ List<String> writtenForms(String n) {
 }
 
 void main() {
+  // The Kotlin backstop (Rules.isEmergency) is tested on the shared table, so
+  // the table has every form above.
+  test('the shared table has every written form', () {
+    final table = File('../vp_linphone/test/fixtures/emergency_numbers.txt')
+        .readAsLinesSync()
+        .where((l) => l.startsWith('E\t'))
+        .map((l) => l.substring(2))
+        .toSet();
+    for (final n in ['000', '112', '106']) {
+      for (final typed in writtenForms(n)) {
+        expect(table, contains(typed), reason: typed);
+      }
+    }
+  });
   group('emergencyNumberIn: every written form gives the three digits', () {
     for (final n in ['000', '112', '106']) {
       test(n, () {
