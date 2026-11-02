@@ -88,6 +88,9 @@ Future<Widget> appUnderTest({
   FakeExtras? extras,
   PresetStatus? statusController,
   Future<String?> Function()? sendCallLogs,
+
+  /// Voicemail that changes as the app hears and deletes it (counts tests).
+  VoicemailServer? voicemail,
 }) async {
   SharedPreferences.setMockInitialValues({
     if (theme != ThemePreference.system)
@@ -158,10 +161,10 @@ Future<Widget> appUnderTest({
       meProvider.overrideWith(
         (ref) async => me != null
             ? await me()
-            : Me.fromJson(fx.me(status: myStatus.json!)),
+            : voicemail?.me() ?? Me.fromJson(fx.me(status: myStatus.json!)),
       ),
       historyProvider.overrideWith(
-        (ref, f) async => fixtureHistory(
+        (ref, f) async => (voicemail?.history ?? fixtureHistory)(
           filter: switch (f) {
             RecentsFilter.missed => 'missed',
             RecentsFilter.voicemail => 'voicemail',
@@ -171,9 +174,12 @@ Future<Widget> appUnderTest({
         ),
       ),
       markHistorySeenProvider.overrideWithValue(onHistorySeen ?? () async {}),
-      voicemailBoxesProvider.overrideWith((ref) async => fixtureBoxes()),
+      voicemailBoxesProvider.overrideWith(
+        (ref) async => voicemail?.boxes() ?? fixtureBoxes(),
+      ),
       voicemailMessagesProvider.overrideWith(
-        (ref, box) async => fixtureVoicemails(box: box),
+        (ref, box) async =>
+            voicemail?.messages(box: box) ?? fixtureVoicemails(box: box),
       ),
       greetingsProvider.overrideWith((ref) async => fixtureGreetings()),
       smsLinesProvider.overrideWith((ref) async => fixtureLines()),

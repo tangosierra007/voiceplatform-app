@@ -138,6 +138,38 @@ class LastKnownShellNotifier extends Notifier<LastKnownShell> {
   }
 }
 
+/// Voicemail changes made on this phone (heard, new again, deleted) that the
+/// server's counts don't show yet: per message, its box and how it moves the
+/// new count. The Recents chip, the box counts and the tab badge add them
+/// at once, and each goes when the counts have been read again.
+final voicemailPendingProvider =
+    NotifierProvider<VoicemailPendingNotifier, Map<String, (String, int)>>(
+      VoicemailPendingNotifier.new,
+    );
+
+class VoicemailPendingNotifier extends Notifier<Map<String, (String, int)>> {
+  @override
+  Map<String, (String, int)> build() => const {};
+
+  void add(String messageId, String boxId, int delta) =>
+      state = {...state, messageId: (boxId, delta)};
+
+  void remove(String messageId) => state = {...state}..remove(messageId);
+}
+
+extension VoicemailPending on Map<String, (String, int)> {
+  /// The change to the new voicemail count, all boxes.
+  int get total => values.fold(0, (n, v) => n + v.$2);
+
+  /// The change to one box's new count.
+  int forBox(String boxId) =>
+      values.where((v) => v.$1 == boxId).fold(0, (n, v) => n + v.$2);
+}
+
+/// [server] moved by [delta], never below none.
+int withPending(int server, int delta) =>
+    server + delta < 0 ? 0 : server + delta;
+
 /// From `GET /me`, then each `badges` event on the stream. While `/me` loads
 /// or fails, the last known tab set and badges stay: Messages never drops
 /// out because a request failed.
@@ -150,7 +182,10 @@ final shellStatusProvider = Provider<ShellStatus>((ref) {
   final badges = m?.badges ?? known.badges;
   final hasSmsLine = m?.permissions.messages ?? known.hasSmsLine;
   return ShellStatus(
-    recentsBadge: live?.recents ?? badges?.recents ?? 0,
+    recentsBadge: withPending(
+      live?.recents ?? badges?.recents ?? 0,
+      ref.watch(voicemailPendingProvider).total,
+    ),
     messagesBadge: live?.messages ?? badges?.messages ?? 0,
     hasSmsLine: hasSmsLine ?? false,
     tabsKnown: hasSmsLine != null,

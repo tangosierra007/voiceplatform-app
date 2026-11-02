@@ -12,6 +12,7 @@ import '../../features/recents/recents_data.dart';
 import '../../features/recents/recents_format.dart';
 import '../../features/recents/voicemail_actions.dart';
 import '../../net/api.dart';
+import '../../shell/shell_status.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
@@ -83,7 +84,15 @@ class _RecentsScreenState extends ConsumerState<RecentsScreen> {
                     (RecentsFilter.missed, withCount('Missed', counts?.missed)),
                     (
                       RecentsFilter.voicemail,
-                      withCount('Voicemail', counts?.voicemail),
+                      withCount(
+                        'Voicemail',
+                        counts == null
+                            ? null
+                            : withPending(
+                                counts.voicemail,
+                                ref.watch(voicemailPendingProvider).total,
+                              ),
+                      ),
                     ),
                     (RecentsFilter.mine, 'Mine only'),
                   ],

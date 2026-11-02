@@ -13,6 +13,7 @@ import '../../features/recents/recents_data.dart';
 import '../../features/recents/recents_format.dart';
 import '../../features/recents/voicemail_actions.dart';
 import '../../net/api.dart';
+import '../../shell/shell_status.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
@@ -36,9 +37,11 @@ class VoicemailView extends ConsumerWidget {
         ? null
         : items.where((m) => m.id == openId).firstOrNull ?? items.first;
 
+    final pending = ref.watch(voicemailPendingProvider);
     String boxLabel(VoicemailBox b) {
       final name = b.kind == VoicemailBoxKind.own ? 'Mine' : b.name;
-      return b.newCount > 0 ? '$name ${b.newCount}' : name;
+      final n = withPending(b.newCount, pending.forBox(b.id));
+      return n > 0 ? '$name $n' : name;
     }
 
     // One scrolling list, so large text never pushes the player off screen.

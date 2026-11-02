@@ -160,7 +160,7 @@ class MockServer {
     ('GET', _p('/presence'), true, _presenceRoute),
     ('GET', _p('/history'), true, _history),
     ('POST', _p('/history/seen'), true, (r) => r.empty(204)),
-    ('GET', _p('/voicemail/boxes'), true, (r) => r.json(200, voicemailBoxes)),
+    ('GET', _p('/voicemail/boxes'), true, _voicemailBoxes),
     ('GET', _p('/voicemail/messages'), true, _voicemails),
     ('POST', _p('/voicemail/messages/{id}/media-url'), true, _voicemailMedia),
     ('POST', _p('/voicemail/messages/{id}/read'), true, _voicemailRead),
@@ -831,12 +831,27 @@ class MockServer {
       r,
       items,
       extra: {
-        'counts': {'missed': 2, 'voicemail': 2},
+        // Voicemail: the new messages left, as the API's newVoicemailCount.
+        'counts': {'missed': 2, 'voicemail': _newVoicemail().length},
       },
     );
   }
 
   // ---------------------------------------------------------- voicemail
+
+  /// The messages still new: not heard, not deleted.
+  List<Map<String, Object?>> _newVoicemail() => [
+    for (final v in voicemails.map(_vm))
+      if (!_deletedVoicemail.contains(v['id']) && v['heard'] != true) v,
+  ];
+
+  Future<void> _voicemailBoxes(_Req r) => r.json(200, [
+    for (final b in voicemailBoxes)
+      {
+        ...b,
+        'newCount': _newVoicemail().where((v) => v['boxId'] == b['id']).length,
+      },
+  ]);
 
   Map<String, Object?> _vm(Map<String, Object?> v) =>
       _heardChanged.contains(v['id'])

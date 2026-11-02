@@ -8,6 +8,7 @@ import 'package:voiceplatform_app/features/recents/media_player.dart';
 import 'package:voiceplatform_app/net/api.dart';
 
 import '../../tool/mock_server/fixtures.dart' as fx;
+import 'fake_api.dart';
 
 class FakeMic implements MicPermission {
   FakeMic({this.granted = true, this.grantOnRequest = true});
@@ -265,4 +266,81 @@ class FakeExtras implements PhoneExtras {
 
   @override
   Future<void> openBatterySettings() async => batterySettingsOpened++;
+}
+
+/// Voicemail as the API keeps it, for the count tests: heard and deleted
+/// change what `GET /history`'s counts, the boxes' new counts and `/me`'s
+/// Recents badge say (`newVoicemailCount`). Its [routes] answer the app's
+/// read and delete; [hold] keeps the next answer back until completed, and
+/// [failNext] refuses it.
+class VoicemailServer {
+  final heard = <String, bool>{
+    for (final v in fx.voicemails) v['id']! as String: v['heard']! as bool,
+  };
+  final deleted = <String>{};
+  Completer<void>? hold;
+  bool failNext = false;
+
+  Iterable<Map<String, Object?>> get _live => [
+    for (final v in fx.voicemails)
+      if (!deleted.contains(v['id'])) {...v, 'heard': heard[v['id']]},
+  ];
+
+  int get newCount => _live.where((v) => v['heard'] != true).length;
+
+  HistoryPage history({String filter = 'all', bool mine = false}) {
+    final page = fixtureHistory(filter: filter, mine: mine);
+    return HistoryPage(
+      items: page.items,
+      counts: Counts(missed: page.counts.missed, voicemail: newCount),
+    );
+  }
+
+  List<VoicemailBox> boxes() => [
+    for (final b in fx.voicemailBoxes)
+      VoicemailBox.fromJson({
+        ...b,
+        'newCount': _live
+            .where((v) => v['boxId'] == b['id'] && v['heard'] != true)
+            .length,
+      }),
+  ];
+
+  List<VoicemailMessage> messages({String? box}) => [
+    for (final v in _live)
+      if (box == null || v['boxId'] == box) VoicemailMessage.fromJson(v),
+  ];
+
+  Me me() {
+    final m = fx.me(status: 'available');
+    return Me.fromJson({
+      ...m,
+      'badges': {'recents': newCount, 'messages': 1},
+    });
+  }
+
+  Future<Object?> _answer(void Function() change) async {
+    final h = hold;
+    hold = null;
+    if (h != null) await h.future;
+    if (failNext) {
+      failNext = false;
+      return (500, {'error': 'internal', 'message': 'Try again'});
+    }
+    change();
+    return null;
+  }
+
+  Map<String, Object? Function(SeenRequest r)> get routes => {
+    for (final v in fx.voicemails) ...{
+      'POST /voicemail/messages/${v['id']}/read': (r) =>
+          _answer(() => heard[v['id']! as String] = r.body.contains('true')),
+      'POST /voicemail/messages/${v['id']}/delete': (_) =>
+          _answer(() => deleted.add(v['id']! as String)),
+      'POST /voicemail/messages/${v['id']}/media-url': (_) => {
+        'url': '/app/v1/media/token-${v['id']}',
+        'expiresAt': '2026-10-27T00:15:00.000Z',
+      },
+    },
+  };
 }

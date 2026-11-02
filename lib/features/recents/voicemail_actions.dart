@@ -60,8 +60,12 @@ class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
     state = VoicemailPlayerState(loadedId: m.id, speaker: state.speaker);
     await p.setSpeaker(state.speaker);
     unawaited(p.play());
-    // Heard once it plays; a failure here leaves it new for next time.
-    if (!m.heard) unawaited(markHeard(m, heard: true).catchError((_) {}));
+    // Heard once it plays. If the server refuses, the counts are already
+    // back to what it has, and the message stays new: the next play asks
+    // again. Nothing to tell the person while it plays.
+    if (!m.heard) {
+      unawaited(markHeard(m, heard: true).catchError((Object _) {}));
+    }
   }
 
   @visibleForTesting
@@ -75,36 +79,75 @@ class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
 
   Future<void> seek(Duration to) => _player.seek(to);
 
-  /// Mark heard or new again; the badge and the box counts follow.
-  Future<void> markHeard(VoicemailMessage m, {required bool heard}) async {
-    await ref
+  /// Mark heard or new again. The Recents chip, the box counts and the tab
+  /// badge move at once, then follow the server. Throws when the server
+  /// refused it, after the counts are back to what the server has.
+  Future<void> markHeard(VoicemailMessage m, {required bool heard}) => _counted(
+    m,
+    heard == m.heard ? 0 : (heard ? -1 : 1),
+    () => ref
         .read(appApiProvider)
         .voicemail
         .postVoicemailMessagesIdRead(
           id: m.id,
           body: VoicemailMessagesIdReadRequestBody(heard: heard),
-        );
-    ref.invalidate(voicemailBoxesProvider);
-    ref.invalidate(voicemailMessagesProvider);
-    ref.read(liveBadgesProvider.notifier).forget();
-    ref.invalidate(meProvider);
-  }
+        ),
+  );
 
+  /// Delete [m]; a new one takes one off the counts at once. Throws when
+  /// the server refused it (the counts are back as the server has them).
   Future<void> delete(VoicemailMessage m) async {
     if (state.loadedId == m.id) {
       await _player.stop();
       state = VoicemailPlayerState(speaker: state.speaker);
     }
-    await ref
-        .read(appApiProvider)
-        .voicemail
-        .postVoicemailMessagesIdDelete(id: m.id);
+    await _counted(
+      m,
+      m.heard ? 0 : -1,
+      () => ref
+          .read(appApiProvider)
+          .voicemail
+          .postVoicemailMessagesIdDelete(id: m.id),
+    );
+  }
+
+  /// Applies [delta] to the new counts at once, sends [change], then reads
+  /// every count again (history, boxes, messages, `/me`) and drops the
+  /// local change: from then on the counts are the server's. Rethrows the
+  /// server's refusal once that is done.
+  Future<void> _counted(
+    VoicemailMessage m,
+    int delta,
+    Future<void> Function() change,
+  ) async {
+    final pending = ref.read(voicemailPendingProvider.notifier);
+    if (delta != 0) pending.add(m.id, m.boxId, delta);
+    Object? failed;
+    StackTrace? trace;
+    try {
+      await change();
+    } catch (e, s) {
+      failed = e;
+      trace = s;
+    }
     ref.invalidate(voicemailBoxesProvider);
     ref.invalidate(voicemailMessagesProvider);
     for (final f in RecentsFilter.values) {
       ref.invalidate(historyProvider(f));
     }
+    ref.read(liveBadgesProvider.notifier).forget();
     ref.invalidate(meProvider);
+    await Future.wait<Object?>([
+      for (final f in [
+        ref.read(historyProvider(RecentsFilter.all).future),
+        ref.read(voicemailBoxesProvider.future),
+        ref.read(meProvider.future),
+      ])
+        f.then<Object?>((v) => v, onError: (_) => null),
+    ]);
+    pending.remove(m.id);
+    // (The API's own Error model hides dart:core's here.)
+    if (failed != null) await Future<void>.error(failed, trace);
   }
 
   /// Leaving Recents stops playback.
