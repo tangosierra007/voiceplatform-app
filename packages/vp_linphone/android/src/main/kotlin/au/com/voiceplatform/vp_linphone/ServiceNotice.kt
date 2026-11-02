@@ -27,7 +27,8 @@ object ServiceNotice {
 
     data class Notice(val kind: Kind, val callId: String? = null, val microphone: Boolean = false)
 
-    data class Call(val id: String, val incoming: Boolean, val state: CallStateMsg)
+    /** [answering]: Answer from the notification is on its way (the call is still INCOMING). */
+    data class Call(val id: String, val incoming: Boolean, val state: CallStateMsg, val answering: Boolean = false)
 
     private val UP = setOf(
         CallStateMsg.CONNECTED,
@@ -42,7 +43,10 @@ object ServiceNotice {
      */
     fun decide(calls: List<Call>, micGranted: Boolean, ringing: Set<String>): Notice {
         val live = calls.filter { it.state != CallStateMsg.ENDED }
-        if (live.any { it.state in UP }) return Notice(Kind.IN_CALL, microphone = micGranted)
+        // An answered call stays "Call in progress" while its notification goes.
+        if (live.any { it.state in UP || (it.state == CallStateMsg.INCOMING && it.answering) }) {
+            return Notice(Kind.IN_CALL, microphone = micGranted)
+        }
         live.firstOrNull { it.state == CallStateMsg.INCOMING && it.id in ringing }?.let {
             return Notice(Kind.INCOMING, it.id)
         }
@@ -50,5 +54,31 @@ object ServiceNotice {
             return Notice(Kind.CALLING)
         }
         return Notice(Kind.READY)
+    }
+
+    /** How [show] put the service in the foreground. */
+    enum class Shown { WITH_MICROPHONE, PLAIN, FAILED }
+
+    /**
+     * Calls [start] (startForeground with or without the microphone type),
+     * dropping the microphone type if Android refuses it, and reports
+     * [Shown.FAILED] rather than throwing if even the plain phoneCall type is
+     * refused: a ringing call then falls back to a posted notification.
+     */
+    fun show(microphone: Boolean, start: (microphone: Boolean) -> Unit): Shown {
+        if (microphone) {
+            try {
+                start(true)
+                return Shown.WITH_MICROPHONE
+            } catch (_: RuntimeException) {
+                // The microphone type is refused while the app is in the background.
+            }
+        }
+        return try {
+            start(false)
+            Shown.PLAIN
+        } catch (_: RuntimeException) {
+            Shown.FAILED
+        }
     }
 }

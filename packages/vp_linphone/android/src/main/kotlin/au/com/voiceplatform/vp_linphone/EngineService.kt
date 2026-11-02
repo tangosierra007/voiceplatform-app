@@ -43,7 +43,7 @@ class EngineService : Service(), IncomingCallNotifier.RingHost {
             // startForeground with the plain phoneCall type.
             goForeground = {
                 createChannel()
-                apply()
+                apply(strict = true)
             },
             // Then liblinphone: native libraries, the Core, its start.
             setUp = {
@@ -75,7 +75,7 @@ class EngineService : Service(), IncomingCallNotifier.RingHost {
 
     override fun ring(callId: String, notificationId: Int, notification: Notification): Boolean {
         ringing[callId] = notificationId to notification
-        apply()
+        if (!apply()) return false
         return shown?.kind == ServiceNotice.Kind.INCOMING && shown?.callId == callId
     }
 
@@ -83,31 +83,31 @@ class EngineService : Service(), IncomingCallNotifier.RingHost {
         if (ringing.remove(callId) != null) apply()
     }
 
-    private fun apply() {
+    /**
+     * Puts the notice for the calls in the foreground. False if Android
+     * refused startForeground even without the microphone type: what was
+     * shown stays, and a ringing call's notification is posted by
+     * [IncomingCallNotifier] instead. [strict] (service start) throws then.
+     */
+    private fun apply(strict: Boolean = false): Boolean {
         val notice = ServiceNotice.decide(calls, micGranted, ringing.keys)
         val ring = notice.callId?.let { ringing[it] }
-        if (notice == shown && ring?.second === shownRing) return
+        if (notice == shown && ring?.second === shownRing) return true
         val before = shown
-        try {
+        val result = ServiceNotice.show(notice.microphone) { mic ->
             if (notice.kind == ServiceNotice.Kind.INCOMING && ring != null) {
-                startForeground(ring.first, ring.second, notice.microphone)
+                startForeground(ring.first, ring.second, mic)
             } else {
-                startForeground(NOTIFICATION_ID, notification(notice.kind), notice.microphone)
+                startForeground(NOTIFICATION_ID, notification(notice.kind), mic)
             }
-            shown = notice
-            shownRing = ring?.second
-        } catch (e: RuntimeException) {
-            // Keep the phoneCall type if the microphone type is refused.
-            if (!notice.microphone) throw e
-            val plain = notice.copy(microphone = false)
-            if (plain.kind == ServiceNotice.Kind.INCOMING && ring != null) {
-                startForeground(ring.first, ring.second, false)
-            } else {
-                startForeground(NOTIFICATION_ID, notification(plain.kind), false)
-            }
-            shown = notice
-            shownRing = ring?.second
         }
+        if (result == ServiceNotice.Shown.FAILED) {
+            LinphoneEngine.logLine("TELECOM", "foreground notification refused for ${notice.kind}")
+            if (strict) throw IllegalStateException("startForeground refused")
+            return false
+        }
+        shown = notice
+        shownRing = ring?.second
         // Moving the foreground to another id removes the old notification: an
         // incoming call that still rings keeps its own (call waiting).
         val left = before?.takeIf { it.kind == ServiceNotice.Kind.INCOMING && it.callId != notice.callId }?.callId
@@ -119,6 +119,7 @@ class EngineService : Service(), IncomingCallNotifier.RingHost {
                 LinphoneEngine.logLine("TELECOM", "incoming notification refused: ${e.javaClass.simpleName}")
             }
         }
+        return true
     }
 
     private fun startForeground(id: Int, notification: Notification, mic: Boolean) {

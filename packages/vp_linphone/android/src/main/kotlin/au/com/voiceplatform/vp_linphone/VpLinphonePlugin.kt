@@ -119,12 +119,13 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
      * The launcher activity is exported, so its intent extras are never
      * trusted: the only input is the request [CallActionActivity] (not
      * exported, token-checked) left in process memory. Over the lock screen
-     * only while that call is still ringing.
+     * only as [LockScreenPolicy] allows: the incoming screen while that call
+     * rings, the call screen while that call is live.
      */
     @Suppress("UNUSED_PARAMETER")
     private fun handleIntent(intent: Intent?) {
         val request = PendingUiRequest.peek() ?: return
-        if (request.kind == UiRequestKindMsg.SHOW_INCOMING && TelecomBridge.isRinging(request.callId)) showOverLock(true)
+        if (LockScreenPolicy.showOverLock(request.kind, LinphoneEngine.callState(request.callId))) showOverLock(true)
     }
 
     /** The incoming screen over the lock screen, and the screen on, while a call rings. */

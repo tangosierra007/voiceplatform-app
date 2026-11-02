@@ -178,6 +178,8 @@ object TelecomBridge {
 
     /** Answer from our notification's Answer button (opens the app first). */
     fun answerFromNotification(context: Context, callId: String) {
+        // Before the notification goes, so the service keeps "Call in progress".
+        LinphoneEngine.markAnswering(callId)
         IncomingCallNotifier.cancel(context, callId)
         val c = connections[callId]
         if (c != null) onUserEvent(c, UserEvent.Answer) else control?.execute(EngineCommand.Answer(callId))

@@ -86,3 +86,16 @@ object PendingUiRequest {
     @Synchronized
     fun take(): UiRequestMsg? = if (delivered) null else request.also { delivered = true }
 }
+
+/**
+ * Whether the app's activity may show over the lock screen for the request
+ * [CallActionActivity] left in memory: the incoming screen while that call
+ * rings, the call screen (after Answer from the locked phone's notification)
+ * while that call is live. Cleared when the last call ends.
+ */
+object LockScreenPolicy {
+    fun showOverLock(kind: UiRequestKindMsg, callState: CallStateMsg?): Boolean = when (kind) {
+        UiRequestKindMsg.SHOW_INCOMING -> callState == CallStateMsg.INCOMING
+        UiRequestKindMsg.SHOW_CALL -> callState != null && callState != CallStateMsg.ENDED
+    }
+}

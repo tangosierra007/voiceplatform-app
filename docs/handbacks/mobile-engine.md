@@ -326,6 +326,20 @@ With the app swiped away and the phone locked, a push woke the engine and the ph
 2. **WS4:** a prompt when `canUseFullScreenIntent()` is false, using `openFullScreenIntentSettings()`.
 3. **Security review (WS6):** the launcher activity is now started by the notification's own PendingIntent, under the token-checked trampoline, instead of by the trampoline. The launcher intent still carries no call extras, and the lock-screen decision still comes only from the in-memory request for a ringing call.
 
+### Follow-ups (WS6 on #35) `fix/incoming-call-followups`
+
+Branch `fix/incoming-call-followups`, first on top of `fix/incoming-call-ui` at `fc42cef`, rebased onto `main` after #39. One PR (#38), not merged.
+
+1. **The call screen over the lock screen after Answer.** `LockScreenPolicy`: the incoming screen while that call rings (`INCOMING`), the call screen (`SHOW_CALL`, after Answer from the locked phone's notification) while that call is live (any state but `ENDED`). It uses the engine's own call state, not Telecom's, so it also works when Telecom refused the call. It is cleared when the last call ends, as before.
+2. **A refused `startForeground` no longer escapes `ring()`.** `ServiceNotice.show` tries with the microphone type, then without, and reports `FAILED` rather than throwing. `ring()` then returns false and `IncomingCallNotifier` posts the notification itself. Only the service's first start still throws (`EngineStartup` reports it).
+3. **Call waiting (chosen):** a third channel, "Call waiting": high importance (a heads-up with Answer and Decline), no ringtone, no vibration, not insistent, plus one `ToneGenerator.TONE_SUP_CALL_WAITING` (1.5 s, voice-call stream, volume 60) in the call's audio. When the other call ends while it still rings, it is shown again as an ordinary incoming call (ringtone channel, as the service notification).
+4. **`IncomingSpec.spec` takes only how it sounds** (`silent`, `waiting`). The app state and full-screen access are deliberately not inputs, and the test now says so: it checks the parameters, and that `show()` passes only those. The app state stays in the call log.
+5. **No "Ready for calls" flash after Answer:** `answerFromNotification` marks the call answering before the notification goes, and `ServiceNotice` keeps "Call in progress" for an answering call. If the answer fails, the mark is cleared.
+
+Tests: `IncomingCallUiTest` now has 15 (the lock-screen policy in every state; the foreground fallback with the microphone refused and with everything refused; the waiting channel and tone, and ringing again once alone; answering keeps "Call in progress"; the reworded spec test). Kotlin JVM 108 pass.
+
+Handset test for TJ: Answer from the locked phone's notification shows the call screen over the lock screen; a second call during a call gives one short tone and a quiet heads-up with Answer and Decline; hanging up the first while the second still rings makes it ring normally.
+
 ## Incoming screen on a cold start `fix/incoming-call-cold-start`
 
 Branch `fix/incoming-call-cold-start` from `main` at `fc42cef` (#35 merged). One PR, not merged.

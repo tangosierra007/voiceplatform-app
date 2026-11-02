@@ -10,6 +10,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -69,7 +71,13 @@ object IncomingCallNotifier {
         val silent = NotificationChannel(CHANNEL_SILENT_ID, context.getString(R.string.vp_linphone_incoming_silent_channel), NotificationManager.IMPORTANCE_HIGH)
         silent.setSound(null, null)
         silent.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        nm.createNotificationChannels(listOf(ring, silent))
+        // A second call while one is up: heads-up with Answer and Decline, no
+        // ringtone or vibration over the call; one call-waiting tone instead.
+        val waiting = NotificationChannel(IncomingSpec.CHANNEL_WAITING, context.getString(R.string.vp_linphone_incoming_waiting_channel), NotificationManager.IMPORTANCE_HIGH)
+        waiting.setSound(null, null)
+        waiting.enableVibration(false)
+        waiting.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        nm.createNotificationChannels(listOf(ring, silent, waiting))
     }
 
     /**
@@ -119,7 +127,9 @@ object IncomingCallNotifier {
         // valid either way.
         val fullScreen = canUseFullScreenIntent(context)
         val state = appState(context)
-        val spec = IncomingSpec.spec(state, fullScreen, silent)
+        val isWaiting = LinphoneEngine.hasOtherCallUp(info.callId)
+        if (isWaiting) waitingCalls[info.callId] = info else waitingCalls.remove(info.callId)
+        val spec = IncomingSpec.spec(silent, isWaiting)
         val n = build(context, spec, title, person, content, answer, decline)
         if (!fullScreen) {
             LinphoneEngine.logLine("TELECOM", "full-screen intent not allowed; sticky heads-up")
@@ -129,9 +139,10 @@ object IncomingCallNotifier {
         val viaService = ringHost?.ring(info.callId, id, n) == true
         LinphoneEngine.logLine(
             "TELECOM",
-            "incoming notification: app $state, full-screen ${if (fullScreen) "allowed" else "denied"}, " +
+            "incoming notification: app $state, ${if (isWaiting) "waiting" else "ringing"}, full-screen ${if (fullScreen) "allowed" else "denied"}, " +
                 if (viaService) "as the service notification" else "posted",
         )
+        if (spec.waitingTone) playWaitingTone()
         if (viaService) return
         try {
             NotificationManagerCompat.from(context).notify(id, n)
@@ -142,11 +153,37 @@ object IncomingCallNotifier {
         }
     }
 
+    /** Calls shown as waiting, by id: they ring properly once no other call is up. */
+    private val waitingCalls = HashMap<String, TelecomBridge.CallInfo>()
+
+    /**
+     * After a call ends: a call that was waiting and now has no other call
+     * up rings like any incoming call (ringtone channel, as the service
+     * notification).
+     */
+    fun ringWaitingCalls(context: Context) {
+        for ((id, info) in waitingCalls.toList()) {
+            if (LinphoneEngine.callState(id) == CallStateMsg.INCOMING && !LinphoneEngine.hasOtherCallUp(id)) show(context, info)
+        }
+    }
+
+    /** One call-waiting tone in the call's audio; never fatal. */
+    private fun playWaitingTone() {
+        try {
+            val tone = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 60)
+            tone.startTone(ToneGenerator.TONE_SUP_CALL_WAITING, 1500)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 2000)
+        } catch (e: RuntimeException) {
+            LinphoneEngine.logLine("TELECOM", "call-waiting tone failed: ${e.javaClass.simpleName}")
+        }
+    }
+
     /** The ringer was silenced (volume key): same notification, no sound. */
     fun silence(context: Context, info: TelecomBridge.CallInfo) = show(context, info, silent = true)
 
     fun cancel(context: Context, callId: String) {
         gate.forget(callId)
+        waitingCalls.remove(callId)
         // First move the service's foreground off it, then remove it.
         ringHost?.unring(callId)
         NotificationManagerCompat.from(context).cancel(notificationId(callId))

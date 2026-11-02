@@ -78,6 +78,7 @@ object LinphoneEngine {
         var hdrRepeat: String? = null
         var hdrLastAnswered: String? = null
         var announced = false
+        var answering = false
         val retry = MediaSecurity.Retry()
     }
 
@@ -571,13 +572,22 @@ object LinphoneEngine {
         val c = requireCore()
         val t = tracked(callId)
         if (t.state != CallStateMsg.INCOMING) throw VpFlutterError("invalid_state", "Call is not ringing")
-        if (!micGranted()) throw VpFlutterError("microphone_denied", "Microphone permission not granted")
-        requireSrtpOnly(c)
-        val params = c.createCallParams(t.call) ?: throw VpFlutterError("invalid_state", "No call params")
-        params.isVideoEnabled = false
-        MediaSecurity.applyToCall(CallEncryption(params))
-        val rc = t.call.acceptWithParams(params)
-        if (rc != 0) throw VpFlutterError("invalid_state", "Answer failed")
+        try {
+            if (!micGranted()) throw VpFlutterError("microphone_denied", "Microphone permission not granted")
+            requireSrtpOnly(c)
+            val params = c.createCallParams(t.call) ?: throw VpFlutterError("invalid_state", "No call params")
+            params.isVideoEnabled = false
+            MediaSecurity.applyToCall(CallEncryption(params))
+            val rc = t.call.acceptWithParams(params)
+            if (rc != 0) throw VpFlutterError("invalid_state", "Answer failed")
+        } catch (e: Throwable) {
+            // Not answered after all: the service shows the ringing call again.
+            if (t.answering) {
+                t.answering = false
+                updateService()
+            }
+            throw e
+        }
     }
 
     /** 486 Busy Here for this device only; the platform keeps the other branches ringing. */
@@ -763,6 +773,26 @@ object LinphoneEngine {
     // ---------------------------------------------------------------- Telecom and push
 
     val hasLiveCall: Boolean get() = calls.values.any { it.state != CallStateMsg.ENDED }
+
+    /** A tracked call's state, or null if it isn't tracked (main thread). */
+    fun callState(callId: String): CallStateMsg? = calls[callId]?.state
+
+    /** Another call is connected, held or being transferred: [callId] would be a waiting call. */
+    fun hasOtherCallUp(callId: String): Boolean = calls.values.any {
+        it.id != callId && (it.state == CallStateMsg.CONNECTED || it.state == CallStateMsg.HELD_BY_ME ||
+            it.state == CallStateMsg.HELD_BY_REMOTE || it.state == CallStateMsg.TRANSFERRING)
+    }
+
+    /**
+     * Answer from the notification is on its way: the service keeps "Call in
+     * progress" while the notification goes, rather than flashing "Ready".
+     */
+    fun markAnswering(callId: String) {
+        val t = calls[callId] ?: return
+        if (t.state != CallStateMsg.INCOMING) return
+        t.answering = true
+        updateService()
+    }
 
     /** Engine commands from the system UI, headsets and cars, through Telecom. */
     private val telecomControl = object : TelecomBridge.Control {
@@ -954,13 +984,15 @@ object LinphoneEngine {
 
     /** The service's notification and types follow the calls ([ServiceNotice]). */
     private fun updateService() {
-        service?.update(calls.values.map { ServiceNotice.Call(it.id, it.incoming, it.state) }, micGranted())
+        service?.update(calls.values.map { ServiceNotice.Call(it.id, it.incoming, it.state, it.answering) }, micGranted())
     }
 
     private fun emitCall(t: Tracked) {
         val msg = snapshot(t)
         appContext?.let { TelecomBridge.onSnapshot(it, msg) }
         updateService()
+        // A waiting call rings properly once no other call is up.
+        if (msg.state == CallStateMsg.ENDED) appContext?.let { IncomingCallNotifier.ringWaitingCalls(it) }
         listeners.forEach { it.onCall(msg) }
     }
 
