@@ -11,6 +11,8 @@ import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/auth/session_store.dart';
 import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/platform/device_keys.dart';
+import 'package:voiceplatform_app/screens/keypad/keypad_matches.dart';
+import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
 import 'package:voiceplatform_app/theme/theme_preference.dart';
 
@@ -127,6 +129,23 @@ void main() {
       expect(c.read(lastKnownShellProvider).hasSmsLine, isNull);
       expect(sp.getKeys(), isEmpty);
     });
+
+    test(
+      'sign-out forgets the half-typed number and the picked match',
+      () async {
+        await auth().requestEmail(SignInFixtures.advancedEmail);
+        await auth().completeWithCode(SignInFixtures.code);
+        c.read(dialledProvider.notifier).set('0491570737');
+        c.read(pickedMatchProvider.notifier).set((
+          number: '0491570737',
+          label: 'Jordan Price, Harbour Cafe',
+          query: '0491',
+        ));
+        await auth().signOutLocally();
+        expect(c.read(dialledProvider), isEmpty);
+        expect(c.read(pickedMatchProvider), isNull);
+      },
+    );
 
     test('a GET /me answer landing mid sign-out never brings the tab set '
         'back', () async {

@@ -11,6 +11,8 @@ import '../diagnostics/scrubber.dart';
 import '../features/messages/messages_data.dart';
 import '../net/api.dart';
 import '../platform/device_keys.dart';
+import '../screens/keypad/keypad_matches.dart' show pickedMatchProvider;
+import '../screens/keypad/keypad_screen.dart' show dialledProvider;
 import '../shell/shell_status.dart';
 import '../theme/theme_preference.dart';
 import 'app_lock.dart';
@@ -126,6 +128,12 @@ final localDataWipersProvider = Provider<List<Future<void> Function()>>(
     () async {
       ref.invalidate(threadDraftProvider);
       ref.invalidate(pickedThreadProvider);
+    },
+    // The half-typed number and the match picked for it (memory only), so
+    // the next account never sees the last one's caller.
+    () async {
+      ref.invalidate(dialledProvider);
+      ref.invalidate(pickedMatchProvider);
     },
     // Crash-report scope and the on-disk outbox.
     clearDiagnosticsOnDevice,
