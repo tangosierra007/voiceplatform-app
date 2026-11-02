@@ -90,7 +90,9 @@ class _RecentsScreenState extends ConsumerState<RecentsScreen> {
                             ? null
                             : withPending(
                                 counts.voicemail,
-                                ref.watch(voicemailPendingProvider).total,
+                                ref
+                                    .watch(voicemailPendingProvider)
+                                    .total(VoicemailCount.history),
                               ),
                       ),
                     ),

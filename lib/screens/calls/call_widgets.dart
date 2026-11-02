@@ -364,15 +364,23 @@ class _LiveWaveformState extends ConsumerState<LiveWaveform> {
 }
 
 /// The network's name for the caller, unless it is only a number (the
-/// carrier often sends "+61491579760" as the display name) or says nothing.
+/// carrier often sends "+61491579760" as the display name) or only says the
+/// number is hidden ("Private", "Withheld", "Restricted", in any case).
 String? networkName(String? remoteName) {
   final n = remoteName?.trim() ?? '';
   if (n.isEmpty || !n.contains(RegExp('[A-Za-z]'))) return null;
-  if (const {'anonymous', 'unknown', 'unavailable'}.contains(n.toLowerCase())) {
-    return null;
-  }
+  if (_noName.contains(n.toLowerCase())) return null;
   return n;
 }
+
+const _noName = {
+  'anonymous',
+  'unknown',
+  'unavailable',
+  'private',
+  'withheld',
+  'restricted',
+};
 
 /// Who is on a call, in the app's order (APP_DESIGN_SCOPE, Phone contacts):
 /// a colleague, the shared phonebook, the phone's own contact (all matched

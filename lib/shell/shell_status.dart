@@ -138,32 +138,116 @@ class LastKnownShellNotifier extends Notifier<LastKnownShell> {
   }
 }
 
+/// The new voicemail counts the server sends: the Recents tab badge (`/me`
+/// and the stream's `badges`), the Recents chip (`GET /history`'s counts)
+/// and the boxes' new counts.
+enum VoicemailCount { badge, history, boxes }
+
+/// One change made on this phone: its box, how it moves the new count, and
+/// once the server has it ([ack]), which counts already show it.
+@immutable
+class PendingVoicemail {
+  const PendingVoicemail(
+    this.boxId,
+    this.delta, {
+    this.ack,
+    this.settled = const {},
+  });
+
+  final String boxId;
+  final int delta;
+
+  /// When the server took the change (an order, not a time); null before.
+  final int? ack;
+
+  /// The counts read since then, which already include it.
+  final Set<VoicemailCount> settled;
+
+  PendingVoicemail copyWith({int? ack, Set<VoicemailCount>? settled}) =>
+      PendingVoicemail(
+        boxId,
+        delta,
+        ack: ack ?? this.ack,
+        settled: settled ?? this.settled,
+      );
+}
+
 /// Voicemail changes made on this phone (heard, new again, deleted) that the
-/// server's counts don't show yet: per message, its box and how it moves the
-/// new count. The Recents chip, the box counts and the tab badge add them
-/// at once, and each goes when the counts have been read again.
+/// server's counts don't show yet, by message. The Recents chip, the box
+/// counts and the tab badge add them at once. Once the server has a change,
+/// each count drops it as soon as a newer server figure for that count
+/// arrives (a `badges` event, `/me`, history or the boxes read again), so
+/// nothing is counted twice; the change itself goes when its own re-read is
+/// done.
 final voicemailPendingProvider =
-    NotifierProvider<VoicemailPendingNotifier, Map<String, (String, int)>>(
+    NotifierProvider<VoicemailPendingNotifier, Map<String, PendingVoicemail>>(
       VoicemailPendingNotifier.new,
     );
 
-class VoicemailPendingNotifier extends Notifier<Map<String, (String, int)>> {
+class VoicemailPendingNotifier extends Notifier<Map<String, PendingVoicemail>> {
+  int _order = 0;
+
   @override
-  Map<String, (String, int)> build() => const {};
+  Map<String, PendingVoicemail> build() {
+    // A newer badge from the server already counts every change it took.
+    ref.listen(liveBadgesProvider, (_, b) {
+      if (b != null) settle(VoicemailCount.badge);
+    });
+    ref.listen(meProvider, (_, me) {
+      if (me.hasValue && !me.isLoading) settle(VoicemailCount.badge);
+    });
+    return const {};
+  }
 
   void add(String messageId, String boxId, int delta) =>
-      state = {...state, messageId: (boxId, delta)};
+      state = {...state, messageId: PendingVoicemail(boxId, delta)};
+
+  /// The server has the change to [messageId]: counts read after this
+  /// include it.
+  void ack(String messageId) {
+    final p = state[messageId];
+    if (p == null) return;
+    state = {...state, messageId: p.copyWith(ack: ++_order)};
+  }
+
+  /// Now, in [ack]'s order: what a read starting now will include.
+  int get mark => _order;
+
+  /// A newer [count] arrived from the server: every change it took by
+  /// [upTo] (by default, all it has taken) is in that count now.
+  void settle(VoicemailCount count, {int? upTo}) {
+    final limit = upTo ?? _order;
+    var changed = false;
+    final next = {
+      for (final MapEntry(:key, :value) in state.entries)
+        key:
+            value.ack != null &&
+                value.ack! <= limit &&
+                !value.settled.contains(count)
+            ? (() {
+                changed = true;
+                return value.copyWith(settled: {...value.settled, count});
+              })()
+            : value,
+    };
+    if (changed) state = next;
+  }
 
   void remove(String messageId) => state = {...state}..remove(messageId);
 }
 
-extension VoicemailPending on Map<String, (String, int)> {
-  /// The change to the new voicemail count, all boxes.
-  int get total => values.fold(0, (n, v) => n + v.$2);
+extension VoicemailPending on Map<String, PendingVoicemail> {
+  /// The change still to add to [count], all boxes.
+  int total(VoicemailCount count) => values
+      .where((v) => !v.settled.contains(count))
+      .fold(0, (n, v) => n + v.delta);
 
-  /// The change to one box's new count.
-  int forBox(String boxId) =>
-      values.where((v) => v.$1 == boxId).fold(0, (n, v) => n + v.$2);
+  /// The change still to add to one box's new count.
+  int forBox(String boxId) => values
+      .where(
+        (v) => v.boxId == boxId && !v.settled.contains(VoicemailCount.boxes),
+      )
+      .fold(0, (n, v) => n + v.delta);
 }
 
 /// [server] moved by [delta], never below none.
@@ -184,7 +268,7 @@ final shellStatusProvider = Provider<ShellStatus>((ref) {
   return ShellStatus(
     recentsBadge: withPending(
       live?.recents ?? badges?.recents ?? 0,
-      ref.watch(voicemailPendingProvider).total,
+      ref.watch(voicemailPendingProvider).total(VoicemailCount.badge),
     ),
     messagesBadge: live?.messages ?? badges?.messages ?? 0,
     hasSmsLine: hasSmsLine ?? false,

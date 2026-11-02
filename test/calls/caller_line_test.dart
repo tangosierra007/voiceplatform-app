@@ -124,6 +124,24 @@ void main() {
       expect(networkName('Jordan Price'), 'Jordan Price');
     });
 
+    test('a name that only says the number is hidden is no name', () {
+      for (final n in [
+        'Private',
+        'PRIVATE',
+        'private',
+        'Withheld',
+        'WITHHELD',
+        ' withheld ',
+        'Restricted',
+        'RESTRICTED',
+        'restricted',
+      ]) {
+        expect(networkName(n), isNull, reason: n);
+      }
+      // A real name that only contains one of the words stays.
+      expect(networkName('Private Hospital'), 'Private Hospital');
+    });
+
     test('best name: a match on this phone, then the network, then none', () {
       final matcher = ContactMatcher(
         shared: [

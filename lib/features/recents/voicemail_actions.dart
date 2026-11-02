@@ -126,10 +126,14 @@ class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
     StackTrace? trace;
     try {
       await change();
+      pending.ack(m.id);
     } catch (e, s) {
       failed = e;
       trace = s;
     }
+    // What the reads below will include: this change and any other the
+    // server took before them (two changes in flight).
+    final upTo = pending.mark;
     ref.invalidate(voicemailBoxesProvider);
     ref.invalidate(voicemailMessagesProvider);
     for (final f in RecentsFilter.values) {
@@ -145,7 +149,10 @@ class VoicemailPlayerNotifier extends Notifier<VoicemailPlayerState> {
       ])
         f.then<Object?>((v) => v, onError: (_) => null),
     ]);
-    pending.remove(m.id);
+    pending
+      ..settle(VoicemailCount.history, upTo: upTo)
+      ..settle(VoicemailCount.boxes, upTo: upTo)
+      ..remove(m.id);
     // (The API's own Error model hides dart:core's here.)
     if (failed != null) await Future<void>.error(failed, trace);
   }
