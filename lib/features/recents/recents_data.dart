@@ -23,7 +23,8 @@ class RecentsFilterNotifier extends Notifier<RecentsFilter> {
 }
 
 /// The call the person opened (by `HistoryEntry.id`): its own page on the
-/// phone, beside the list at 800 dp and wider (FoldRecents). Kept across
+/// phone, beside the list from about 680 dp ([listDetailMinWidth];
+/// FoldRecents). Kept across
 /// fold and unfold.
 final pickedRecentProvider = NotifierProvider<PickedNotifier, String?>(
   PickedNotifier.new,

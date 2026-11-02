@@ -240,11 +240,11 @@ class RecentDetail extends ConsumerWidget {
           title: title,
           when: callWhen(voicemail.at, now),
         ),
-      _Card(
+      DetailCard(
         title: 'Recent calls with $title',
         children: [
           for (final x in calls)
-            _CallLine(
+            DetailCallLine(
               missed: historyIsMissed(x),
               text: callWithLine(x, myFirstName: myFirst),
               when: callWhen(x.at, now),
@@ -301,9 +301,10 @@ class RecentDetail extends ConsumerWidget {
   }
 }
 
-/// `.vp-card` with padding 16 18 and a 14 px bold title.
-class _Card extends StatelessWidget {
-  const _Card({required this.title, required this.children});
+/// `.vp-card` with padding 16 18 and a 14 px bold title (a call's or a
+/// colleague's detail).
+class DetailCard extends StatelessWidget {
+  const DetailCard({super.key, required this.title, required this.children});
   final String title;
   final List<Widget> children;
 
@@ -341,8 +342,9 @@ class _Card extends StatelessWidget {
 }
 
 /// One call: its icon, what happened, when; 8 px above and below, a rule.
-class _CallLine extends StatelessWidget {
-  const _CallLine({
+class DetailCallLine extends StatelessWidget {
+  const DetailCallLine({
+    super.key,
     required this.missed,
     required this.text,
     required this.when,

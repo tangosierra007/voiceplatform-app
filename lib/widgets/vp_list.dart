@@ -196,13 +196,16 @@ class VpRowText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
+    // At large text a narrow row (a 280 dp list) gives each line two, so
+    // the name still reads; the full text is in the row's label.
+    final lines = MediaQuery.textScalerOf(context).scale(10) > 13 ? 2 : 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           title,
-          maxLines: 1,
+          maxLines: lines,
           overflow: TextOverflow.ellipsis,
           style: VpType.body.copyWith(
             fontSize: titleSize,
@@ -216,7 +219,7 @@ class VpRowText extends StatelessWidget {
         if (subtitle != null)
           Text(
             subtitle!,
-            maxLines: 1,
+            maxLines: lines,
             overflow: TextOverflow.ellipsis,
             style: VpType.caption.copyWith(
               color: c.textMuted,

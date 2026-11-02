@@ -10,12 +10,16 @@ import '../../calls/numbers.dart';
 import '../../emergency/emergency.dart';
 import '../../features/recents/recents_format.dart';
 import '../../net/api.dart';
+import '../../shell/layout.dart';
+import '../../shell/list_detail.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_preference.dart';
 import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
 import '../../widgets/vp_list.dart';
+import '../../widgets/vp_wide.dart';
 import '../calls/transfer_screen.dart' show PresenceAvatar;
+import 'colleague_detail.dart';
 
 enum ContactsTab { colleagues, teams, phone }
 
@@ -100,12 +104,107 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     }
   }
 
+  Widget _search(BuildContext context, String? tenant) {
+    final c = context.vp;
+    return TextField(
+      controller: _query,
+      onChanged: (_) => setState(() {}),
+      style: VpType.body.copyWith(color: c.text),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Search ${tenant ?? 'contacts'}',
+        hintStyle: VpType.body.copyWith(color: c.textMuted),
+        prefixIcon: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: VpSvgIcon(VpIcon.search, size: 18, colour: c.textMuted),
+        ),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 38,
+          minHeight: 36,
+        ),
+        filled: true,
+        fillColor: c.surface,
+        constraints: const BoxConstraints(minHeight: 48),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(VpRadius.md),
+          borderSide: BorderSide(color: c.borderStrong),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(VpRadius.md),
+          borderSide: BorderSide(color: c.focus, width: 2),
+        ),
+        semanticCounterText: 'Search contacts',
+      ),
+    );
+  }
+
+  Widget _tabs(ContactsTab tab) => VpSeg<ContactsTab>(
+    label: 'Show',
+    options: const [
+      (ContactsTab.colleagues, 'Colleagues'),
+      (ContactsTab.teams, 'Teams'),
+      (ContactsTab.phone, 'Phone contacts'),
+    ],
+    value: tab,
+    onChanged: _select,
+  );
+
+  /// FoldContacts: the list (280 to 360 dp) and the colleague picked beside
+  /// it; until one is picked, the first colleague other than you. The
+  /// Teams and Phone contacts tabs keep the colleague beside them; a team
+  /// member picked from Teams shows too.
+  Widget _wide(BuildContext context, ContactsTab tab, String q) {
+    final me = ref.watch(meProvider).value;
+    final colleagues = ref.watch(colleaguesProvider).value ?? const [];
+    final picked = ref.watch(pickedColleagueProvider);
+    final shown =
+        colleagues.where((x) => x.userId == picked).firstOrNull ??
+        colleagues
+            .where((x) => x.extensionValue != me?.extensionValue)
+            .firstOrNull;
+    void pick(String id) => ref.read(pickedColleagueProvider.notifier).pick(id);
+    return SafeArea(
+      bottom: false,
+      child: ListDetailLayout(
+        list: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            WideListHeader(
+              title: 'Contacts',
+              children: [_search(context, me?.tenantName), _tabs(tab)],
+            ),
+            Expanded(
+              child: switch (tab) {
+                ContactsTab.colleagues => _Colleagues(
+                  query: q,
+                  shownId: shown?.userId,
+                  onPick: pick,
+                ),
+                ContactsTab.teams => _Teams(
+                  query: q,
+                  shownId: shown?.userId,
+                  onPick: pick,
+                ),
+                ContactsTab.phone => _PhoneContacts(query: q),
+              },
+            ),
+          ],
+        ),
+        detail: shown == null
+            ? const SizedBox.shrink()
+            : ColleagueDetail(key: ValueKey(shown.userId), colleague: shown),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c = context.vp;
     final tab = ref.watch(contactsTabProvider);
     final me = ref.watch(meProvider).value;
     final q = _query.text.trim();
+    if (isListDetailLayout(context)) return _wide(context, tab, q);
     return SafeArea(
       bottom: false,
       child: Column(
@@ -118,53 +217,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               children: [
                 const VpPageTitle('Contacts'),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _query,
-                  onChanged: (_) => setState(() {}),
-                  style: VpType.body.copyWith(color: c.text),
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: 'Search ${me?.tenantName ?? 'contacts'}',
-                    hintStyle: VpType.body.copyWith(color: c.textMuted),
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: VpSvgIcon(
-                        VpIcon.search,
-                        size: 18,
-                        colour: c.textMuted,
-                      ),
-                    ),
-                    prefixIconConstraints: const BoxConstraints(
-                      minWidth: 38,
-                      minHeight: 36,
-                    ),
-                    filled: true,
-                    fillColor: c.surface,
-                    constraints: const BoxConstraints(minHeight: 48),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(VpRadius.md),
-                      borderSide: BorderSide(color: c.borderStrong),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(VpRadius.md),
-                      borderSide: BorderSide(color: c.focus, width: 2),
-                    ),
-                    semanticCounterText: 'Search contacts',
-                  ),
-                ),
+                _search(context, me?.tenantName),
                 const SizedBox(height: 12),
-                VpSeg<ContactsTab>(
-                  label: 'Show',
-                  options: const [
-                    (ContactsTab.colleagues, 'Colleagues'),
-                    (ContactsTab.teams, 'Teams'),
-                    (ContactsTab.phone, 'Phone contacts'),
-                  ],
-                  value: tab,
-                  onChanged: _select,
-                ),
+                _tabs(tab),
               ],
             ),
           ),
@@ -197,8 +252,12 @@ bool _matches(String q, List<String?> fields) {
 bool _isFree(Presence p) => presenceLook(p) == PresenceLook.free;
 
 class _Colleagues extends ConsumerWidget {
-  const _Colleagues({required this.query});
+  const _Colleagues({required this.query, this.shownId, this.onPick});
   final String query;
+
+  /// Beside the detail: the colleague shown, and a tap to show another.
+  final String? shownId;
+  final ValueChanged<String>? onPick;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -245,6 +304,8 @@ class _Colleagues extends ConsumerWidget {
             ColleagueRow(
               colleague: col,
               presence: presence[col.extensionValue] ?? col.presence,
+              selected: col.userId == shownId,
+              onTap: onPick == null ? null : () => onPick!(col.userId),
             ),
         ],
       ),
@@ -259,14 +320,25 @@ class ColleagueRow extends ConsumerWidget {
     super.key,
     required this.colleague,
     required this.presence,
+    this.selected = false,
+    this.onTap,
   });
   final Colleague colleague;
   final PresenceEntry presence;
+
+  /// Beside the detail (FoldContacts): the one shown, on the brand tint.
+  final bool selected;
+
+  /// Beside the detail, a tap shows the colleague; the phone has no page
+  /// for one, so there the row only calls.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final col = colleague;
     return VpRow(
+      onTap: onTap,
+      background: selected ? context.vp.brandTint : null,
       children: [
         ExcludeSemantics(
           child: PresenceAvatar(name: col.name, presence: presence.presence),
@@ -358,8 +430,10 @@ class _PresenceLineState extends ConsumerState<_PresenceLine> {
 }
 
 class _Teams extends ConsumerStatefulWidget {
-  const _Teams({required this.query});
+  const _Teams({required this.query, this.shownId, this.onPick});
   final String query;
+  final String? shownId;
+  final ValueChanged<String>? onPick;
 
   @override
   ConsumerState<_Teams> createState() => _TeamsState();
@@ -411,6 +485,10 @@ class _TeamsState extends ConsumerState<_Teams> {
                     child: ColleagueRow(
                       colleague: col,
                       presence: presence[col.extensionValue] ?? col.presence,
+                      selected: col.userId == widget.shownId,
+                      onTap: widget.onPick == null
+                          ? null
+                          : () => widget.onPick!(col.userId),
                     ),
                   ),
           ],
