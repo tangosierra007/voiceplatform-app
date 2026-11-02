@@ -342,7 +342,7 @@ Handset test for TJ: Answer from the locked phone's notification shows the call 
 
 **Round 2 (WS6 on #38):**
 
-1. **Engine stop during a call** (sign-out, a revocation): `stopCore()` removes the Core listener before `terminateAllCalls()`, so no End reached the app and the lock-screen flag stayed on. Every call not yet ended is now sent as ENDED (end reason `local`) before the calls are forgotten, so the app, Telecom and the flag see it. The plugin also clears the flag on `stop()`, and on `unregister()` when no call is live (unregistering alone ends no call). `waitingCalls` is cleared.
+1. **Engine stop during a call** (sign-out, a revocation): `stopCore()` removes the Core listener before `terminateAllCalls()`, so no End reached the app and the lock-screen flag stayed on. Every call not yet ended is now sent as ENDED (end reason `local`) before the calls are forgotten, so the app, Telecom and the flag see it. The plugin also clears the flag on `stop()`, and on `unregister()` when no call is live (unregistering alone ends no call). `waitingCalls` is cleared first (WS6), so ending the other calls doesn't make a waiting call ring briefly at sign-out.
 2. **A failed Answer from the notification** (the microphone denied, say): the Answer tap had removed the notification, so the call rang with nothing to answer on. If the call still rings, `answer()`'s catch now shows the incoming notification again (`IncomingCallNotifier.show`), and the service shows it as the ringing call.
 3. **The call-waiting tone plays once per waiting call**, not again when the same call is shown again (the volume key, say).
 

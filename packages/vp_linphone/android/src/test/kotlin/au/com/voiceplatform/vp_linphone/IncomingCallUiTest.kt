@@ -266,7 +266,8 @@ class IncomingCallUiTest {
         val stop = engine.substringAfter("private fun stopCore()").substringBefore("private fun endTrackedCalls()")
         // Each call not yet ended is sent as ENDED before the calls are forgotten.
         assertTrue(stop.indexOf("endTrackedCalls()") in 0 until stop.indexOf("calls.clear()"))
-        assertTrue("IncomingCallNotifier.reset()" in stop)
+        // Waiting calls are forgotten first: ending the others must not make one ring (WS6).
+        assertTrue(stop.indexOf("IncomingCallNotifier.reset()") in 0 until stop.indexOf("endTrackedCalls()"))
         val end = engine.substringAfter("private fun endTrackedCalls()").substringBefore("private fun incomingInfo(")
         assertTrue("t.state = CallStateMsg.ENDED" in end && "emitCall(t)" in end)
         // The plugin clears the flag on ENDED with no live call, and on stop().

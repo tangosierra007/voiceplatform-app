@@ -226,8 +226,9 @@ object LinphoneEngine {
         c.stop()
         // The listener is gone, so liblinphone sends no End: tell the app, Telecom
         // and the lock-screen flag that every call has ended (sign-out, revoked).
-        endTrackedCalls()
+        // Forget waiting calls first, so ending the others doesn't make one ring.
         IncomingCallNotifier.reset()
+        endTrackedCalls()
         core = null
         account = null
         authInfo = null
