@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/version.dart';
+import '../calls/directory.dart';
 import '../calls/me_state.dart';
 import '../net/api.dart';
 import '../net/live_events.dart';
@@ -45,6 +46,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) => shell.goBranch(0));
     }
     ref.watch(meRetryOnResumeProvider);
+    ref.watch(addressBookRefreshOnResumeProvider);
     // Back online with `GET /me` still failed: ask again (Riverpod's own
     // retries stop after about a minute).
     ref.listen(offlineProvider, (was, offline) {

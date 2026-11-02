@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -101,12 +101,18 @@ class PhoneContact {
       i < labels.length && labels[i].trim().isNotEmpty ? labels[i] : 'phone';
 }
 
-/// The labels [phoneLabelText] gives the phone's standard kinds.
+/// The labels [phoneLabelText] gives the phone's standard kinds, in lower
+/// case: see [isStandardPhoneLabel].
 final standardPhoneLabels = {
   for (final l in PhoneLabel.values)
-    if (l != PhoneLabel.custom) phoneLabelText(l, null),
+    if (l != PhoneLabel.custom) phoneLabelText(l, null).toLowerCase(),
   'phone',
 };
+
+/// A standard kind's word, however it is written ("Work" typed as a
+/// custom label is still "work"): nothing personal, so never scrubbed.
+bool isStandardPhoneLabel(String label) =>
+    standardPhoneLabels.contains(label.trim().toLowerCase());
 
 /// A number's label in the words the phone's own Contacts app uses; the
 /// person's own label as they wrote it (Apple's `_$!<…>!$_` markers off).
@@ -223,10 +229,28 @@ final phoneContactsProvider = FutureProvider<List<PhoneContact>>((ref) async {
       p.name,
       ...p.numbers,
       for (final l in p.labels)
-        if (!standardPhoneLabels.contains(l)) l,
+        if (!isStandardPhoneLabel(l)) l,
     ],
   ]);
   return list;
+});
+
+/// Back in the foreground with the address book allowed: read it again, so
+/// names show the person's edits, an open phone contact's page shows its
+/// new numbers, and a deleted contact's page closes. The shell watches it
+/// while signed in.
+final addressBookRefreshOnResumeProvider = Provider<void>((ref) {
+  var live = true;
+  final listener = AppLifecycleListener(
+    onResume: () async {
+      final granted = await ref.read(phoneContactsSourceProvider).isGranted();
+      if (live && granted) ref.invalidate(phoneContactsProvider);
+    },
+  );
+  ref.onDispose(() {
+    live = false;
+    listener.dispose();
+  });
 });
 
 /// Who a number belongs to, for the keypad's match line and the call screens.

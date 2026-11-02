@@ -182,8 +182,8 @@ void main() {
     await _end(tester, e);
   });
 
-  testWidgets('a team member picked on Teams shows; Phone contacts keeps the '
-      'colleague beside it', (tester) async {
+  testWidgets('a team member picked on Teams shows; Phone contacts has its '
+      'own pick (TJ, 3 Nov)', (tester) async {
     _window(tester, _unfolded);
     final e = await _open(tester);
     await tester.tap(find.text('Teams'));
@@ -195,7 +195,7 @@ void main() {
     expect(_shown(tester), 'Priya Shah');
     await tester.tap(find.text('Phone contacts'));
     await _settle(tester);
-    expect(_shown(tester), 'Priya Shah');
+    expect(_shown(tester), isNull);
     await _end(tester, e);
   });
 

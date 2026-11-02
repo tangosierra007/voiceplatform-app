@@ -40,6 +40,19 @@ final contactsListPlacesProvider = Provider<Map<ContactsTab, double>>(
   (ref) => {},
 );
 
+/// The teams opened on Teams (by id), kept like the list's place: a
+/// member's page and back finds them still open.
+final contactsOpenTeamsProvider =
+    NotifierProvider<OpenTeamsNotifier, Set<String>>(OpenTeamsNotifier.new);
+
+class OpenTeamsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void toggle(String id) =>
+      state = state.contains(id) ? ({...state}..remove(id)) : {...state, id};
+}
+
 /// Whether READ_CONTACTS has been asked for. Asked once, the first time the
 /// Phone contacts tab opens; never from anywhere else.
 const contactsAskedKey = 'contacts.permission_asked';
@@ -168,21 +181,35 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       ? ref.watch(phoneContactsProvider).value ?? const <PhoneContact>[]
       : const <PhoneContact>[];
 
-  /// The latest pick shows: a colleague, or a phone contact.
-  void _pickColleague(String? id) {
-    ref.read(pickedPhoneContactProvider.notifier).pick(null);
-    ref.read(pickedColleagueProvider.notifier).pick(id);
-  }
+  /// Each tab has its own pick (TJ, 3 Nov): Colleagues a colleague, Teams a
+  /// team's member, Phone contacts a phone contact or a shared phonebook
+  /// entry. Switching tabs keeps each one.
+  NotifierProvider<PickedNotifier, String?> _pickOf(ContactsTab tab) =>
+      switch (tab) {
+        ContactsTab.colleagues => pickedColleagueProvider,
+        ContactsTab.teams => pickedTeamMemberProvider,
+        ContactsTab.phone => pickedPhoneContactProvider,
+      };
 
-  void _pickPhone(String? key) {
-    ref.read(pickedColleagueProvider.notifier).pick(null);
-    ref.read(pickedPhoneContactProvider.notifier).pick(key);
-  }
+  void _pick(ContactsTab tab, String? id) =>
+      ref.read(_pickOf(tab).notifier).pick(id);
 
-  /// Back to the list (the phone's page), with nothing picked.
-  void _back() {
-    ref.read(pickedColleagueProvider.notifier).pick(null);
-    ref.read(pickedPhoneContactProvider.notifier).pick(null);
+  /// What [tab] has picked, if it's still there.
+  _Shown _picked(ContactsTab tab) {
+    final id = ref.watch(_pickOf(tab));
+    if (id == null) return const _Shown();
+    if (tab == ContactsTab.phone) {
+      final shared = ref.watch(sharedContactsProvider).value ?? const [];
+      return _Shown(
+        phone: _phoneContacts().where((p) => phonePickKey(p) == id).firstOrNull,
+        shared: shared.where((s) => sharedPickKey(s) == id).firstOrNull,
+      );
+    }
+    return _Shown(
+      colleague: (ref.watch(colleaguesProvider).value ?? const <Colleague>[])
+          .where((x) => x.userId == id)
+          .firstOrNull,
+    );
   }
 
   /// Each tab's place in its list ([contactsListPlacesProvider]): the lists
@@ -220,54 +247,81 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     ContactsTab tab,
     String q, {
     required bool wide,
-    _Shown? shown,
+    _Shown shown = const _Shown(),
   }) {
     final controller = _listController(tab, wide: wide);
+    void pick(String id) => _pick(tab, id);
     return switch (tab) {
       ContactsTab.colleagues => _Colleagues(
         query: q,
         controller: controller,
-        shownId: shown?.colleague?.userId,
-        onPick: _pickColleague,
+        shownId: shown.colleague?.userId,
+        onPick: pick,
       ),
       ContactsTab.teams => _Teams(
         query: q,
         controller: controller,
-        shownId: shown?.colleague?.userId,
-        onPick: _pickColleague,
+        shownId: shown.colleague?.userId,
+        onPick: pick,
       ),
       ContactsTab.phone => _PhoneContacts(
         query: q,
         controller: controller,
-        shownKey: shown?.phone?.key,
-        onPick: _pickPhone,
+        shownKey: shown.phone != null
+            ? phonePickKey(shown.phone!)
+            : shown.shared != null
+            ? sharedPickKey(shown.shared!)
+            : null,
+        onPick: pick,
       ),
     };
   }
 
-  /// FoldContacts: the list (280 to 360 dp) and the contact picked beside
-  /// it; until one is picked, the first colleague other than you. A team
-  /// member picked from Teams shows, and a phone contact picked from Phone
-  /// contacts (TJ, 3 Nov); otherwise each tab keeps the last one beside it.
-  Widget _wide(
-    BuildContext context,
-    ContactsTab tab,
-    String q,
-    Colleague? colleague,
-    PhoneContact? phone,
-  ) {
-    final me = ref.watch(meProvider).value;
-    final colleagues = ref.watch(colleaguesProvider).value ?? const [];
-    final shown = phone != null
-        ? _Shown(phone: phone)
-        : _Shown(
-            colleague:
-                colleague ??
-                colleagues
-                    .where((x) => x.extensionValue != me?.extensionValue)
-                    .firstOrNull,
-          );
+  /// The detail for what's shown: beside the list ([wide]), or its page.
+  Widget? _detail(_Shown shown, {required bool wide, VoidCallback? onBack}) {
+    final phone = shown.phone;
+    final shared = shown.shared;
     final col = shown.colleague;
+    if (phone != null) {
+      return PhoneContactDetail(
+        key: ValueKey(phonePickKey(phone)),
+        contact: phone,
+        wide: wide,
+        onBack: onBack,
+      );
+    }
+    if (shared != null) {
+      return SharedContactDetail(
+        key: ValueKey(sharedPickKey(shared)),
+        contact: shared,
+        wide: wide,
+        onBack: onBack,
+      );
+    }
+    if (col != null) {
+      return ColleagueDetail(
+        key: ValueKey(col.userId),
+        colleague: col,
+        wide: wide,
+        onBack: onBack,
+      );
+    }
+    return null;
+  }
+
+  /// FoldContacts: the list (280 to 360 dp) and, beside it, what this tab
+  /// has picked (TJ, 3 Nov). Until then Colleagues shows the first
+  /// colleague other than you (FoldContacts), and Teams and Phone contacts
+  /// say how to pick one.
+  Widget _wide(BuildContext context, ContactsTab tab, String q, _Shown shown) {
+    final me = ref.watch(meProvider).value;
+    if (shown.isEmpty && tab == ContactsTab.colleagues) {
+      shown = _Shown(
+        colleague: (ref.watch(colleaguesProvider).value ?? const <Colleague>[])
+            .where((x) => x.extensionValue != me?.extensionValue)
+            .firstOrNull,
+      );
+    }
     return SafeArea(
       bottom: false,
       child: ListDetailLayout(
@@ -281,19 +335,17 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
             Expanded(child: _tabList(tab, q, wide: true, shown: shown)),
           ],
         ),
-        detail: phone != null
-            ? PhoneContactDetail(
-                key: ValueKey('phone:${phone.key}'),
-                contact: phone,
-                wide: true,
-              )
-            : col == null
-            ? const SizedBox.shrink()
-            : ColleagueDetail(
-                key: ValueKey(col.userId),
-                colleague: col,
-                wide: true,
+        detail:
+            _detail(shown, wide: true) ??
+            switch (tab) {
+              ContactsTab.colleagues => const SizedBox.shrink(),
+              ContactsTab.teams => const _PaneEmpty(
+                'Open a team and pick someone to see them here.',
               ),
+              ContactsTab.phone => const _PaneEmpty(
+                'Pick a contact to see their numbers here.',
+              ),
+            },
       ),
     );
   }
@@ -303,43 +355,26 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     final tab = ref.watch(contactsTabProvider);
     final me = ref.watch(meProvider).value;
     final q = _query.text.trim();
-    final colleagueId = ref.watch(pickedColleagueProvider);
-    final phoneKey = ref.watch(pickedPhoneContactProvider);
-    final colleague = colleagueId == null
-        ? null
-        : (ref.watch(colleaguesProvider).value ?? const <Colleague>[])
-              .where((x) => x.userId == colleagueId)
-              .firstOrNull;
-    final phone = phoneKey == null
-        ? null
-        : _phoneContacts().where((p) => p.key == phoneKey).firstOrNull;
-    if (isListDetailLayout(context)) {
-      return _wide(context, tab, q, colleague, phone);
-    }
-    if (colleague != null || phone != null) {
+    final shown = _picked(tab);
+    if (isListDetailLayout(context)) return _wide(context, tab, q, shown);
+    void back() => _pick(tab, null);
+    final page = _detail(shown, wide: false, onBack: back);
+    if (page != null) {
       // The contact's own page on the phone (TJ, 3 Nov): the same detail,
       // full screen; folding with one picked lands here. Back returns to
-      // the list where it was.
-      _dropList();
+      // the list where it was: once the list has gone, its controller goes
+      // too, and the next list starts from the place kept.
+      if (_list != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _list != null && !_list!.hasClients) _dropList();
+        });
+      }
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _back();
+          if (!didPop) back();
         },
-        child: SafeArea(
-          bottom: false,
-          child: phone != null
-              ? PhoneContactDetail(
-                  key: ValueKey('phone:${phone.key}'),
-                  contact: phone,
-                  onBack: _back,
-                )
-              : ColleagueDetail(
-                  key: ValueKey(colleague!.userId),
-                  colleague: colleague,
-                  onBack: _back,
-                ),
-        ),
+        child: SafeArea(bottom: false, child: page),
       );
     }
     return SafeArea(
@@ -367,11 +402,34 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 }
 
-/// The contact beside the list: a colleague or a phone contact.
+/// What a tab has picked: a colleague (Colleagues, Teams), or a phone
+/// contact or shared phonebook entry (Phone contacts).
 class _Shown {
-  const _Shown({this.colleague, this.phone});
+  const _Shown({this.colleague, this.phone, this.shared});
   final Colleague? colleague;
   final PhoneContact? phone;
+  final SharedContact? shared;
+
+  bool get isEmpty => colleague == null && phone == null && shared == null;
+}
+
+/// The pane with nothing picked on Teams or Phone contacts.
+class _PaneEmpty extends StatelessWidget {
+  const _PaneEmpty(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topCenter,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(28, 48, 28, 22),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: vpMuted(context, size: 14, line: 20),
+      ),
+    ),
+  );
 }
 
 bool _matches(String q, List<String?> fields) {
@@ -593,10 +651,9 @@ class _Teams extends ConsumerStatefulWidget {
 }
 
 class _TeamsState extends ConsumerState<_Teams> {
-  final _open = <String>{};
-
   @override
   Widget build(BuildContext context) {
+    final open = ref.watch(contactsOpenTeamsProvider);
     final teams = ref.watch(teamsProvider);
     final colleagues = {
       for (final c
@@ -632,7 +689,7 @@ class _TeamsState extends ConsumerState<_Teams> {
             ),
           for (final t in shown) ...[
             _teamRow(context, t, colleagues, presence),
-            if (_open.contains(t.id))
+            if (open.contains(t.id))
               for (final id in t.members)
                 if (colleagues[id] case final col?)
                   Padding(
@@ -676,9 +733,8 @@ class _TeamsState extends ConsumerState<_Teams> {
       '$free free now',
       if (number != null) formatAuNumber(number),
     ].join(' · ');
-    final open = _open.contains(t.id);
-    void toggle() =>
-        setState(() => open ? _open.remove(t.id) : _open.add(t.id));
+    final open = ref.watch(contactsOpenTeamsProvider).contains(t.id);
+    void toggle() => ref.read(contactsOpenTeamsProvider.notifier).toggle(t.id);
     return VpRow(
       onTap: toggle,
       semanticLabel: '${t.name}, $sub, ${open ? 'hide' : 'show'} members',
@@ -734,8 +790,9 @@ class _PhoneContacts extends ConsumerWidget {
   final String query;
   final ScrollController controller;
 
-  /// The phone contact shown beside the list; a tap on one shows it there,
-  /// or on the phone opens its page. The shared phonebook's rows only call.
+  /// The contact shown beside the list ([phonePickKey], [sharedPickKey]);
+  /// a tap shows one there, or on the phone opens its page. A shared
+  /// phonebook entry has a row per number: any of them picks the entry.
   final String? shownKey;
   final ValueChanged<String>? onPick;
 
@@ -776,6 +833,8 @@ class _PhoneContacts extends ConsumerWidget {
                 ].whereType<String>().where((d) => d != s.name).join(' · '),
                 number: n.number,
                 inTheApps: true,
+                selected: sharedPickKey(s) == shownKey,
+                onTap: onPick == null ? null : () => onPick!(sharedPickKey(s)),
               ),
         ],
         const VpBand('On this phone'),
@@ -792,8 +851,8 @@ class _PhoneContacts extends ConsumerWidget {
                   name: p.name,
                   detail: formatAuNumber(p.numbers.first),
                   number: p.numbers.first,
-                  selected: p.key == shownKey,
-                  onTap: onPick == null ? null : () => onPick!(p.key),
+                  selected: phonePickKey(p) == shownKey,
+                  onTap: onPick == null ? null : () => onPick!(phonePickKey(p)),
                 ),
             ],
           ),
@@ -844,7 +903,7 @@ class _NumberRow extends ConsumerWidget {
   /// Beside the detail: the one shown, on the brand tint.
   final bool selected;
 
-  /// A phone contact: shows it (beside the list, or its own page).
+  /// Shows the contact (beside the list, or its own page).
   final VoidCallback? onTap;
 
   @override

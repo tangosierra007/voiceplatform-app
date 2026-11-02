@@ -23,11 +23,20 @@ final pickedColleagueProvider = NotifierProvider<PickedNotifier, String?>(
   PickedNotifier.new,
 );
 
-/// The phone contact picked in Contacts ([PhoneContact.key]), shown as a
-/// colleague is. Picking one clears the other: the latest pick shows.
+/// The team member picked on Teams (by user id). Each tab has its own pick
+/// (TJ, 3 Nov): the pane shows the current tab's.
+final pickedTeamMemberProvider = NotifierProvider<PickedNotifier, String?>(
+  PickedNotifier.new,
+);
+
+/// The contact picked on Phone contacts: a phone contact ([phonePickKey]) or
+/// a shared phonebook entry ([sharedPickKey]), shown as a colleague is.
 final pickedPhoneContactProvider = NotifierProvider<PickedNotifier, String?>(
   PickedNotifier.new,
 );
+
+String phonePickKey(PhoneContact p) => 'phone:${p.key}';
+String sharedPickKey(SharedContact s) => 'shared:${s.id}';
 
 /// "Ava Nguyen called you, 4:02", "You called Priya, 1:37" (FoldContacts);
 /// anything else as Recents says it.
@@ -52,6 +61,15 @@ String labelTitle(String label) {
     return label;
   }
   return a.toUpperCase() + label.substring(1);
+}
+
+/// "Main" as a button's word: "Call main". Labels with another capital
+/// ("ISDN", "Apple Watch", "iPhone") stay as they are.
+String labelWord(String label) {
+  if (label.isEmpty) return label;
+  final rest = label.substring(1);
+  if (rest.toLowerCase() != rest) return label;
+  return label[0].toLowerCase() + rest;
 }
 
 /// FoldContacts' detail: the colleague with presence, Call (extension) and
@@ -157,13 +175,12 @@ class ColleagueDetail extends ConsumerWidget {
 }
 
 /// A contact from the phone's own address book, laid out as a colleague
-/// (TJ, 3 Nov): the name, Call for the first number, and every number with
-/// its label (mobile, work, home…), each one a call. Every call goes the
-/// one way ([dialNumber]), so an emergency number opens AppEmergency.
+/// (TJ, 3 Nov): the name, "On this phone", Call for the first number, and
+/// every number with its label (mobile, work, home…), each one a call.
 ///
 /// No "Calls with": that needs `GET /history?number=` with the contact's
 /// number, and the address book never leaves the phone (APP12).
-class PhoneContactDetail extends ConsumerWidget {
+class PhoneContactDetail extends StatelessWidget {
   const PhoneContactDetail({
     super.key,
     required this.contact,
@@ -175,31 +192,100 @@ class PhoneContactDetail extends ConsumerWidget {
   final VoidCallback? onBack;
 
   @override
+  Widget build(BuildContext context) => _NumbersDetail(
+    name: contact.name,
+    sub: 'On this phone',
+    numbers: [
+      for (final (i, n) in contact.numbers.indexed) (contact.labelAt(i), n),
+    ],
+    wide: wide,
+    onBack: onBack,
+  );
+}
+
+/// An entry in the tenant's shared phonebook ("In the apps"; TJ, 3 Nov), as
+/// a phone contact is: the name, the company, and each number with its
+/// label, each one a call.
+class SharedContactDetail extends StatelessWidget {
+  const SharedContactDetail({
+    super.key,
+    required this.contact,
+    this.wide = false,
+    this.onBack,
+  });
+  final SharedContact contact;
+  final bool wide;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = contact;
+    final company = s.company;
+    return _NumbersDetail(
+      name: s.name,
+      sub: [
+        if (company != null && company.isNotEmpty && company != s.name) company,
+        'Shared phonebook',
+      ].join(' · '),
+      numbers: [
+        for (final n in s.numbers)
+          (n.label.trim().isEmpty ? 'phone' : n.label, n.number),
+      ],
+      wide: wide,
+      onBack: onBack,
+    );
+  }
+}
+
+/// A phone contact's or shared phonebook entry's detail: the header, Call
+/// for the first number, and the numbers card. Every call goes the one way
+/// ([dialNumber]), so an emergency number opens AppEmergency.
+class _NumbersDetail extends ConsumerWidget {
+  const _NumbersDetail({
+    required this.name,
+    required this.sub,
+    required this.numbers,
+    required this.wide,
+    required this.onBack,
+  });
+  final String name;
+  final String sub;
+
+  /// (label, number), in the contact's order.
+  final List<(String, String)> numbers;
+  final bool wide;
+  final VoidCallback? onBack;
+
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final p = contact;
+    final first = numbers.firstOrNull;
     return DetailFrame(
       wide: wide,
       backLabel: 'Back to Contacts',
       onBack: onBack,
       children: [
-        _Header(name: p.name, sub: 'On this phone'),
-        if (p.numbers.isNotEmpty)
+        _Header(name: name, sub: sub),
+        if (first != null)
           Wrap(
             children: [
               _CallButton(
-                label: 'Call ${p.labelAt(0)}',
-                onPressed: () => dialNumber(context, ref, p.numbers.first),
+                // A number with no label is just "Call".
+                label: first.$1.toLowerCase() == 'phone'
+                    ? 'Call'
+                    : 'Call ${labelWord(first.$1)}',
+                onPressed: () => dialNumber(context, ref, first.$2),
               ),
             ],
           ),
         DetailCard(
-          title: p.numbers.length == 1 ? 'Number' : 'Numbers',
+          title: numbers.length == 1 ? 'Number' : 'Numbers',
           children: [
-            for (final (i, n) in p.numbers.indexed)
+            for (final (i, (label, n)) in numbers.indexed)
               _NumberLine(
-                label: labelTitle(p.labelAt(i)),
+                label: labelTitle(label),
                 number: formatAuNumber(n),
                 onCall: () => dialNumber(context, ref, n),
+                last: i == numbers.length - 1,
               ),
           ],
         ),
@@ -403,10 +489,14 @@ class _NumberLine extends StatelessWidget {
     required this.label,
     required this.number,
     required this.onCall,
+    this.last = false,
   });
   final String label;
   final String number;
   final VoidCallback onCall;
+
+  /// The card's last row: no rule under it.
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
@@ -421,7 +511,7 @@ class _NumberLine extends StatelessWidget {
         onTap: onCall,
         child: Container(
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: c.border)),
+            border: last ? null : Border(bottom: BorderSide(color: c.border)),
           ),
           child: _Field(
             label,

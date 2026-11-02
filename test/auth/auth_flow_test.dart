@@ -10,7 +10,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voiceplatform_app/auth/auth.dart';
 import 'package:voiceplatform_app/auth/session_store.dart';
 import 'package:voiceplatform_app/net/api.dart';
+import 'package:voiceplatform_app/features/recents/recents_data.dart';
 import 'package:voiceplatform_app/platform/device_keys.dart';
+import 'package:voiceplatform_app/screens/contacts/colleague_detail.dart';
+import 'package:voiceplatform_app/screens/contacts/contacts_screen.dart';
 import 'package:voiceplatform_app/screens/keypad/keypad_matches.dart';
 import 'package:voiceplatform_app/screens/keypad/keypad_screen.dart';
 import 'package:voiceplatform_app/shell/shell_status.dart';
@@ -146,6 +149,28 @@ void main() {
         expect(c.read(pickedMatchProvider), isNull);
       },
     );
+
+    test('sign-out forgets every pick and list place in Recents and Contacts; '
+        'the next sign-in starts with none', () async {
+      await auth().requestEmail(SignInFixtures.advancedEmail);
+      await auth().completeWithCode(SignInFixtures.code);
+      c.read(pickedRecentProvider.notifier).pick('call-1');
+      c.read(pickedColleagueProvider.notifier).pick('user-302');
+      c.read(pickedTeamMemberProvider.notifier).pick('user-302');
+      c.read(pickedPhoneContactProvider.notifier).pick('phone:7');
+      c.read(contactsListPlacesProvider)[ContactsTab.colleagues] = 240;
+      c.read(contactsOpenTeamsProvider.notifier).toggle('team-1');
+      await auth().signOutLocally();
+      await auth().requestEmail(SignInFixtures.advancedEmail);
+      await auth().completeWithCode(SignInFixtures.code);
+      expect(c.read(authProvider), isA<SignedIn>());
+      expect(c.read(pickedRecentProvider), isNull);
+      expect(c.read(pickedColleagueProvider), isNull);
+      expect(c.read(pickedTeamMemberProvider), isNull);
+      expect(c.read(pickedPhoneContactProvider), isNull);
+      expect(c.read(contactsListPlacesProvider), isEmpty);
+      expect(c.read(contactsOpenTeamsProvider), isEmpty);
+    });
 
     test('a GET /me answer landing mid sign-out never brings the tab set '
         'back', () async {

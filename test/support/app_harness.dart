@@ -75,6 +75,9 @@ Future<Widget> appUnderTest({
   Map<String, Object> prefs = const {},
   FakeMic? mic,
   List<PhoneContact> phoneContacts = const [],
+
+  /// In place of the fixture's shared phonebook.
+  List<SharedContact>? sharedContacts,
   bool offline = false,
   DeskPhoneCall? deskPhone,
   EngineUi? ui,
@@ -197,7 +200,9 @@ Future<Widget> appUnderTest({
       if (sendCallLogs != null)
         sendCallLogsProvider.overrideWithValue(sendCallLogs),
       mediaPlayerProvider.overrideWithValue(player ?? FakeMediaPlayer()),
-      sharedContactsProvider.overrideWith((ref) async => fixtureShared()),
+      sharedContactsProvider.overrideWith(
+        (ref) async => sharedContacts ?? fixtureShared(),
+      ),
       callerIdsProvider.overrideWith((ref) async => fixtureCallerIds()),
       myStatusProvider.overrideWith(
         () => statusController ?? PresetStatus(myStatus),

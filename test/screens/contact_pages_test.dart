@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/calls/directory.dart';
 import 'package:voiceplatform_app/emergency/emergency.dart';
 import 'package:voiceplatform_app/engine/fake_call_engine.dart';
+import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/screens/contacts/colleague_detail.dart';
 import 'package:voiceplatform_app/screens/contacts/contacts_screen.dart';
 import 'package:voiceplatform_app/shell/list_detail.dart';
@@ -83,6 +84,7 @@ Future<void> _resize(WidgetTester tester, Size size) async {
 Future<_Spy> _open(
   WidgetTester tester, {
   List<PhoneContact> book = _book,
+  FixedPhoneContacts? source,
 }) async {
   final e = _Spy();
   await e.start();
@@ -93,6 +95,7 @@ Future<_Spy> _open(
       clock: () => _now,
       api: FakeApi({}),
       phoneContacts: book,
+      phoneSource: source,
     ),
   );
   await _settle(tester);
@@ -117,7 +120,8 @@ Future<void> _end(WidgetTester t, FakeCallEngine e) async {
   await e.dispose();
 }
 
-/// Who the detail shows, colleague or phone contact, or null for none.
+/// Who the detail shows (colleague, phone contact or shared phonebook
+/// entry), or null for none.
 String? _shown(WidgetTester tester) {
   final col = find.byType(ColleagueDetail);
   if (col.evaluate().isNotEmpty) {
@@ -126,6 +130,10 @@ String? _shown(WidgetTester tester) {
   final phone = find.byType(PhoneContactDetail);
   if (phone.evaluate().isNotEmpty) {
     return tester.widget<PhoneContactDetail>(phone).contact.name;
+  }
+  final shared = find.byType(SharedContactDetail);
+  if (shared.evaluate().isNotEmpty) {
+    return tester.widget<SharedContactDetail>(shared).contact.name;
   }
   return null;
 }
@@ -142,8 +150,13 @@ Finder _kv(String label) => find.byWidgetPredicate(
   (w) => w is Semantics && w.properties.label == label,
 );
 
-Finder _inDetail(Finder f) =>
-    find.descendant(of: find.byType(PhoneContactDetail), matching: f);
+/// Within the phone contact's or shared phonebook entry's detail.
+Finder _inDetail(Finder f) => find.descendant(
+  of: find.byWidgetPredicate(
+    (w) => w is PhoneContactDetail || w is SharedContactDetail,
+  ),
+  matching: f,
+);
 
 /// Taps [f] to call, then hangs the call up so the detail is back.
 Future<void> _callAndHangUp(WidgetTester tester, _Spy e, Finder f) async {
@@ -187,6 +200,12 @@ void main() {
     expect(phoneLabelText(PhoneLabel.custom, ' '), 'phone');
     expect(const PhoneContact('A', ['1', '2']).labelAt(1), 'phone');
     expect(standardPhoneLabels, isNot(contains("Rowan's clinic")));
+    expect(isStandardPhoneLabel('Work'), isTrue, reason: 'typed, not picked');
+    expect(isStandardPhoneLabel(' IPHONE '), isTrue);
+    expect(isStandardPhoneLabel("Rowan's clinic"), isFalse);
+    expect(labelWord('Main'), 'main');
+    expect(labelWord('Apple Watch'), 'Apple Watch');
+    expect(labelWord('ISDN'), 'ISDN');
   });
 
   testWidgets('884 dp: a phone contact picked shows beside the list, each '
@@ -194,7 +213,7 @@ void main() {
     _window(tester, _unfolded);
     final e = await _open(tester);
     await _phoneTab(tester);
-    expect(_shown(tester), 'Reception', reason: 'the colleague until then');
+    expect(_shown(tester), isNull, reason: 'nothing picked on this tab');
     await tester.tap(find.text('Dr Rowan Achebe'));
     await _settle(tester);
     expect(find.byType(ListDetailLayout), findsOneWidget);
@@ -215,18 +234,7 @@ void main() {
     await _callAndHangUp(tester, e, _inDetail(find.text('03 5550 1778')));
     expect(e.called, ['0491 573 770', '+61 3 5550 1777', '03 5550 1778']);
 
-    // A colleague picked again shows; the latest pick wins.
-    await tester.tap(find.text('Colleagues'));
-    await _settle(tester);
-    expect(_shown(tester), 'Dr Rowan Achebe', reason: 'kept beside the list');
-    await tester.tap(
-      find.descendant(
-        of: find.byType(ListDetailLayout),
-        matching: find.text('Priya Shah'),
-      ),
-    );
-    await _settle(tester);
-    expect(_shown(tester), 'Priya Shah');
+    expect(tester.takeException(), isNull);
     expect(tester.takeException(), isNull);
     await _end(tester, e);
   });
@@ -314,7 +322,7 @@ void main() {
   });
 
   testWidgets('a team picked on Teams has no detail; its member opens their '
-      'page', (tester) async {
+      'page; Back finds the team still open', (tester) async {
     _window(tester, _phone);
     final e = await _open(tester);
     await tester.tap(find.text('Teams'));
@@ -325,6 +333,20 @@ void main() {
     await tester.tap(find.text('Priya Shah'));
     await _settle(tester);
     expect(_shown(tester), 'Priya Shah');
+    await tester.tap(_button('Back to Contacts'));
+    await _settle(tester);
+    expect(_shown(tester), isNull);
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Semantics &&
+            (w.properties.label ?? '').startsWith('Accounts,') &&
+            w.properties.label!.endsWith('hide members'),
+      ),
+      findsOneWidget,
+      reason: 'still open',
+    );
+    expect(find.text('Priya Shah'), findsOneWidget, reason: 'a member, shown');
     await _end(tester, e);
   });
 
@@ -333,7 +355,7 @@ void main() {
     ('a phone contact', 'Phone contacts', 'Dr Rowan Achebe'),
   ]) {
     testWidgets('fold with $what picked: their page; Back: the list; unfold: '
-        'the first colleague again', (tester) async {
+        'nothing picked again', (tester) async {
       _window(tester, _unfolded);
       final e = await _open(tester);
       if (tab != 'Colleagues') await _phoneTab(tester);
@@ -360,7 +382,11 @@ void main() {
       expect(find.text(tab), findsOneWidget);
 
       await _resize(tester, _unfolded);
-      expect(_shown(tester), 'Reception', reason: 'nothing picked');
+      expect(
+        _shown(tester),
+        tab == 'Colleagues' ? 'Reception' : null,
+        reason: 'nothing picked',
+      );
       expect(tester.takeException(), isNull);
       await _end(tester, e);
     });
@@ -419,4 +445,219 @@ void main() {
       await _end(tester, e);
     });
   }
+
+  testWidgets('back in the foreground, the address book is read again: an '
+      "open page shows the edits, and closes when they're deleted", (
+    tester,
+  ) async {
+    _window(tester, _phone);
+    final book = [..._book];
+    final source = FixedPhoneContacts(book);
+    final e = await _open(tester, source: source);
+    await _phoneTab(tester);
+    await tester.tap(find.text('Kim Bell'));
+    await _settle(tester);
+    expect(_inDetail(_kv('Home: 03 5550 1142')), findsOneWidget);
+
+    Future<void> resume() async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await _settle(tester);
+      await _settle(tester);
+    }
+
+    // Edited in the phone's Contacts app while away (same id).
+    book[1] = const PhoneContact(
+      'Kim Bell',
+      ['03 5550 1142', '0491 570 156'],
+      labels: ['home', 'mobile'],
+      id: '3',
+    );
+    await resume();
+    expect(_shown(tester), 'Kim Bell');
+    expect(_inDetail(_kv('Mobile: 0491 570 156')), findsOneWidget);
+
+    // Deleted while away: the page closes, back to Phone contacts.
+    book.removeAt(1);
+    await resume();
+    expect(_shown(tester), isNull);
+    expect(find.text('Kim Bell'), findsNothing);
+    expect(find.text('Dr Rowan Achebe'), findsOneWidget);
+    await _end(tester, e);
+  });
+
+  testWidgets('a number with no label: "Call", and "Phone" in the card', (
+    tester,
+  ) async {
+    _window(tester, _unfolded);
+    final e = await _open(
+      tester,
+      book: const [
+        PhoneContact('Sam Lowe', ['03 5550 1990'], id: '9'),
+      ],
+    );
+    await _phoneTab(tester);
+    await tester.tap(find.text('Sam Lowe'));
+    await _settle(tester);
+    expect(_inDetail(find.text('Call')), findsOneWidget);
+    expect(_inDetail(find.text('Call phone')), findsNothing);
+    expect(_inDetail(find.text('Number')), findsOneWidget);
+    expect(_inDetail(_kv('Phone: 03 5550 1990')), findsOneWidget);
+    await _end(tester, e);
+  });
+
+  testWidgets('884 dp: the pane follows the tab, each with its own pick, '
+      'kept when switching back (TJ, 3 Nov)', (tester) async {
+    _window(tester, _unfolded);
+    final e = await _open(tester);
+    Finder row(String name) => find.descendant(
+      of: find.byType(ListDetailLayout),
+      matching: find.text(name),
+    );
+    Future<void> tab(String name) async {
+      await tester.tap(find.text(name).first);
+      await _settle(tester);
+    }
+
+    expect(_shown(tester), 'Reception', reason: 'Colleagues: the first');
+    await tester.tap(row('Mia Rossi'));
+    await _settle(tester);
+    expect(_shown(tester), 'Mia Rossi');
+
+    await tab('Teams');
+    expect(_shown(tester), isNull, reason: 'nothing picked on Teams');
+    expect(
+      find.text('Open a team and pick someone to see them here.'),
+      findsOneWidget,
+    );
+    await tester.tap(row('Accounts'));
+    await _settle(tester);
+    await tester.tap(row('Priya Shah'));
+    await _settle(tester);
+    expect(_shown(tester), 'Priya Shah');
+
+    await tab('Phone contacts');
+    expect(_shown(tester), isNull, reason: 'no colleague stays');
+    expect(
+      find.text('Pick a contact to see their numbers here.'),
+      findsOneWidget,
+    );
+    await tester.tap(row('Dr Rowan Achebe'));
+    await _settle(tester);
+    expect(_shown(tester), 'Dr Rowan Achebe');
+
+    await tab('Colleagues');
+    expect(_shown(tester), 'Mia Rossi', reason: 'no phone contact stays');
+    await tab('Teams');
+    expect(_shown(tester), 'Priya Shah');
+    await tab('Phone contacts');
+    expect(_shown(tester), 'Dr Rowan Achebe');
+    expect(tester.takeException(), isNull);
+    await _end(tester, e);
+  });
+
+  group('a shared phonebook entry', () {
+    // One entry with two numbers: a row each in the list.
+    final shared = [
+      SharedContact.fromJson({
+        'id': 'shared-1',
+        'name': 'Jordan Price',
+        'company': 'Harbour Cafe',
+        'numbers': [
+          {'label': 'Mobile', 'number': '+61491570737'},
+          {'label': 'Work', 'number': '+61355501993'},
+        ],
+      }),
+    ];
+
+    Future<_Spy> open(WidgetTester tester) async {
+      final e = _Spy();
+      await e.start();
+      await e.register(_account);
+      await tester.pumpWidget(
+        await appUnderTest(
+          engine: e,
+          clock: () => _now,
+          api: FakeApi({}),
+          phoneContacts: _book,
+          sharedContacts: shared,
+        ),
+      );
+      await _settle(tester);
+      final rail = find.descendant(
+        of: find.byType(VpNavRail),
+        matching: find.text('Contacts'),
+      );
+      await tester.tap(
+        rail.evaluate().isNotEmpty
+            ? rail
+            : find.descendant(
+                of: find.byType(VpTabBar),
+                matching: find.text('Contacts'),
+              ),
+      );
+      await _settle(tester);
+      await _phoneTab(tester);
+      return e;
+    }
+
+    testWidgets('884 dp: either row picks it; beside the list with the '
+        'company and each number under its label, each one a call', (
+      tester,
+    ) async {
+      _window(tester, _unfolded);
+      final e = await open(tester);
+      expect(find.text('Jordan Price'), findsNWidgets(2), reason: 'two rows');
+      await tester.tap(find.text('Jordan Price').last);
+      await _settle(tester);
+      expect(_shown(tester), 'Jordan Price');
+      expect(
+        _inDetail(find.text('Harbour Cafe · Shared phonebook')),
+        findsOneWidget,
+      );
+      expect(_inDetail(_kv('Mobile: 0491 570 737')), findsOneWidget);
+      expect(_inDetail(_kv('Work: 03 5550 1993')), findsOneWidget);
+      await _callAndHangUp(tester, e, _inDetail(find.text('Call mobile')));
+      await _callAndHangUp(
+        tester,
+        e,
+        _inDetail(_button('Call Work, 03 5550 1993')),
+      );
+      expect(e.called, ['+61491570737', '+61355501993']);
+
+      // The first row picks the same entry.
+      await tester.tap(find.text('Jordan Price').first);
+      await _settle(tester);
+      expect(_shown(tester), 'Jordan Price');
+      expect(tester.takeException(), isNull);
+      await _end(tester, e);
+    });
+
+    testWidgets("phone: the entry's own page; Back to Phone contacts", (
+      tester,
+    ) async {
+      _window(tester, _phone);
+      final e = await open(tester);
+      await tester.tap(find.text('Jordan Price').first);
+      await _settle(tester);
+      expect(_shown(tester), 'Jordan Price');
+      expect(find.byType(ListDetailLayout), findsNothing);
+      expect(_inDetail(_kv('Work: 03 5550 1993')), findsOneWidget);
+      await _callAndHangUp(
+        tester,
+        e,
+        _inDetail(_button('Call Mobile, 0491 570 737')),
+      );
+      expect(e.called, ['+61491570737']);
+      await tester.tap(_button('Back to Contacts'));
+      await _settle(tester);
+      expect(_shown(tester), isNull);
+      expect(find.text('Kim Bell'), findsOneWidget);
+      await _end(tester, e);
+    });
+  });
 }

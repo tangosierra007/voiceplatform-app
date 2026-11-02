@@ -9,8 +9,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../calls/directory.dart';
 import '../diagnostics/scrubber.dart';
 import '../features/messages/messages_data.dart';
+import '../features/recents/recents_data.dart' show pickedRecentProvider;
 import '../net/api.dart';
 import '../platform/device_keys.dart';
+import '../screens/contacts/colleague_detail.dart'
+    show
+        pickedColleagueProvider,
+        pickedPhoneContactProvider,
+        pickedTeamMemberProvider;
+import '../screens/contacts/contacts_screen.dart'
+    show contactsListPlacesProvider, contactsOpenTeamsProvider;
 import '../screens/keypad/keypad_matches.dart' show pickedMatchProvider;
 import '../screens/keypad/keypad_screen.dart' show dialledProvider;
 import '../shell/shell_status.dart';
@@ -134,6 +142,17 @@ final localDataWipersProvider = Provider<List<Future<void> Function()>>(
     () async {
       ref.invalidate(dialledProvider);
       ref.invalidate(pickedMatchProvider);
+    },
+    // What was picked (a call; a colleague, team member, phone contact or
+    // shared phonebook entry) and where the lists were, in Recents and
+    // Contacts (memory only): the next account opens on its own lists.
+    () async {
+      ref.invalidate(pickedRecentProvider);
+      ref.invalidate(pickedColleagueProvider);
+      ref.invalidate(pickedTeamMemberProvider);
+      ref.invalidate(pickedPhoneContactProvider);
+      ref.invalidate(contactsListPlacesProvider);
+      ref.invalidate(contactsOpenTeamsProvider);
     },
     // Crash-report scope and the on-disk outbox.
     clearDiagnosticsOnDevice,
