@@ -7,6 +7,7 @@ import 'package:call_engine/call_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/engine/fake_call_engine.dart';
+import 'package:voiceplatform_app/screens/calls/call_widgets.dart';
 import 'package:voiceplatform_app/screens/calls/in_call_screen.dart';
 import 'package:voiceplatform_app/screens/calls/incoming_screen.dart';
 import 'package:voiceplatform_app/screens/messages/thread_screen.dart';
@@ -393,6 +394,39 @@ void main() {
         side: 48,
         what: 'Send',
       );
+      await _end(tester, e);
+    });
+  }
+
+  for (final size in [const Size(360, 800), const Size(368, 904)]) {
+    testWidgets('in-call keypad open, ${size.width.toInt()} x '
+        '${size.height.toInt()}: the avatar and waveform make way; the name, '
+        'the timer and the Encrypted tag stay in view', (tester) async {
+      _window(tester, size, bottom: 48);
+      final e = await _app(tester);
+      await _answer(tester, e);
+      await _press(tester, 'Answer');
+      await _settle(tester);
+      final inCall = find.byType(InCallScreen);
+      Finder within(Finder f) => find.descendant(of: inCall, matching: f);
+      expect(within(find.byType(CallAvatar)), findsOneWidget);
+      expect(within(find.byType(LiveWaveform)), findsOneWidget);
+      await _press(tester, 'Keypad');
+      await _settle(tester);
+      expect(within(find.byType(CallAvatar)), findsNothing);
+      expect(within(find.byType(LiveWaveform)), findsNothing);
+      // In view without scrolling: above Hang up and the bar.
+      final hangUp = tester.getRect(within(find.bySemanticsLabel('Hang up')));
+      for (final (what, f) in [
+        ('name', within(find.text('Jordan Price'))),
+        ('timer', within(find.bySemanticsLabel(RegExp('^Call time')))),
+        ('Encrypted', within(find.text('ENCRYPTED'))),
+      ]) {
+        expect(f, findsOneWidget, reason: what);
+        final r = tester.getRect(f);
+        expect(r.top, greaterThanOrEqualTo(artboardStatusBar), reason: what);
+        expect(r.bottom, lessThanOrEqualTo(hangUp.top), reason: what);
+      }
       await _end(tester, e);
     });
   }
