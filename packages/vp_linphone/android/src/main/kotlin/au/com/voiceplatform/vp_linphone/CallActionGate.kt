@@ -60,19 +60,29 @@ object PendingUiRequest {
     @Volatile private var delivered = false
     var listener: ((UiRequestMsg) -> Unit)? = null
 
-    /** Delivered live when a Flutter engine listens, else kept for [take]. */
+    /**
+     * Sent live when a Flutter engine is attached, and kept for [take] until
+     * Dart has received it ([delivered]): an engine that is attached but whose
+     * Dart side isn't listening yet (a cold start from the full-screen intent)
+     * must not lose it.
+     */
+    @Synchronized
     fun post(r: UiRequestMsg) {
         request = r
         delivered = false
-        listener?.let {
-            delivered = true
-            it(r)
-        }
+        listener?.invoke(r)
+    }
+
+    /** Dart received [r] live: [take] won't hand it out again. */
+    @Synchronized
+    fun delivered(r: UiRequestMsg) {
+        if (request == r) delivered = true
     }
 
     /** The latest request, for the lock-screen decision. */
     fun peek(): UiRequestMsg? = request
 
     /** For Dart's takeUiRequest(): once, and not if it was delivered live. */
+    @Synchronized
     fun take(): UiRequestMsg? = if (delivered) null else request.also { delivered = true }
 }

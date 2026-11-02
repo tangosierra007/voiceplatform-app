@@ -79,7 +79,10 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
             // The app's activity may already exist (backgrounded, then locked):
             // it gets no new intent, so decide the lock screen here too.
             handleIntent(null)
-            send { it.onUiRequest(request) }
+            send {
+                it.onUiRequest(request)
+                PendingUiRequest.delivered(request)
+            }
         }
     }
 

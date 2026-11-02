@@ -240,7 +240,20 @@ final class VpLinphoneEngine implements CallEngine {
     if (p != null) _pushes.add(p);
   }
 
-  void _onUiRequest(UiRequestMsg m) => _ui.add(_uiFrom(m));
+  /// Live when something listens; otherwise kept for [takeUiRequest], so a
+  /// request that arrives before the app's screens subscribe (a cold start
+  /// from the full-screen intent) is not lost.
+  void _onUiRequest(UiRequestMsg m) {
+    final r = _uiFrom(m);
+    if (_ui.hasListener) {
+      _held = null;
+      _ui.add(r);
+    } else {
+      _held = r;
+    }
+  }
+
+  VpUiRequest? _held;
 
   static VpPushMessage? _pushFrom(PushMsg m) {
     final type = switch (m.type) {
@@ -280,6 +293,11 @@ final class VpLinphoneEngine implements CallEngine {
   /// The request the app was launched with (a cold start from the
   /// notification), once; null when there is none.
   Future<VpUiRequest?> takeUiRequest() async {
+    final held = _held;
+    if (held != null) {
+      _held = null;
+      return held;
+    }
     final m = await _guard(_host.takeUiRequest);
     return m == null ? null : _uiFrom(m);
   }

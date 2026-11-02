@@ -326,6 +326,44 @@ With the app swiped away and the phone locked, a push woke the engine and the ph
 2. **WS4:** a prompt when `canUseFullScreenIntent()` is false, using `openFullScreenIntentSettings()`.
 3. **Security review (WS6):** the launcher activity is now started by the notification's own PendingIntent, under the token-checked trampoline, instead of by the trampoline. The launcher intent still carries no call extras, and the lock-screen decision still comes only from the in-memory request for a ringing call.
 
+## Incoming screen on a cold start `fix/incoming-call-cold-start`
+
+Branch `fix/incoming-call-cold-start` from `main` at `fc42cef` (#35 merged). One PR, not merged.
+
+### The fault (A53, 2 Nov, 14:12)
+
+Locked, app swiped away: the full-screen intent started the app over the lock screen (no background-start block), but TJ saw a black screen while it rang, then the Keypad tab. The notification's Answer worked.
+
+### Cause
+
+Mostly in the app's routing (`lib/`, WS4's):
+
+- `CallFlow` does route to AppIncoming at once: from `takeUiRequest()`, and from the engine's replayed call (`syncState` when the Dart engine is created).
+- But the router starts at `/starting`, and while sign-in is still loading (`AuthStarting`), `gateRedirect` sends every location, the incoming screen included, back to `/starting` (a plain canvas: the black screen).
+- When sign-in resolves (`SignedIn`), `/starting` goes to the Keypad. Neither `CallFlow` nor the gate routes to the call again.
+
+On the plugin side, two ways a request could be lost, fixed here:
+
+- `PendingUiRequest` marked a request delivered as soon as a Flutter engine was attached, even if Dart never received it. It is now marked delivered only after the Dart call returns.
+- The Dart engine dropped a request that arrived before anything listened to `uiRequests`. It now keeps it for `takeUiRequest()`.
+
+### What the app must do (for WS4, or my patch with mobile-lead's approval)
+
+1. In `gateRedirect`, while `AuthStarting`, let call routes through (`isCallRoute(location)` → stay). A call the engine has means it registered with stored credentials.
+2. In `gateRedirect`, when `SignedIn` on `/starting` or a sign-in route, go to the live call's route if there is one (the incoming screen of a ringing call, else the call screen of a call that is up) instead of the Keypad. `routerProvider` passes it from `callEngineProvider.activeCalls`.
+3. The black: the launch and normal window themes (`android/app/.../styles.xml`, Flutter's defaults, black at night) and AppIncoming's empty state (a blank `CallScaffold` until the call's snapshot arrives) should be AppIncoming's ink background.
+
+A tested patch for 1 and 2 (`lib/nav/routes.dart`, `test/auth/gate_test.dart`: 4 tests, root 502 pass) is ready but not committed. It needs mobile-lead's approval or goes to WS4. Item 3 is WS4's.
+
+### Tests (plugin)
+
+- `PendingUiRequestTest` (4): with no engine the request waits for `take`; an engine whose Dart side never received it still gets it from `take`; a received request isn't handed out twice, and an old ack doesn't hide a newer request; the plugin acks only after Dart received it.
+- `android_extras_test.dart`: a request before anything listens is kept for `takeUiRequest()`, once; with a listener it goes live.
+
+### "Call in progress" before ACTIVE
+
+No: the service shows "Call in progress" only for a call connected, held or being transferred (`ServiceNotice`), which is when Telecom goes ACTIVE. With `fix/incoming-call-followups`, also from Answer on the notification until CONNECTED (a moment), to avoid the "Ready for calls" flash.
+
 ## 3.2 (Android) `feat/telecom-fcm`
 
 Branch `feat/telecom-fcm` from `main` at `89752d3`. One PR, not merged.

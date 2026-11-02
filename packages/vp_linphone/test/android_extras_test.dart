@@ -88,6 +88,24 @@ void main() {
     await sub.cancel();
   });
 
+  test('a cold start: a request before anything listens is kept for takeUiRequest', () async {
+    // The full-screen intent brought the app up; the screens haven't subscribed yet.
+    engine.events.onUiRequest(UiRequestMsg(kind: UiRequestKindMsg.showIncoming, callId: 'call-3'));
+    await pumpEventQueue();
+    host.ui = null;
+    expect(await engine.takeUiRequest(), const VpUiRequest(VpUiRequestKind.showIncoming, 'call-3'));
+    // Once only.
+    expect(await engine.takeUiRequest(), isNull);
+    // With a listener it goes live and isn't kept.
+    final got = <VpUiRequest>[];
+    final sub = engine.uiRequests.listen(got.add);
+    engine.events.onUiRequest(UiRequestMsg(kind: UiRequestKindMsg.showIncoming, callId: 'call-4'));
+    await pumpEventQueue();
+    expect(got, const [VpUiRequest(VpUiRequestKind.showIncoming, 'call-4')]);
+    expect(await engine.takeUiRequest(), isNull);
+    await sub.cancel();
+  });
+
   test('full-screen intent refused: stream, check and settings', () async {
     final got = <String>[];
     final sub = engine.fullScreenIntentDenied.listen(got.add);
