@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/calls/directory.dart';
+import 'package:voiceplatform_app/calls/numbers.dart';
 import 'package:voiceplatform_app/engine/fake_call_engine.dart';
 import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/screens/calls/call_details_panel.dart';
@@ -122,6 +123,20 @@ String _dialled(WidgetTester t) =>
 /// The matches pane beside the keypad, if shown.
 final _pane = find.byType(KeypadMatchesPane);
 
+/// A fixture time as the screens show it in this machine's time zone (CI runs
+/// in UTC; the fixtures are Melbourne times): "11:04 am".
+String _local(Map<String, Object?> h) =>
+    clockTime(DateTime.parse(h['at']! as String).toLocal());
+
+/// "Today 10:42 am" in Melbourne; "Yesterday 11:42 pm" in UTC.
+String _lastCall(Map<String, Object?> h) {
+  final a = DateTime.parse(h['at']! as String).toLocal();
+  final n = _now.toLocal();
+  final today = DateTime(n.year, n.month, n.day);
+  final day = DateTime(a.year, a.month, a.day);
+  return '${day == today ? 'Today' : 'Yesterday'} ${clockTime(a)}';
+}
+
 Finder _inPane(String text) =>
     find.descendant(of: _pane, matching: find.text(text, findRichText: true));
 
@@ -230,7 +245,8 @@ void main() {
         matcher: ContactMatcher(),
         now: _now,
       ).single;
-      expect(missed.detail, '03 5550 1987 · missed 11:04 am');
+      // 11:04 am in Melbourne; read in the machine's own time zone.
+      expect(missed.detail, '03 5550 1987 · missed ${_local(fx.history[0])}');
       expect(missed.source, KeypadMatchSource.recent);
     });
 
@@ -448,11 +464,17 @@ void main() {
       expect(find.byType(VpNavRail), findsNothing);
       expect(tester.getSize(find.byType(CallDetailsPanel)).width, 464);
       expect(find.text('2nd call this week'), findsOneWidget);
-      expect(find.text('Last answered by Mia Rossi, 9:15 am'), findsOneWidget);
+      expect(
+        find.text(
+          'Last answered by Mia Rossi, '
+          '${whenShort(DateTime.utc(2026, 10, 26, 22, 15), _now)}',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('About Jordan'), findsOneWidget);
       expect(find.bySemanticsLabel('Phonebook: Harbour Cafe'), findsOneWidget);
       expect(
-        find.bySemanticsLabel('Last call: Today 10:42 am, 4:12'),
+        find.bySemanticsLabel('Last call: ${_lastCall(fx.history[1])}, 4:12'),
         findsOneWidget,
       );
       expect(
