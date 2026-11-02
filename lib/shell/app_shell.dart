@@ -19,8 +19,9 @@ import 'vp_tab_bar.dart';
 /// is visible.
 ///
 /// Folding, unfolding or rotating only moves the bar to the rail and back:
-/// the tab screens sit under one [GlobalKey], so their state (open tab,
-/// pushed pages, scroll positions, half-typed text) carries over.
+/// go_router keeps the [StatefulNavigationShell] and its branch navigators
+/// under its own keys, so their state (open tab, pushed pages, scroll
+/// positions, half-typed text) carries over wherever the shell sits.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.shell});
 
@@ -31,8 +32,6 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  final _screensKey = GlobalKey(debugLabel: 'tab screens');
-
   StatefulNavigationShell get shell => widget.shell;
 
   @override
@@ -95,7 +94,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: MediaQuery.removePadding(
             context: context,
             removeTop: updateBanner || meBanner,
-            child: KeyedSubtree(key: _screensKey, child: shell),
+            child: shell,
           ),
         ),
       ],
