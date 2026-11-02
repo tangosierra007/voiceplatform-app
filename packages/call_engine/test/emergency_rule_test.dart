@@ -8,7 +8,7 @@ import 'support/test_numbers.dart';
 /// Every way 000, 112 and 106 are written, with [n] the three digits.
 List<String> writtenForms(String n) {
   final spaced = n.split('').join(' ');
-  return [
+  final plain = [
     n,
     spaced,
     '($n)',
@@ -32,6 +32,7 @@ List<String> writtenForms(String n) {
     '+61 (0) $n',
     '+61 (0)$n',
     '+610$n',
+    '610$n',
     '61 0 $n',
     '61 (0) $n',
     // An international prefix in front of 61.
@@ -47,7 +48,40 @@ List<String> writtenForms(String n) {
     '0011 61 (0) $n',
     '+0011 61 $n',
   ];
+  // A caller-ID prefix in front of the usual forms.
+  final hidden = [
+    for (final p in ['1831 ', '1832 ', '1831', '#31#', '*31#', '#31# '])
+      for (final f in [
+        n,
+        '0$n',
+        '+61 $n',
+        '61 $n',
+        '0061 $n',
+        '0011 61 $n',
+        '+61 (0) $n',
+      ])
+        '$p$f',
+  ];
+  return [...plain, ...hidden];
 }
+
+/// "+61 00" and the like: after an international 61, a leftover 00 is 000
+/// (TJ). All of them dial 000.
+const zeroZeroForms = [
+  '+61 00',
+  '+6100',
+  '+61 0 0',
+  '+61 (0) 0',
+  '(+61) 00',
+  '0061 00',
+  '006100',
+  '00 61 00',
+  '0011 61 00',
+  '00116100',
+  '+0011 61 00',
+  '1831 +61 00',
+  '#31# 0011 61 00',
+];
 
 void main() {
   // The Kotlin backstop (Rules.isEmergency) is tested on the shared table, so
@@ -58,12 +92,14 @@ void main() {
         .where((l) => l.startsWith('E\t'))
         .map((l) => l.substring(2))
         .toSet();
-    for (final n in ['000', '112', '106']) {
-      for (final typed in writtenForms(n)) {
-        expect(table, contains(typed), reason: typed);
-      }
+    for (final typed in [
+      for (final n in ['000', '112', '106']) ...writtenForms(n),
+      ...zeroZeroForms,
+    ]) {
+      expect(table, contains(typed), reason: typed);
     }
   });
+
   group('emergencyNumberIn: every written form gives the three digits', () {
     for (final n in ['000', '112', '106']) {
       test(n, () {
@@ -72,6 +108,25 @@ void main() {
           expect(isEmergencyNumber(typed), isTrue, reason: typed);
         }
       });
+    }
+  });
+
+  test('after +61, 0061 or 0011 61, a leftover 00 is 000', () {
+    for (final typed in zeroZeroForms) {
+      expect(emergencyNumberIn(typed), '000', reason: typed);
+    }
+  });
+
+  test('61 written together with the number is the country code (TJ)', () {
+    for (final (typed, want) in [
+      ('61000', '000'),
+      ('61112', '112'),
+      ('61106', '106'),
+      ('610000', '000'),
+      ('610112', '112'),
+      ('610106', '106'),
+    ]) {
+      expect(emergencyNumberIn(typed), want, reason: typed);
     }
   });
 
@@ -116,8 +171,6 @@ void main() {
       '0061',
       '0011 61',
       '6100',
-      '+6100',
-      '+61 00',
       '+61 0001',
       '+610001',
       '610001',
@@ -128,6 +181,23 @@ void main() {
       '0061 61 000',
       '0011 61 61 000',
       '0011 0061 000',
+      // A bare 61 00 (no +, 0061 or 0011 in front) stays a number.
+      '61 00',
+      '61 0 0',
+      '1831 61 00',
+      // A caller-ID prefix with nothing, or the wrong number, after it.
+      '1831',
+      '1832',
+      '#31#',
+      '*31#',
+      '18310001',
+      '1831 0001',
+      '#31#0001',
+      '1833 000',
+      '1830 112',
+      '#32#000',
+      '#31#*31#000',
+      '1831 1831 000',
       // An international prefix without 61, or 61 in the wrong place.
       '0011 000',
       '0011 112',

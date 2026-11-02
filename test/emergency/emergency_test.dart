@@ -83,6 +83,14 @@ void main() {
       ('0061 112', '112'),
       ('0011 61 106', '106'),
       ('0011 61 0 106', '106'),
+      ('+61 00', '000'),
+      ('0011 61 00', '000'),
+      ('61000', '000'),
+      ('610112', '112'),
+      ('1831 000', '000'),
+      ('1832 +61 112', '112'),
+      ('#31#106', '106'),
+      ('*31# 0061 000', '000'),
     ]) {
       expect(emergencyDialString(typed), want, reason: typed);
     }
@@ -103,6 +111,11 @@ void main() {
     '0061 106',
     '0011 61 000',
     '+61 (0) 112',
+    '+61 00',
+    '61106',
+    '1831 000',
+    '#31#000',
+    '*31# +61 112',
   ]) {
     testWidgets('$n opens AppEmergency and never reaches the engine', (
       tester,
@@ -155,7 +168,16 @@ void main() {
     expect(engine.asked, isEmpty);
   });
 
-  for (final n in ['0491 570 737', '0006', '1120', '+61 0001', '0011 000']) {
+  for (final n in [
+    '0491 570 737',
+    '0006',
+    '1120',
+    '+61 0001',
+    '0011 000',
+    '61 00',
+    '1833 000',
+    '18310001',
+  ]) {
     testWidgets('$n is not an emergency number: it goes to the engine', (
       tester,
     ) async {

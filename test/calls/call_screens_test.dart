@@ -75,7 +75,8 @@ Future<void> _settle(WidgetTester t) async {
 
 Future<void> _type(WidgetTester t, String digits) async {
   for (final d in digits.split('')) {
-    final re = RegExp('^${RegExp.escape(d)}( |\$|,)');
+    final key = const {'*': 'Star', '#': 'Hash'}[d] ?? d;
+    final re = RegExp('^${RegExp.escape(key)}( |\$|,)');
     await t.tap(
       find
           .byWidgetPredicate(
@@ -206,6 +207,10 @@ void main() {
       ('001161000', '000'),
       ('+61112', '112'),
       ('0011610112', '112'),
+      ('+6100', '000'),
+      ('1831000', '000'),
+      ('#31#112', '112'),
+      ('*31#61106', '106'),
       ('61106', '106'),
       ('0061106', '106'),
     ]) {
@@ -742,6 +747,11 @@ void main() {
       ('0011 61 112', '112'),
       ('0061 106', '106'),
       ('0011 61 106', '106'),
+      ('+61 00', '000'),
+      ('0061 00', '000'),
+      ('61000', '000'),
+      ('610106', '106'),
+      ('1831 000', '000'),
     ]) {
       for (final action in ['Send now', 'Talk first']) {
         testWidgets('$n, $action: refused; the phone\'s dialler sheet', (
