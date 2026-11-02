@@ -1,6 +1,8 @@
 import 'package:call_engine/call_engine.dart';
 import 'package:test/test.dart';
 
+import 'support/test_numbers.dart';
+
 void main() {
   test(
     'matches 000, 112 and 106, alone or with a leading 0, ignoring punctuation',
@@ -28,7 +30,7 @@ void main() {
       '00',
       '0001',
       '1120',
-      ['13 ', '11 ', '14'].join(),
+      arbitrary13Number,
       '0491 570 737',
       '03 5550 1201',
       '*97',

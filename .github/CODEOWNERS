@@ -1,0 +1,11 @@
+# Documentation only for now: branch protection does not require code owner
+# review (TJ turns that on if a second person or bot joins). Until then,
+# TJ's standing rule (2 Nov 2026): any change to .github/ or the phone number
+# check's files goes to TJ before it merges, even with review passed and CI
+# green.
+#
+# The CI workflows, and the phone number check with its allow-list
+# (README.md, Test data).
+/.github/                        @tangosierra007
+/tool/phone_numbers/             @tangosierra007
+/tool/check_phone_numbers.dart   @tangosierra007

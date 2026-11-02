@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../tool/phone_numbers/allow_list.dart';
 import '../../tool/phone_numbers/phone_numbers.dart';
+import '../support/test_numbers.dart';
 
 /// Joins [parts] into one string at run time.
 String _n(List<String> parts) => parts.join();
@@ -21,7 +22,9 @@ final _mobileTight = _n(['04', '12', '345', '678']);
 final _geo = _n(['(02)', ' 9', '876 ', '5432']);
 final _local = _n(['13', '00 ', '123 ', '456']);
 final _free = _n(['18', '00 ', '123 ', '456']);
-final _short13 = _n(['13 ', '24 ', '68']);
+// The one 13 number tests may use (test/support/test_numbers.dart).
+final _short13 = arbitrary13Number;
+final _d13 = arbitrary13Number.replaceAll(' ', '');
 
 List<String> _found(String line) =>
     findRealAuPhoneNumbers(line).map((h) => h.national).toList();
@@ -70,12 +73,8 @@ void main() {
       expect(_found(_free), [
         _n(['1800', '123456']),
       ]);
-      expect(_found(_short13), [
-        _n(['13', '2468']),
-      ]);
-      expect(_found(_n(['13', ' 2468'])), [
-        _n(['13', '2468']),
-      ]);
+      expect(_found(_short13), [_d13]);
+      expect(_found('13 ${_d13.substring(2)}'), [_d13]);
     });
 
     test('several numbers on one line, and the kind of each', () {
@@ -156,6 +155,61 @@ void main() {
     });
   });
 
+  group('finds the less common forms', () {
+    test('0061 and 0011 61 international prefixes', () {
+      for (final s in [
+        _n(['00', '61 ', '412 ', '345 ', '678']),
+        _n(['0061', '412', '345', '678']),
+        _n(['0011 ', '61 ', '412 ', '345 ', '678']),
+        _n(['00', '61 ', '(0)', '412 ', '345 ', '678']),
+      ]) {
+        expect(_found(s), [_mobileTight], reason: s);
+      }
+      expect(_found('0061 491 570 006'), isEmpty, reason: 'ACMA, 00 form');
+    });
+
+    test('separators of more than one character', () {
+      for (final s in [
+        _n(['0412', ' - ', '345', ' - ', '678']),
+        _n(['0412', '  ', '345', '  ', '678']),
+        _n(['0412', ' . ', '345', ' . ', '678']),
+        _n(['+61 ', '412', ' - ', '345', ' - ', '678']),
+      ]) {
+        expect(_found(s), [_mobileTight], reason: s);
+      }
+      expect(_found(_n(['(02)', '  9876', '  5432'])), hasLength(1));
+      expect(_found(_n(['1800', ' - ', '123', ' - ', '456'])), hasLength(1));
+    });
+
+    test('URL-encoded plus, with or without a tel: prefix', () {
+      for (final s in [
+        _n(['?to=', '%2B', '61', '412345678']),
+        _n(['tel%3A', '%2B', '61', '412345678']),
+        _n(['%2b', '61', '412345678']),
+      ]) {
+        expect(_found(s), [_mobileTight], reason: s);
+      }
+      final h = findRealAuPhoneNumbers(
+        _n(['tel%3A', '%2B', '61', '412345678']),
+      );
+      expect(h.single.masked, '%2B614xxxxx678');
+    });
+
+    test('13x xxx, and still no dates or amounts', () {
+      final head = _d13.substring(0, 3), tail = _d13.substring(3);
+      expect(_found('$head $tail'), [_d13]);
+      expect(_found('$head  $tail'), [_d13]);
+      for (final s in [
+        '13-05-26',
+        '$head-$tail',
+        '130 000 000',
+        '13 000 000',
+      ]) {
+        expect(findAuPhoneNumbers(s), isEmpty, reason: s);
+      }
+    });
+  });
+
   group('ignores what is not a phone number', () {
     test('emergency and short codes', () {
       for (final s in ['000', '112', '106', 'dial 000 now', '*121#']) {
@@ -192,7 +246,7 @@ void main() {
       );
       expect(maskNumber(_geo), '(02) xxxx x432');
       expect(maskNumber(_free), '1800 xxx 456');
-      expect(maskNumber(_short13), '13 xx 68');
+      expect(maskNumber(_short13), '13 xx ${_d13.substring(4)}');
     });
 
     test('a hit masks itself', () {
@@ -209,6 +263,12 @@ void main() {
       expect(list.allows('lib/a.dart', _mobileTight), isTrue);
       expect(list.allows('lib/b.dart', _mobileTight), isFalse);
       expect(list.allows('lib/a.dart', _n(['04', '12345679'])), isFalse);
+    });
+
+    test('keys are always 16 hex digits, top bit set or not', () {
+      final keys = [for (var i = 0; i < 200; i++) allowKey('$i')];
+      expect(keys.every(RegExp(r'^[0-9a-f]{16}$').hasMatch), isTrue);
+      expect(keys.any((k) => int.parse(k[0], radix: 16) >= 8), isTrue);
     });
 
     test('every entry needs a reason and a 16 hex key', () {

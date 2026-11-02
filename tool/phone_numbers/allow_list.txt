@@ -6,3 +6,7 @@
 # Get the key with `dart tool/check_phone_numbers.dart --print-allow-keys` on
 # your own machine. Never add a real phone number here: replace it with an
 # ACMA fictional number (README.md, Test data).
+
+# The one 13 number tests may use (arbitrary13Number, TJ's rule, 2 Nov 2026).
+test/support/test_numbers.dart  836525907a910ccd  # arbitrary13Number: ACMA has no fictional 13 number; data only
+packages/call_engine/test/support/test_numbers.dart  836525907a910ccd  # arbitrary13Number, call_engine's copy

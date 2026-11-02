@@ -4,6 +4,7 @@ import 'package:voiceplatform_app/calls/numbers.dart';
 import 'package:voiceplatform_app/net/api.dart';
 
 import '../support/call_fakes.dart';
+import '../support/test_numbers.dart';
 
 void main() {
   group('numbers', () {
@@ -12,10 +13,9 @@ void main() {
       expect(formatAuNumber('+61491570737'), '0491 570 737');
       expect(formatAuNumber('0491570737'), '0491 570 737');
       expect(formatAuNumber('1300975707'), '1300 975 707');
-      expect(
-        formatAuNumber(['13', '12', '34'].join()),
-        ['13 ', '12', '34'].join(),
-      );
+      // arbitrary13Number, the one 13 number tests use (test_numbers.dart).
+      final d13 = arbitrary13Number.replaceAll(' ', '');
+      expect(formatAuNumber(d13), '13 ${d13.substring(2)}');
       expect(formatAuNumber('206'), '206');
       expect(formatAuNumber('anonymous'), 'Private');
       // Short and part-typed numbers are left as digits (000 is not 00 0).

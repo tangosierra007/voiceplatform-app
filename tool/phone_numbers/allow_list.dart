@@ -18,7 +18,9 @@ String allowKey(String national) {
     h ^= c;
     h *= 0x100000001b3; // wraps at 64 bits on the Dart VM
   }
-  return h.toUnsigned(64).toRadixString(16).padLeft(16, '0');
+  // Two 32-bit halves: a 64-bit int with the top bit set is negative.
+  String half(int v) => (v & 0xffffffff).toRadixString(16).padLeft(8, '0');
+  return half(h >> 32) + half(h);
 }
 
 class AllowList {
