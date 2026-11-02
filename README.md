@@ -35,7 +35,7 @@ Never use a real person's, business's or public service's number, your own inclu
 
 1300 and 1800 tests use ACMA's fictional numbers.
 
-Building a number from parts at run time is only for the check's own tests in `test/tool/phone_numbers_test.dart`, which need non-ACMA numbers to prove they are caught. They use made-up digits only.
+Building a number from parts at run time is only for the check's own tests in `test/tool/phone_numbers_test.dart`, which need non-ACMA numbers to prove they are caught. They use made-up digits only. The same rule as the 13 constant applies to them: data only, never dialled or sent anywhere, never in screenshots, goldens or store material, and only in the scanner's own tests.
 
 CI enforces this: `tool/check_phone_numbers.dart` (the `phone-numbers` job in `.github/workflows/secret-scan.yml`) fails on any Australian mobile, geographic, 13, 1300 or 1800 number outside ACMA's numbers. It catches these forms:
 
