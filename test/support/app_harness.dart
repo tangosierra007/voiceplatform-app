@@ -92,6 +92,9 @@ Future<Widget> appUnderTest({
   PresetStatus? statusController,
   Future<String?> Function()? sendCallLogs,
 
+  /// Recents in place of the fixture calls.
+  List<HistoryEntry>? history,
+
   /// Voicemail that changes as the app hears and deletes it (counts tests).
   VoicemailServer? voicemail,
 }) async {
@@ -167,14 +170,19 @@ Future<Widget> appUnderTest({
             : voicemail?.me() ?? Me.fromJson(fx.me(status: myStatus.json!)),
       ),
       historyProvider.overrideWith(
-        (ref, f) async => (voicemail?.history ?? fixtureHistory)(
-          filter: switch (f) {
-            RecentsFilter.missed => 'missed',
-            RecentsFilter.voicemail => 'voicemail',
-            _ => 'all',
-          },
-          mine: f == RecentsFilter.mine,
-        ),
+        (ref, f) async => history != null
+            ? HistoryPage(
+                items: history,
+                counts: const Counts(missed: 0, voicemail: 0),
+              )
+            : (voicemail?.history ?? fixtureHistory)(
+                filter: switch (f) {
+                  RecentsFilter.missed => 'missed',
+                  RecentsFilter.voicemail => 'voicemail',
+                  _ => 'all',
+                },
+                mine: f == RecentsFilter.mine,
+              ),
       ),
       markHistorySeenProvider.overrideWithValue(onHistorySeen ?? () async {}),
       voicemailBoxesProvider.overrideWith(

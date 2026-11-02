@@ -151,6 +151,46 @@ void main() {
     await e.dispose();
   });
 
+  // APP6: a call back goes through the one emergency rule too.
+  testWidgets('calling back +61 000 opens AppEmergency, never the engine', (
+    tester,
+  ) async {
+    usePhone(tester);
+    final e = await engine();
+    final phone = FakePhone();
+    final mic = FakeMic(granted: false);
+    await tester.pumpWidget(
+      await appUnderTest(
+        engine: e,
+        phone: phone,
+        mic: mic,
+        history: [
+          HistoryEntry.fromJson({
+            ...fx.history.firstWhere((h) => h['id'] == 'h2'),
+            'number': '+61 000',
+            'name': null,
+          }),
+        ],
+      ),
+    );
+    await _settle(tester);
+    await openRecents(tester);
+    await tester.tap(_buttonStarting('Call back').first);
+    await _settle(tester);
+    expect(
+      find.text("Emergency calls use your phone's own network"),
+      findsOneWidget,
+    );
+    expect(e.activeCalls, isEmpty);
+    expect(mic.requests, 0);
+    await tester.tap(find.text('Call 000 now'));
+    await _settle(tester);
+    expect(phone.dialled, ['000']);
+    expect(e.activeCalls, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    await e.dispose();
+  });
+
   testWidgets('a phone contact names a number on this device only', (
     tester,
   ) async {

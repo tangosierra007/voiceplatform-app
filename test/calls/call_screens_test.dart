@@ -598,10 +598,13 @@ void main() {
     Future<(SpyEngine, String)> toTransfer(
       WidgetTester tester, {
       FakePhone? phone,
+      FakeMic? mic,
     }) async {
       usePhone(tester);
       final e = await _engine();
-      await tester.pumpWidget(await appUnderTest(engine: e, phone: phone));
+      await tester.pumpWidget(
+        await appUnderTest(engine: e, phone: phone, mic: mic ?? FakeMic()),
+      );
       await _settle(tester);
       late String id;
       await tester.runAsync(() async {
@@ -745,7 +748,12 @@ void main() {
           tester,
         ) async {
           final phone = FakePhone();
-          final (e, id) = await toTransfer(tester, phone: phone);
+          final mic = FakeMic();
+          final (e, id) = await toTransfer(tester, phone: phone, mic: mic);
+          // From here a call would have to ask for the microphone.
+          mic
+            ..granted = false
+            ..requests = 0;
           await tester.enterText(find.byType(TextField), n);
           await tester.pump();
           await tester.tap(find.bySemanticsLabel(RegExp('^Transfer to ')));
@@ -754,6 +762,7 @@ void main() {
           await _settle(tester);
           expect(e.transferredTo[id], isNull);
           expect(e.called, hasLength(0), reason: 'no consult call');
+          expect(mic.requests, 0, reason: 'before the microphone');
           expect(
             find.text("Emergency calls use your phone's own network"),
             findsOneWidget,
