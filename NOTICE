@@ -222,11 +222,16 @@ Third-party components are listed below with their licences as they are added.
   1.10.2), JetBrains. Apache-2.0. Used by packages/vp_linphone (Pigeon's
   generated Kotlin).
 
+- AndroidX WorkManager (androidx.work:work-runtime-ktx 2.10.1), The Android
+  Open Source Project. Apache-2.0. Used by packages/vp_linphone to register
+  again after a phone restart or an app update.
+
 - firebase_core 5.1.0 and firebase_messaging 17.0.1 (pub.dev), BSD-3-Clause
   (The Chromium Authors). Used by packages/vp_linphone for the FCM token.
   They bring the Firebase Android SDK (com.google.firebase: firebase-common,
   firebase-messaging and their Google Play services dependencies), Apache-2.0
-  (Google LLC).
+  (Google LLC). packages/vp_linphone also reads the token natively
+  (firebase-messaging from firebase-bom 35.1.0, the same SDK).
 
 - Google Services Gradle plugin (com.google.gms.google-services 4.4.2),
   Apache-2.0 (Google LLC). Build only: reads android/app/google-services.json.

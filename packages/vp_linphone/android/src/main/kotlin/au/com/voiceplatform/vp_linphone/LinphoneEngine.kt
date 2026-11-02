@@ -171,6 +171,11 @@ object LinphoneEngine {
             log("engine stop requested while starting: stopping")
             return
         }
+        if (headlessCore) {
+            // A background registration's Core: the service owns it from now on.
+            headlessCore = false
+            log("service took over the background registration's core")
+        }
         startCore(svc.applicationContext)
         lifecycle.onCoreStarted()
     }
@@ -529,6 +534,15 @@ object LinphoneEngine {
         event?.let { emitRegistration(it) }
         if (pendingUnregister != null && (state == RegistrationState.Cleared || state == RegistrationState.Failed)) {
             finishUnregister()
+        }
+        if (backgroundDone != null && acc == account) {
+            val outcome = when (state) {
+                RegistrationState.Ok -> BackgroundRegistration.Outcome.REGISTERED
+                RegistrationState.Failed -> BackgroundRegistration.failure(acc.errorInfo.protocolCode)
+                else -> null
+            }
+            // Posted: the Core isn't stopped from inside its own callback.
+            if (outcome != null) main.post { endBackgroundRefresh(outcome) }
         }
     }
 
@@ -894,6 +908,86 @@ object LinphoneEngine {
         }
     }
 
+    // ---------------------------------------------------------------- background registration
+
+    /** The Core is one [refreshInBackground] created, with no service: it stops when that ends. */
+    private var headlessCore = false
+    private var backgroundDone: ((BackgroundRegistration.Outcome) -> Unit)? = null
+
+    /**
+     * After a phone restart or an app update ([ReregisterWorker]): register
+     * the stored account once, with [fcmToken] as its pn-prid when it
+     * changed. With nothing running, the Core is created here without the
+     * foreground service and stopped again once the edge has answered (the
+     * binding stays: unregister-at-stop is off). A service that starts in
+     * the meantime (a push, the app) takes that Core over. [done] runs on
+     * the main thread, once.
+     */
+    fun refreshInBackground(context: Context, fcmToken: String?, done: (BackgroundRegistration.Outcome) -> Unit) {
+        attach(context)
+        if (backgroundDone != null) {
+            done(BackgroundRegistration.Outcome.ENGINE_RUNNING)
+            return
+        }
+        val app = context.applicationContext
+        val record = runCatching { CredentialStore(app).load() }.getOrNull()
+        val engine = BackgroundRegistration.EngineState(
+            coreUp = core != null,
+            accountUp = account != null,
+            stopped = lifecycle.state == EngineLifecycle.State.STOPPED,
+        )
+        when (val plan = BackgroundRegistration.plan(record, engine, fcmToken)) {
+            BackgroundRegistration.Plan.NoAccount -> done(BackgroundRegistration.Outcome.NO_ACCOUNT)
+            BackgroundRegistration.Plan.LeaveToEngine -> done(BackgroundRegistration.Outcome.ENGINE_RUNNING)
+            is BackgroundRegistration.Plan.RefreshRunning -> {
+                val r = record!!
+                val prid = plan.newPrid
+                if (prid != null && r.pushProvider != null && r.pushParam != null) {
+                    updatePush(r.pushProvider, prid, r.pushParam)
+                } else {
+                    account?.refreshRegister()
+                }
+                log("background registration: engine running, refreshed${if (prid != null) " with a new push token" else ""}")
+                done(BackgroundRegistration.Outcome.ENGINE_RUNNING)
+            }
+            is BackgroundRegistration.Plan.Headless -> {
+                val r = plan.record
+                backgroundDone = done
+                try {
+                    // The stored device id, so the new Core sends the right +sip.instance.
+                    lastInstance = Rules.instanceUuid(r.instanceId)
+                    startCore(app)
+                    headlessCore = true
+                    register(
+                        r.authUsername, r.password, r.domain, r.outboundProxy, r.displayName,
+                        r.expiresSeconds, r.instanceId, r.pushProvider, r.pushPrid, r.pushParam,
+                    )
+                    log("background registration: registering without the service")
+                } catch (e: VpFlutterError) {
+                    log("background registration: register refused ${e.code}")
+                    endBackgroundRefresh(BackgroundRegistration.Outcome.REFUSED)
+                } catch (t: Throwable) {
+                    log("background registration failed: ${t.javaClass.simpleName}")
+                    endBackgroundRefresh(BackgroundRegistration.Outcome.FAILED)
+                }
+            }
+        }
+    }
+
+    /** Ends [refreshInBackground]: its own Core stops (unless a service took it over). Main thread; once. */
+    fun endBackgroundRefresh(outcome: BackgroundRegistration.Outcome) {
+        val done = backgroundDone ?: return
+        backgroundDone = null
+        if (headlessCore) {
+            headlessCore = false
+            if (!hasLiveCall) {
+                stopCore()
+                log("background registration over: core stopped")
+            }
+        }
+        done(outcome)
+    }
+
     /**
      * A `signed_out` push (device revoked): forget the account and its stored
      * copy and stop, natively, whether or not Flutter is running. The app
@@ -905,6 +999,7 @@ object LinphoneEngine {
         account = null
         domain = null
         scrubber.clearSecrets()
+        endBackgroundRefresh(BackgroundRegistration.Outcome.NO_ACCOUNT)
         log("signed out by push: account forgotten, engine stops")
         if (!hasLiveCall) requestStop(context) {}
     }

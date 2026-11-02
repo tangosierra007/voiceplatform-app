@@ -15,6 +15,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Incoming call on a locked phone (Play: calling app declaration). -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Register again after a phone restart (ReregisterReceiver). WorkManager
+         declares it too, for rescheduling its own jobs. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- liblinphone's AAR asks for these; the app has no camera or data-sync
          foreground service, and each would need its own Play declaration. -->
@@ -72,5 +75,20 @@
         <receiver
             android:name=".CallActionReceiver"
             android:exported="false" />
+
+        <!-- After a phone restart or an app update nothing else brings the
+             process back: register again from a WorkManager job, with no
+             foreground service (ReregisterWork.kt). Both broadcasts come
+             from the system only (protected), so the receiver can be
+             exported for them. Not LOCKED_BOOT_COMPLETED: the app isn't
+             direct-boot aware. -->
+        <receiver
+            android:name=".ReregisterReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

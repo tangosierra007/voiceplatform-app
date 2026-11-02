@@ -4,7 +4,11 @@ Draft for task 5.4, from spec 22 (Android specifics, decision 141). Paste into P
 
 ## Foreground service types
 
-The engine runs one foreground service (`android:foregroundServiceType="phoneCall|microphone"`) only while a call is ringing or in progress. It stops when the call ends. The app runs nothing in the background otherwise.
+The engine runs one foreground service (`android:foregroundServiceType="phoneCall|microphone"`) only while a call is ringing or in progress. It stops when the call ends. The app runs nothing in the background otherwise, except one short WorkManager job after a phone restart or an app update that registers the phone again so calls keep reaching it; that job starts no foreground service.
+
+## `RECEIVE_BOOT_COMPLETED`
+
+A normal permission with no declaration form; listed here for the permissions review. The app listens for `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED` only to queue that job (WorkManager declares the permission too, for rescheduling its own jobs).
 
 ### `FOREGROUND_SERVICE_PHONE_CALL` (type `phoneCall`)
 
