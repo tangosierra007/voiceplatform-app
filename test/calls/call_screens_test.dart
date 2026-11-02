@@ -614,6 +614,89 @@ void main() {
       expect(find.byType(VpTabBar), findsOneWidget);
     });
 
+    // Typed targets (TJ's A53, 2 Nov): an extension with no user or an
+    // outside number can be picked; emergency numbers never transfer.
+    testWidgets('an extension with no colleague: "Transfer to 101", then '
+        'Send now', (tester) async {
+      final (e, id) = await toTransfer(tester);
+      await tester.enterText(find.byType(TextField), '101');
+      await tester.pump();
+      expect(find.text('Transfer to 101'), findsOneWidget);
+      expect(find.text('Send now'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Transfer to 101'));
+      await tester.pump();
+      expect(find.text('Talk first'), findsOneWidget);
+      await tester.tap(find.text('Send now'));
+      await _settle(tester);
+      expect(e.transferredTo[id], '101');
+      await _end(tester);
+    });
+
+    testWidgets('a colleague\'s extension shows the colleague, not a typed '
+        'row', (tester) async {
+      await toTransfer(tester);
+      await tester.enterText(find.byType(TextField), '206');
+      await tester.pump();
+      expect(find.text('Mia Rossi'), findsOneWidget);
+      expect(find.textContaining('Transfer to'), findsNothing);
+      await _end(tester);
+    });
+
+    testWidgets('an outside number: formatted, and Talk first calls it', (
+      tester,
+    ) async {
+      final (e, id) = await toTransfer(tester);
+      await tester.enterText(find.byType(TextField), '0491 571 266');
+      await tester.pump();
+      expect(find.text('Transfer to 0491 571 266'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Transfer to 0491 571 266'));
+      await tester.pump();
+      await tester.tap(find.text('Talk first'));
+      await _settle(tester);
+      expect(e.called.last.$1, '0491571266');
+      await _end(tester);
+    });
+
+    testWidgets('changing the search after picking a typed target unpicks '
+        'it', (tester) async {
+      final (e, id) = await toTransfer(tester);
+      await tester.enterText(find.byType(TextField), '101');
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Transfer to 101'));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), '1012');
+      await tester.pump();
+      await tester.tap(find.text('Send now'));
+      await _settle(tester);
+      expect(e.transferredTo[id], isNull, reason: 'nothing picked');
+      await _end(tester);
+    });
+
+    for (final n in ['000', '112', '106']) {
+      testWidgets('$n: refused as a transfer; the phone\'s dialler sheet', (
+        tester,
+      ) async {
+        final (e, id) = await toTransfer(tester);
+        await tester.enterText(find.byType(TextField), n);
+        await tester.pump();
+        await tester.tap(find.bySemanticsLabel('Transfer to $n'));
+        await tester.pump();
+        await tester.tap(find.text('Send now'));
+        await _settle(tester);
+        expect(e.transferredTo[id], isNull);
+        expect(
+          find.text("Emergency calls use your phone's own network"),
+          findsOneWidget,
+        );
+        expect(
+          e.activeCalls.single.state,
+          CallState.heldByMe,
+          reason: 'the caller stays on hold',
+        );
+        await _end(tester);
+      });
+    }
+
     testWidgets('Talk to Mia first: consult call, then Complete transfer', (
       tester,
     ) async {

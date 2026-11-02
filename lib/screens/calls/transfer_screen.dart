@@ -30,6 +30,13 @@ class TransferScreen extends ConsumerStatefulWidget {
 class _TransferScreenState extends ConsumerState<TransferScreen> {
   final _query = TextEditingController();
   Colleague? _picked;
+
+  /// A typed extension or number picked instead of a colleague
+  /// ([typedTransferTarget]).
+  String? _typed;
+
+  /// Where the call goes: the colleague's extension, or what was typed.
+  String? get _target => _picked?.extensionValue ?? _typed;
   late final LiveEvents _live = ref.read(liveEventsProvider);
 
   @override
@@ -66,9 +73,8 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   }
 
   Future<void> _sendNow() async {
-    final p = _picked;
-    if (p == null) return;
-    final target = p.extensionValue;
+    final target = _target;
+    if (target == null) return;
     // Emergency numbers go to the phone's dialler, never through a transfer.
     if (isEmergencyNumber(target)) {
       await showEmergencySheet(context, target);
@@ -92,9 +98,10 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   }
 
   Future<void> _talkFirst() async {
-    final p = _picked;
-    if (p == null) return;
-    final consult = await startCall(context, ref, p.extensionValue);
+    final target = _target;
+    if (target == null) return;
+    // Emergency numbers: startCall opens the phone's dialler instead.
+    final consult = await startCall(context, ref, target);
     if (consult != null) {
       ref.read(callBookProvider.notifier).startTransfer(widget.callId, consult);
     }
@@ -121,6 +128,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                 nationalDigits(col.mobile!).contains(nationalDigits(q))))
           col,
     ];
+    final typed = typedTransferTarget(_query.text, colleagues);
 
     return CallScaffold(
       child: Column(
@@ -170,7 +178,8 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                 // The sheet follows the app's theme; only the strip above is ink.
                 data: outer,
                 child: Builder(
-                  builder: (context) => _sheet(context, first, shown, presence),
+                  builder: (context) =>
+                      _sheet(context, first, shown, typed, presence),
                 ),
               ),
             ),
@@ -184,6 +193,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
     BuildContext context,
     String first,
     List<Colleague> shown,
+    String? typed,
     Map<String, PresenceEntry> presence,
   ) {
     final c = context.vp;
@@ -246,7 +256,13 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
           child: TextField(
             controller: _query,
-            onChanged: (_) => setState(() {}),
+            onChanged: (text) => setState(() {
+              // A typed target stays picked only while it is still typed.
+              if (_typed != null &&
+                  _typed != typedTransferTarget(text, const [])) {
+                _typed = null;
+              }
+            }),
             style: VpType.body.copyWith(color: c.text),
             decoration: InputDecoration(
               isDense: true,
@@ -281,6 +297,17 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
+              // An extension with no user, or an outside number: no
+              // colleague to pick, so the typed target is offered itself.
+              if (typed != null)
+                _TypedRow(
+                  target: typed,
+                  picked: _typed == typed,
+                  onTap: () => setState(() {
+                    _picked = null;
+                    _typed = typed;
+                  }),
+                ),
               for (final col in shown)
                 _ColleagueRow(
                   colleague: col,
@@ -288,7 +315,10 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                       presence[col.extensionValue]?.presence ??
                       col.presence.presence,
                   picked: _picked?.userId == col.userId,
-                  onTap: () => setState(() => _picked = col),
+                  onTap: () => setState(() {
+                    _typed = null;
+                    _picked = col;
+                  }),
                 ),
             ],
           ),
@@ -316,7 +346,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                       kind: VpButtonKind.outline,
                       large: false,
                       height: VpSize.controlHeight,
-                      onPressed: _picked == null ? null : _talkFirst,
+                      onPressed: _target == null ? null : _talkFirst,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -325,7 +355,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                       label: 'Send now',
                       large: false,
                       height: VpSize.controlHeight,
-                      onPressed: _picked == null ? null : _sendNow,
+                      onPressed: _target == null ? null : _sendNow,
                     ),
                   ),
                 ],
@@ -340,6 +370,86 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The search as a transfer target when no colleague matches it: an
+/// extension with no user ("101": the directory lists users with
+/// extensions) or a phone number, as dial digits ("+" kept); null for
+/// anything else. Emergency numbers come through too: sending one opens
+/// the phone's dialler, never a transfer.
+String? typedTransferTarget(String query, List<Colleague> colleagues) {
+  final raw = query.trim();
+  if (!RegExp(r'^\+?[\d\s().-]+$').hasMatch(raw)) return null;
+  final national = nationalDigits(raw);
+  if (national.length < 3 || national.length > 15) return null;
+  final someone = colleagues.any(
+    (c) =>
+        c.extensionValue == national ||
+        (c.mobile != null && nationalDigits(c.mobile!) == national),
+  );
+  return someone ? null : dialDigits(raw);
+}
+
+/// "Transfer to 101", "Transfer to 0491 570 737": the typed target.
+class _TypedRow extends StatelessWidget {
+  const _TypedRow({
+    required this.target,
+    required this.picked,
+    required this.onTap,
+  });
+  final String target;
+  final bool picked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.vp;
+    final title = 'Transfer to ${formatAuNumber(target)}';
+    return Semantics(
+      button: true,
+      selected: picked,
+      label: title,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: Material(
+        color: picked ? c.brandTint : Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: c.border)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: c.surfaceRaised,
+                    shape: BoxShape.circle,
+                  ),
+                  child: VpSvgIcon(VpIcon.phone, size: 18, colour: c.text),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: VpType.bodyStrong.copyWith(color: c.text),
+                  ),
+                ),
+                if (picked)
+                  VpSvgIcon(VpIcon.check, size: 20, colour: c.brandText),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
