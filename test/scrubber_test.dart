@@ -191,6 +191,34 @@ void main() {
       expect(out, contains('inline:[scrubbed]'));
     });
 
+    test('in an event: message, exception, breadcrumbs and extra', () {
+      final sdp = 'a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:$a|2^20|1:32';
+      final out = jsonEncode(
+        s.scrubEventJson({
+          'event_id': '0123456789abcdef0123456789abcdef',
+          'message': {'formatted': 'offer had $sdp'},
+          'exception': {
+            'values': [
+              {'type': 'StateError', 'value': 'bad answer: $sdp'},
+            ],
+          },
+          'breadcrumbs': {
+            'values': [
+              {'category': 'sip', 'message': 'INVITE body $sdp'},
+            ],
+          },
+          'extra': {
+            'sdp':
+                'v=0\r\n$sdp\r\na=crypto:2 AES_CM_128_HMAC_SHA1_32 inline:$b',
+          },
+        }),
+      );
+      for (final k in [a, b]) {
+        expect(out, isNot(contains(k)));
+      }
+      expect('inline:[scrubbed]'.allMatches(out).length, 5);
+    });
+
     test('a key short enough to slip past the opaque-string rule', () {
       // 16 characters, letters only: no other rule would catch it.
       final short = 'FAKE' * 4;
