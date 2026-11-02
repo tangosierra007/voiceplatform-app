@@ -53,6 +53,7 @@ object LinphoneEngine {
     private const val QUALITY_EVERY_TICKS = 40 // 2 s at 50 ms
     private const val UNREGISTER_TIMEOUT_MS = 5000L
     private const val INSECURE_RETRY_MS = 1000L
+    private const val SYSTEM_ROOTS = "vp_linphone/system-roots.pem"
 
     private val main = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArraySet<Listener>()
@@ -205,6 +206,7 @@ object LinphoneEngine {
         coreInstance = lastInstance
         try {
             configure(c)
+            useSystemRoots(c, context)
             c.addListener(coreListener)
             check(c.start() == 0) { "Core.start failed" }
         } catch (t: Throwable) {
@@ -233,6 +235,22 @@ object LinphoneEngine {
         log("core stopped")
     }
 
+
+    /**
+     * SIP TLS trusts Android's system certificate store, as the app's HTTPS
+     * client does, not the SDK's static rootca.pem. If the store can't be
+     * read, the SDK's bundle stays; verification is never turned off.
+     */
+    private fun useSystemRoots(c: Core, context: Context) {
+        val file = File(context.noBackupFilesDir, SYSTEM_ROOTS)
+        when (val r = SystemTrust.install(file, SystemTrust::androidStore)) {
+            is SystemTrust.Result.Installed -> {
+                c.rootCa = r.file.absolutePath
+                log("tls roots: Android system store, ${r.count} certificates")
+            }
+            is SystemTrust.Result.Unavailable -> log("tls roots: SDK bundle, system store unavailable (${r.why})")
+        }
+    }
 
     private fun configure(c: Core) {
         c.setUserAgent(USER_AGENT, VERSION)

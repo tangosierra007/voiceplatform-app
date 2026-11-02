@@ -233,6 +233,34 @@ Branch `feat/srtp-mandatory` from `main` at `cbce9a0`, rebased onto `main` at `e
 2. **Store copy:** `docs/store/listing.md` now says every call is encrypted (TLS signalling, SRTP audio). **Do not merge** until main #125 has merged; merged first, every app call fails with 488.
 3. **Guardrail APP13** is already in main's `docs/guardrails.md` (decision 146). Proposed to mobile-lead: its test column cite the app's `MediaSecurityTest` (`packages/vp_linphone/android/src/test/.../MediaSecurityTest.kt`) by name, in place of "encryption-mandatory test". Status: partial until the handset test.
 
+## SIP TLS trusts Android's system store `fix/engine-system-roots`
+
+Branch `fix/engine-system-roots` from `main` at `922ddec`. One PR, draft, not merged: it merges only if the A53's TLS log shows a trust failure.
+
+### The fault (A53, 2 Nov)
+
+After #23, the debug build never registers. The edge logs the A53's TLS connection as `failed to accept ... unexpected eof while reading`: the client closes during the handshake without an alert. The app shows "No internet on this phone", most likely because a TLS failure reaches `registrationFailure` as an I/O error (503 or `IOError`), which it maps to `network` (to confirm from the log).
+
+### What was checked (PC, read only)
+
+1. **Versions and ciphers.** The edge (`tls_mgm`, OpenSSL) offers TLS 1.2 and later, with no cipher list. From the PC it negotiates TLS 1.2 (ECDHE-ECDSA-AES256-GCM-SHA384) and TLS 1.3 (TLS_AES_256_GCM_SHA384). liblinphone 5.5.39's TLS is **bctoolbox on mbedTLS 3.x** (not OpenSSL), with TLS 1.2 and 1.3 compiled in, PSA initialised and session tickets off. No version mismatch.
+2. **Key types.** The leaf is ECDSA P-256 (signed with SHA-384 by YE1). YE1, Root YE and the X2 cross-sign are P-384; X2's cross-sign by X1 is RSA. bctoolbox's verification profile allows any key type and curve, SHA-1 and up, and the build has secp256r1 and secp384r1. No key-type mismatch.
+3. **Chain and trust.** The served chain is leaf, YE1, Root YE (cross-signed by X2), X2 (cross-signed by X1), 3.4 KB of DER. The SDK's `rootca.pem` has ISRG Root X1 and X2 but not Root YE. `openssl s_client -CAfile <SDK rootca.pem> -verify_return_error -verify_hostname` passes, ending at the self-signed X2 in the bundle (the key matches the cross-signed X2). mbedTLS's path building (trusted list first, then the chain) should find the same path. So the bundle alone does not explain the failure on paper.
+4. **Root CA loading.** liblinphone copies `assets/org.linphone.core` to `files/share/linphone/rootca.pem` and uses it if the file exists; otherwise belle-sip has no roots. belle-sip loads a root file even when some certificates don't parse, but rejects a whole data string if one doesn't. The CN check uses the outbound proxy's host.
+
+So the static checks don't find the cause; the A53's own log has to show it (belle-sip's `SSL handshake failed : <mbedTLS error>` and the `Found certificate depth=..., flags=...` lines). A local, never-committed debug build sends only TLS and registration lines to logcat (tag `VPTLS`), through the scrubber, dropping anything that looks like a SIP message or auth.
+
+### The proposed fix (TJ's preference, if trust is the cause)
+
+- `SystemTrust.kt`: at Core start the engine writes Android's system CAs (`AndroidCAStore`, `system:` aliases only, never user-installed CAs) to `noBackupFilesDir/vp_linphone/system-roots.pem` and sets `Core.rootCa` to it, before `Core.start()`. This is the store the app's HTTPS client trusts, updated with the OS. A file, not `setRootCaData`, so one certificate mbedTLS can't parse doesn't drop every root.
+- If the store can't be read or holds no system CA, the SDK's `rootca.pem` stays (logged). `verifyServerCertificates(true)` and `verifyServerCn(true)` are unchanged; nothing turns verification off.
+- Tests (`SystemTrustTest`, public ISRG roots as fixtures): only system aliases are used; the PEM round-trips in order without duplicates; the file is replaced atomically; without system roots the SDK bundle stays; source checks that the roots are set after `configure` and before `Core.start()`, and that nothing turns verification or the CN check off.
+
+### Open
+
+1. **The A53 log decides.** If it shows a trust failure (`flags` with `not trusted` or `CA chain`), this PR is the fix. If not (for example an mbedTLS handshake error), this PR waits and the fix follows the error.
+2. **"No internet on this phone"** for a TLS failure is misleading. Once the log shows what liblinphone reports, `registrationFailure` should map it to `tls`. Proposed as a follow-up.
+
 ## 3.2 (Android) `feat/telecom-fcm`
 
 Branch `feat/telecom-fcm` from `main` at `89752d3`. One PR, not merged.
