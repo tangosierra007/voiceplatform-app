@@ -109,6 +109,13 @@ jobs:
       - run: flutter pub get
       - name: Debug APK
         run: flutter build apk --debug --build-number=${{ github.run_number }}
+      - name: Kotlin unit tests (vp_linphone, the emergency backstop included)
+        # TJ approved this step (3 Nov). RulesTest checks the native emergency
+        # rule against the table the Dart rule is tested on. Here, after the
+        # debug build: Java and the Android SDK are set up above, and the
+        # build has written the Gradle wrapper (gitignored).
+        working-directory: android
+        run: ./gradlew :vp_linphone:testDebugUnitTest --console=plain
       - name: Release App Bundle (unsigned in CI)
         # No upload key is given to this job, so the bundle is unsigned. Only
         # the play-internal job below signs, with the key from secrets.
