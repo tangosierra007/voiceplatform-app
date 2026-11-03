@@ -89,7 +89,8 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
 
   /// The server's words for a refused number (422), shown by the field it
   /// was about. The body doesn't say which field: so under the one filled
-  /// in, or with both filled in, once below the forward field, above Save.
+  /// in, or with both filled in, once below the forward field, above Save;
+  /// always a live region, read out as soon as Save fails.
   String? _refused;
   _Refused? _refusedAt;
 
@@ -160,11 +161,20 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
     final c = context.vp;
     final s = ref.watch(callSettingsProvider).value;
     if (s != null) _seed(s);
+    // A refusal under its field, read out (TalkBack) as soon as Save fails.
+    Widget refusal(String words) => Semantics(
+      container: true,
+      liveRegion: true,
+      child: Text(
+        words,
+        style: VpType.body.copyWith(fontSize: 13, color: c.statusBad),
+      ),
+    );
     InputDecoration field(String hint, {String? error}) => InputDecoration(
       hintText: hint,
-      errorText: error,
-      errorMaxLines: 4,
-      errorStyle: VpType.body.copyWith(fontSize: 13, color: c.statusBad),
+      // The red border; the words go under the field, as their own live
+      // region (an `error` widget isn't read out).
+      error: error == null ? null : const SizedBox.shrink(),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(VpRadius.md),
         borderSide: BorderSide(color: c.statusBad),
@@ -238,6 +248,11 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
               ),
               onChanged: (_) => setState(_clearRefused),
             ),
+            if (_refusedAt == _Refused.mobile && _refused != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: refusal(_refused!),
+              ),
             if (_mobile.text.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               VpSeg<int>(
@@ -282,19 +297,10 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
                 ),
                 onChanged: (_) => setState(_clearRefused),
               ),
-              if (_refusedAt == _Refused.both && _refused != null)
+              if (_refusedAt != _Refused.mobile && _refused != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      _refused!,
-                      style: VpType.body.copyWith(
-                        fontSize: 13,
-                        color: c.statusBad,
-                      ),
-                    ),
-                  ),
+                  padding: const EdgeInsets.only(top: 6),
+                  child: refusal(_refused!),
                 ),
             ],
           ),

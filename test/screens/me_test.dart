@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -354,12 +355,37 @@ void main() {
       final fields = tester.widgetList<TextField>(find.byType(TextField));
       expect(fields.first.controller!.text, mobile);
       expect(fields.last.controller!.text, forward);
-      final at = mobile.isNotEmpty && forward.isNotEmpty
-          ? null
-          : mobile.isNotEmpty
-          ? fields.first
-          : fields.last;
-      if (at != null) expect(at.decoration!.errorText, words);
+      // A live region, so TalkBack reads it as soon as Save fails; under
+      // the field it is about when only one is filled in.
+      final live = find.ancestor(
+        of: find.text(words),
+        matching: find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.liveRegion == true,
+        ),
+      );
+      expect(live, findsOneWidget);
+      // Under the mobile when only it is filled in; else under the forward
+      // number (the last field), just above Save.
+      final shown = tester.getRect(find.text(words));
+      final mobileBox = tester.getRect(find.byType(TextField).first);
+      final forwardBox = tester.getRect(find.byType(TextField).last);
+      if (mobile.isNotEmpty && forward.isEmpty) {
+        expect(shown.top, greaterThanOrEqualTo(mobileBox.bottom));
+        expect(shown.bottom, lessThanOrEqualTo(forwardBox.top));
+      } else {
+        expect(shown.top, greaterThanOrEqualTo(forwardBox.bottom));
+      }
+      // In the semantics tree TalkBack reads: a live region with the words.
+      final read = find.semantics
+          .byLabel(RegExp(RegExp.escape(words)))
+          .evaluate()
+          .toList();
+      expect(read, isNotEmpty);
+      expect(
+        read.any((n) => n.getSemanticsData().flagsCollection.isLiveRegion),
+        isTrue,
+        reason: 'read out as soon as Save fails',
+      );
       await _settle(tester);
       expect(
         api.requests.where((r) => r.path == '/me/call-settings'),
@@ -371,6 +397,42 @@ void main() {
       await tester.enterText(find.byType(TextField).last, '0491 570 159');
       await _settle(tester);
       expect(find.text(words), findsNothing);
+    });
+  }
+
+  for (final (what, answer) in <(String, Object? Function(SeenRequest))>[
+    ('an empty body', (r) => (422, null)),
+    ('a plain-text body', (r) => (422, 'Unprocessable')),
+    ('no message', (r) => (422, {'error': 'forward_to_own_number'})),
+    ('an empty message', (r) => (422, {'error': 'x', 'message': '  '})),
+    (
+      'an error that is not a string',
+      (r) => (422, {'error': 187, 'message': 7}),
+    ),
+  ]) {
+    testWidgets('a 422 with $what: "That didn\x27t save", the numbers stay', (
+      tester,
+    ) async {
+      usePhone(tester);
+      final api = FakeApi({'PATCH /me/call-settings': answer});
+      await tester.pumpWidget(await appUnderTest(clock: () => _now, api: api));
+      await _settle(tester);
+      await openMe(tester);
+      await tester.tap(find.text("When I don't answer"));
+      await _settle(tester);
+      await tester.enterText(find.byType(TextField).first, '0491 570 156');
+      await _settle(tester);
+      await tester.enterText(find.byType(TextField).last, '03 5550 1999');
+      await _settle(tester);
+      await tester.ensureVisible(find.bySemanticsLabel('Save'));
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Save'));
+      await _settle(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text("That didn't save. Try again."), findsOneWidget);
+      final fields = tester.widgetList<TextField>(find.byType(TextField));
+      expect(fields.first.controller!.text, '0491 570 156');
+      expect(fields.last.controller!.text, '03 5550 1999');
     });
   }
 

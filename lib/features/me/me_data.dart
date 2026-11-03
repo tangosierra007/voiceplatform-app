@@ -60,14 +60,15 @@ final callSettingsSaveProvider = Provider<CallSettingsSave>((ref) {
           );
       return CallSettings.fromJson(r.data!);
     } on DioException catch (e) {
+      // Only a 422 with words to show is a refusal; anything else (no body,
+      // plain text, no or empty message) is an ordinary failure.
       final data = e.response?.data;
-      if (e.response?.statusCode == 422 &&
-          data is Map<String, Object?> &&
-          data['message'] is String) {
-        throw CallSettingsRefused(
-          data['error'] as String? ?? '',
-          data['message']! as String,
-        );
+      final message = data is Map<String, Object?> && data['message'] is String
+          ? (data['message']! as String).trim()
+          : '';
+      if (e.response?.statusCode == 422 && message.isNotEmpty) {
+        final code = (data as Map<String, Object?>)['error'];
+        throw CallSettingsRefused(code is String ? code : '', message);
       }
       rethrow;
     }
