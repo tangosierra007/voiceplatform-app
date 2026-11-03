@@ -165,10 +165,12 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         pushProvider: String?,
         pushPrid: String?,
         pushParam: String?,
-    ) = LinphoneEngine.register(
-        authUsername, password, domain, outboundProxy, displayName,
-        AccountSetup.expires(expiresSeconds), instanceId, pushProvider, pushPrid, pushParam,
-    )
+    ) = ReregisterWork.registerOrQueue(context) {
+        LinphoneEngine.register(
+            authUsername, password, domain, outboundProxy, displayName,
+            AccountSetup.expires(expiresSeconds), instanceId, pushProvider, pushPrid, pushParam,
+        )
+    }
 
     override suspend fun unregister() = suspendCancellableCoroutine { cont ->
         // Unregistering alone ends no call: only with none live.

@@ -92,4 +92,22 @@ class BackgroundRegistrationTest {
         assertEquals(Outcome.FAILED, BackgroundRegistration.failure(503))
         assertEquals(Outcome.FAILED, BackgroundRegistration.failure(0))
     }
+
+    @Test
+    fun aRunningServiceWithNoAccountGetsTheStoredOneTheAppsRegisterFailed() {
+        // The app's register failed after its POST and queued the job: the
+        // stored account has the rotated password; the service's Core is up.
+        val running = EngineState(coreUp = true, accountUp = false, stopped = false, running = true)
+        assertEquals(Plan.RegisterOnRunning(record), BackgroundRegistration.plan(record, stored = true, running, "token-1"))
+        assertEquals(
+            Plan.RegisterOnRunning(record.copy(pushPrid = "token-2")),
+            BackgroundRegistration.plan(record, stored = true, running, "token-2"),
+        )
+        // Still starting: left to the service, checked again.
+        assertEquals(Plan.LeaveToEngine, BackgroundRegistration.plan(record, stored = true, upNoAccount, "token-1"))
+        // Registered: refreshed, never replaced.
+        val registeredRunning = EngineState(coreUp = true, accountUp = true, stopped = false, running = true)
+        assertEquals(Plan.RefreshRunning(null), BackgroundRegistration.plan(record, stored = true, registeredRunning, "token-1"))
+        assertEquals(Plan.NoAccount, BackgroundRegistration.plan(null, stored = false, running, "token-1"))
+    }
 }

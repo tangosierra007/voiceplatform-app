@@ -192,7 +192,16 @@ object LinphoneEngine {
     internal fun onServiceDestroyed() {
         // A service that never took the background registration's Core over
         // (call_cancelled while it started) leaves that Core to the job.
-        if (headless.serviceMayStopCore()) stopCore() else log("service stopped: background core kept")
+        if (headless.serviceMayStopCore()) {
+            // Stopped with an account (the system or the user stopped the
+            // service, not a sign-out, which unregisters first): the app hears
+            // `cleared`, so its next resume starts and registers again.
+            val hadAccount = account != null
+            stopCore()
+            if (hadAccount) emitRegistration(RegistrationMsg(RegStateMsg.CLEARED))
+        } else {
+            log("service stopped: background core kept")
+        }
         service = null
         lifecycle.onServiceDestroyed()
     }
@@ -1012,6 +1021,7 @@ object LinphoneEngine {
             coreUp = core != null,
             accountUp = account != null,
             stopped = lifecycle.state == EngineLifecycle.State.STOPPED,
+            running = lifecycle.state == EngineLifecycle.State.RUNNING && service != null,
         )
         when (val plan = BackgroundRegistration.plan(record, store.exists(), engine, fcmToken)) {
             BackgroundRegistration.Plan.NoAccount -> done(BackgroundRegistration.Outcome.NO_ACCOUNT)
@@ -1022,6 +1032,27 @@ object LinphoneEngine {
             BackgroundRegistration.Plan.LeaveToEngine -> {
                 log("background registration: engine starting, checked again later")
                 done(BackgroundRegistration.Outcome.ENGINE_STARTING)
+            }
+            is BackgroundRegistration.Plan.RegisterOnRunning -> {
+                // The app's register failed after its POST: the stored account has
+                // the rotated password. Registered on the service's Core, and the
+                // job waits for the edge's answer like a Core of its own.
+                val r = plan.record
+                backgroundDone = done
+                try {
+                    register(
+                        r.authUsername, r.password, r.domain, r.outboundProxy, r.displayName,
+                        r.expiresSeconds, r.instanceId, r.pushProvider, r.pushPrid, r.pushParam,
+                    )
+                    if (r.pushPrid != record?.pushPrid) PushTokenFlag.setUnsent(app)
+                    log("background registration: registering on the running engine")
+                } catch (e: VpFlutterError) {
+                    log("background registration: register refused ${e.code}")
+                    endBackgroundRefresh(BackgroundRegistration.Outcome.REFUSED)
+                } catch (t: Throwable) {
+                    log("background registration failed: ${t.javaClass.simpleName}")
+                    endBackgroundRefresh(BackgroundRegistration.Outcome.FAILED)
+                }
             }
             is BackgroundRegistration.Plan.RefreshRunning -> {
                 val r = record!!

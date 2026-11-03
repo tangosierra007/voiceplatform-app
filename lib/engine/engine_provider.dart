@@ -80,6 +80,10 @@ final engineSessionProvider = Provider<void>((ref) {
   final engine = ref.watch(callEngineProvider);
   var started = false;
 
+  /// Notifications are asked once per process, however often [up] starts
+  /// the engine.
+  var askedNotifications = false;
+
   /// The last [up] reached `register()`.
   var registered = false;
 
@@ -94,6 +98,12 @@ final engineSessionProvider = Provider<void>((ref) {
 
   /// The [down] in progress: a new sign-in waits for its unregister.
   Future<void>? stopping;
+
+  /// The running [up] is in a local step (the engine's start, or
+  /// `register()`), which [down] waits for. In its network steps (the FCM
+  /// token, the PUT, the POST) [down] doesn't wait: the run stops at its next
+  /// check, so an offline sign-out isn't held up by an HTTP timeout.
+  var inLocalStep = false;
 
   /// True when the API took it; the native "not yet sent" flag is cleared then.
   Future<bool> putPushToken(String token) async {
@@ -130,12 +140,20 @@ final engineSessionProvider = Provider<void>((ref) {
       if (wait != null) await wait;
       if (gone()) return;
       if (!started) {
-        await engine.start();
+        inLocalStep = true;
+        try {
+          await engine.start();
+        } finally {
+          inLocalStep = false;
+        }
         started = true;
         if (gone()) return;
-        // Incoming-call notifications need it on Android 13+ (WS3 3.2):
-        // asked once signed in, when the app can start ringing.
-        unawaited(ref.read(micPermissionProvider).requestNotifications());
+        if (!askedNotifications) {
+          askedNotifications = true;
+          // Incoming-call notifications need it on Android 13+ (WS3 3.2):
+          // asked once signed in, when the app can start ringing.
+          unawaited(ref.read(micPermissionProvider).requestNotifications());
+        }
       }
       // The FCM token for RFC 8599 (pn-provider fcm, pn-param
       // voiceplatform-app) and for the API; null without push (fake engine).
@@ -158,18 +176,23 @@ final engineSessionProvider = Provider<void>((ref) {
       // Signed out meanwhile: no register; [down] is unregistering, which
       // clears the account the native side keeps.
       if (gone()) return;
-      await engine.register(
-        SipAccount(
-          authUsername: c.authUsername,
-          password: c.password,
-          domain: c.domain,
-          outboundProxy: c.outboundProxy,
-          displayName: c.displayName,
-          expiresSeconds: c.expiresSeconds,
-          instanceId: c.instanceId,
-          push: token == null ? null : VpPushTokens.paramsFor(token),
-        ),
-      );
+      inLocalStep = true;
+      try {
+        await engine.register(
+          SipAccount(
+            authUsername: c.authUsername,
+            password: c.password,
+            domain: c.domain,
+            outboundProxy: c.outboundProxy,
+            displayName: c.displayName,
+            expiresSeconds: c.expiresSeconds,
+            instanceId: c.instanceId,
+            push: token == null ? null : VpPushTokens.paramsFor(token),
+          ),
+        );
+      } finally {
+        inLocalStep = false;
+      }
       registered = true;
       if (gone()) return;
       if (token != null) await putPushToken(token);
@@ -210,21 +233,25 @@ final engineSessionProvider = Provider<void>((ref) {
   /// clears the SIP account the native side keeps for push wakes, so a later
   /// push can't register it again.
   ///
-  /// A run of [up] still going is stopped first (the session moves on) and
-  /// waited for, so its `register()` can never come after this unregister.
+  /// A run of [up] still going is stopped first (the session moves on). It is
+  /// waited for only in a local step ([inLocalStep]): in `register()`, so the
+  /// register can never come after this unregister. In a network step it
+  /// can't reach `register()` any more: it checks the session first.
   Future<void> downOnce() async {
     session++;
     registered = false;
     final run = running;
-    if (run != null) {
+    if (run != null && inLocalStep) {
       try {
         await run;
       } catch (_) {}
     }
+    // Read before the unregister: its `cleared` resets [started].
+    final wasStarted = started;
     try {
       await engine.unregister();
     } catch (_) {}
-    if (!started) return;
+    if (!wasStarted && !started) return;
     try {
       await engine.stop();
     } catch (_) {}
@@ -257,11 +284,15 @@ final engineSessionProvider = Provider<void>((ref) {
   ref.listen<String?>(accessTokenProvider, (before, t) {
     if (before == null && t != null) apply(ref.read(authProvider), t);
   });
-  // Registration cleared (an unregister, or the engine stopped natively by a
-  // signed_out push): the next resume runs [up] again if still signed in.
-  // Not on `none`: a new account reports it before it registers.
+  // Registration cleared: an unregister, or the engine's service stopped
+  // with an account (the native side reports `cleared` then). The next
+  // resume starts the engine (a no-op when it runs) and registers again if
+  // still signed in. Not on `none`: a new account reports it before it
+  // registers.
   final cleared = engine.registration.listen((e) {
-    if (e.state == RegistrationState.cleared) registered = false;
+    if (e.state != RegistrationState.cleared) return;
+    registered = false;
+    started = false;
   });
   ref.onDispose(cleared.cancel);
 

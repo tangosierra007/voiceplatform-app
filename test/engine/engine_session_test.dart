@@ -335,8 +335,9 @@ void main() {
   // Sign-outs during up(), and the credentials POST that rotates the
   // password (WS6 and mobile-lead on #52).
   Future<(ProviderContainer, StreamController<void>)> session(
-    _GatedEngine engine,
-  ) async {
+    _GatedEngine engine, {
+    VpPushTokens? push,
+  }) async {
     SharedPreferences.setMockInitialValues({});
     final sp = await SharedPreferences.getInstance();
     final own = await MockServer.start(port: 0);
@@ -349,7 +350,7 @@ void main() {
         sessionStoreProvider.overrideWithValue(MemorySessionStore()),
         deviceKeysProvider.overrideWithValue(FakeDeviceKeys()),
         callEngineProvider.overrideWithValue(engine),
-        pushTokensProvider.overrideWithValue(null),
+        pushTokensProvider.overrideWithValue(push),
         micPermissionProvider.overrideWithValue(FakeMic()),
         appResumesProvider.overrideWithValue(resumes.stream),
         apiConfigProvider.overrideWithValue(
@@ -390,7 +391,7 @@ void main() {
     expect(engine.sinceStart, ['start'], reason: 'down() waits for the run');
     engine.startGate!.complete();
     await settle();
-    expect(engine.sinceStart, ['start', 'unregister']);
+    expect(engine.sinceStart, ['start', 'unregister', 'stop']);
     expect(engine.attempted, isEmpty);
 
     // A new sign-in: its own run, not the old one.
@@ -468,6 +469,65 @@ void main() {
     resumes.add(null);
     await settle();
     expect(engine.attempted, hasLength(2));
+    await engine.dispose();
+  });
+  // WS6's low findings on #52.
+  test('an offline sign-out is not held up by the run\'s network step: it '
+      'unregisters at once, and the run never registers', () async {
+    final engine = _GatedEngine();
+    final token = Completer<String?>();
+    final push = VpPushTokens(
+      engine: engine,
+      source: _HeldTokens(token.future),
+      ledger: _Ledger(false),
+    );
+    final (c, _) = await session(engine, push: push);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    expect(engine.sinceStart, ['start'], reason: 'waiting for the FCM token');
+
+    await c.read(authProvider.notifier).signOutLocally();
+    await settle();
+    expect(engine.sinceStart, [
+      'start',
+      'unregister',
+      'stop',
+    ], reason: 'down() did not wait for the network step');
+    token.complete('fcm-token-9');
+    await settle();
+    expect(engine.attempted, isEmpty);
+    expect(engine.sinceStart.contains('register'), isFalse);
+    await engine.dispose();
+  });
+
+  test('a service stopped under the app (cleared) is started and registered '
+      'again on the next resume', () async {
+    final engine = _GatedEngine();
+    final (c, resumes) = await session(engine);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    expect(engine.sinceStart, ['start', 'register']);
+
+    // The native side reports `cleared` when the service is destroyed with
+    // an account; the fake's stop() does the same.
+    await engine.stop();
+    engine.log.clear();
+    resumes.add(null);
+    await settle();
+    expect(engine.log, ['start', 'register']);
+    expect(engine.registrationState, RegistrationState.ok);
+    await engine.dispose();
+  });
+
+  test('a sign-out still stops the engine, though the unregister\'s cleared '
+      'resets the started flag', () async {
+    final engine = _GatedEngine();
+    final (c, _) = await session(engine);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    await c.read(authProvider.notifier).signOutLocally();
+    await settle();
+    expect(engine.sinceStart, ['start', 'register', 'unregister', 'stop']);
     await engine.dispose();
   });
 }
@@ -589,4 +649,22 @@ class _GatedEngine extends FakeCallEngine {
     log.add('unregister');
     return super.unregister();
   }
+
+  @override
+  Future<void> stop() {
+    log.add('stop');
+    return super.stop();
+  }
+}
+
+/// An FCM token that comes only when [token] completes (a slow network).
+class _HeldTokens implements PushTokenSource {
+  _HeldTokens(this.token);
+  final Future<String?> token;
+
+  @override
+  Future<String?> currentToken() => token;
+
+  @override
+  Stream<String> get tokenRefresh => const Stream.empty();
 }

@@ -47,6 +47,7 @@ object ReregisterWork {
     const val KEY_REASON = "reason"
     const val REASON_BOOT = "boot"
     const val REASON_UPDATE = "update"
+    const val REASON_REGISTER_FAILED = "register_failed"
 
     /** The job's own attempts before it gives up; the next push, boot, update or app start registers anyway. */
     const val MAX_ATTEMPTS = 5
@@ -72,6 +73,23 @@ object ReregisterWork {
         if (sdkInt >= Build.VERSION_CODES.S) b.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
         return b.build()
     }
+
+    /**
+     * The app's own register (right after `POST /devices/me/sip-credentials`,
+     * which rotated the password): if it throws, queue the job, which
+     * registers the stored account (kept with the new password before the
+     * register ran) without another POST, so the phone isn't left
+     * unreachable until the app is next opened. The error still goes to
+     * the app. The job itself never comes through here, so it can't queue
+     * itself.
+     */
+    fun <T> registerOrQueue(context: Context, register: () -> T): T =
+        try {
+            register()
+        } catch (e: Exception) {
+            enqueue(context, REASON_REGISTER_FAILED)
+            throw e
+        }
 
     /** KEEP: a boot and an update close together make one job, and a running one isn't cut short. */
     fun enqueue(context: Context, reason: String) {

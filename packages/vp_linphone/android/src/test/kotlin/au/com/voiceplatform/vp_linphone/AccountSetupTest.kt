@@ -178,4 +178,17 @@ class AccountSetupTest {
         val now = engine.substringAfter("    private fun registerNow(").substringBefore("log(\"register ")
         assertFalse("CredentialStore" in now, "registerNow must not save after the register steps")
     }
+
+    @Test
+    fun aServiceStoppedWithAnAccountTellsTheAppCleared() {
+        // So the app's next resume starts and registers again (WS6 on PR 52).
+        val destroyed = engine.substringAfter("internal fun onServiceDestroyed()").substringBefore("lifecycle.onServiceDestroyed()")
+        assertTrue("val hadAccount = account != null" in destroyed)
+        assertTrue("if (hadAccount) emitRegistration(RegistrationMsg(RegStateMsg.CLEARED))" in destroyed)
+        assertTrue(destroyed.indexOf("val hadAccount") < destroyed.indexOf("stopCore()"), "read before the stop forgets it")
+        // stopCore() itself stays quiet: internal restarts and the job's own
+        // Core must not reset the app's state (each new up() rotates the password).
+        val stop = engine.substringAfter("private fun stopCore()").substringBefore("log(\"core stopped\")")
+        assertFalse("emitRegistration" in stop)
+    }
 }

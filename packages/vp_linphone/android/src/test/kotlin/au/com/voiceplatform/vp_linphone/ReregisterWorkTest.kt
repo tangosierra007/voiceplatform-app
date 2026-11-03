@@ -177,4 +177,34 @@ class ReregisterWorkTest {
         runBlocking { worker.doWork() }
         assertEquals(listOf<String?>(null), seen)
     }
+
+    @Test
+    fun aRegisterThatFailsQueuesTheJobAndTheErrorStillReachesTheApp() {
+        val e = kotlin.runCatching {
+            ReregisterWork.registerOrQueue(context) { throw VpFlutterError("invalid_state", "Engine not started") }
+        }.exceptionOrNull()
+        assertTrue(e is VpFlutterError)
+        val job = queued().single()
+        assertEquals(WorkInfo.State.ENQUEUED, job.state)
+        assertEquals(NetworkType.CONNECTED, job.constraints.requiredNetworkType)
+    }
+
+    @Test
+    fun aRegisterThatWorksQueuesNothing() {
+        assertEquals(7, ReregisterWork.registerOrQueue(context) { 7 })
+        assertTrue(queued().isEmpty())
+    }
+
+    @Test
+    fun theRegisterFailedJobCarriesItsReason() {
+        val r = ReregisterWork.request(ReregisterWork.REASON_REGISTER_FAILED)
+        assertEquals("register_failed", r.workSpec.input.getString(ReregisterWork.KEY_REASON))
+    }
+
+    @Test
+    fun thePluginsRegisterGoesThroughRegisterOrQueue() {
+        val plugin = java.io.File("src/main/kotlin/au/com/voiceplatform/vp_linphone/VpLinphonePlugin.kt").readText()
+        val register = plugin.substringAfter("override fun register(").substringBefore("override suspend fun unregister")
+        assertTrue("ReregisterWork.registerOrQueue(context)" in register)
+    }
 }

@@ -51,11 +51,24 @@ object BackgroundRegistration {
         /** The service is starting, or up with no account yet: it should register by itself; checked again. */
         data object LeaveToEngine : Plan
 
+        /**
+         * The service is up (running, not starting) with no account: the app's
+         * own register failed (it queued this job). [record] is registered on
+         * that Core; it holds the password the last POST rotated to.
+         */
+        data class RegisterOnRunning(val record: AccountRecord) : Plan
+
         /** Nothing is running: a Core of our own, just long enough to register [record]. */
         data class Headless(val record: AccountRecord) : Plan
     }
 
-    data class EngineState(val coreUp: Boolean, val accountUp: Boolean, val stopped: Boolean)
+    data class EngineState(
+        val coreUp: Boolean,
+        val accountUp: Boolean,
+        val stopped: Boolean,
+        /** The service has started its Core (not still starting). */
+        val running: Boolean = false,
+    )
 
     /** [stored]: the account file exists, so a null [record] is a read failure, not a sign-out. */
     fun plan(record: AccountRecord?, stored: Boolean, engine: EngineState, fcmToken: String?): Plan {
@@ -64,6 +77,7 @@ object BackgroundRegistration {
         val newPrid = updated.pushPrid.takeIf { it != record.pushPrid }
         return when {
             engine.coreUp && engine.accountUp -> Plan.RefreshRunning(newPrid)
+            engine.coreUp && engine.running -> Plan.RegisterOnRunning(updated)
             engine.coreUp || !engine.stopped -> Plan.LeaveToEngine
             else -> Plan.Headless(updated)
         }
