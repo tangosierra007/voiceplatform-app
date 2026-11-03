@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:call_engine/call_engine.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vp_linphone/vp_linphone.dart';
 
@@ -50,13 +51,37 @@ final audioStateProvider = StreamProvider<AudioState>(
   (ref) => ref.watch(callEngineProvider).audio,
 );
 
+/// Each return of the app to the foreground (an [AppLifecycleListener]).
+/// Tests override it with their own stream.
+final appResumesProvider = Provider<Stream<void>>((ref) {
+  final resumes = StreamController<void>.broadcast();
+  final listener = AppLifecycleListener(onResume: () => resumes.add(null));
+  ref.onDispose(() {
+    listener.dispose();
+    resumes.close();
+  });
+  return resumes.stream;
+});
+
 /// Starts and registers the engine while someone is signed in: SIP
 /// credentials from `POST /devices/me/sip-credentials` go straight into
 /// `register()` and are never kept or logged (APP4). Signed out, it
 /// unregisters and stops.
+///
+/// A start or registration that fails (offline, or Android refusing the
+/// engine's service while the phone is locked) is tried again the next time
+/// the app comes to the foreground, so the API's expiry (decision 170) and
+/// fresh credentials always reach the engine; until then only the copy the
+/// native side keeps for push wakes registers.
 final engineSessionProvider = Provider<void>((ref) {
   final engine = ref.watch(callEngineProvider);
   var started = false;
+
+  /// The last [up] reached `register()`.
+  var registered = false;
+
+  /// The [up] in progress: a second request waits for it, never overlaps it.
+  Future<void>? running;
 
   /// True when the API took it; the native "not yet sent" flag is cleared then.
   Future<bool> putPushToken(String token) async {
@@ -78,7 +103,8 @@ final engineSessionProvider = Provider<void>((ref) {
     return true;
   }
 
-  Future<void> up() async {
+  Future<void> upOnce() async {
+    registered = false;
     try {
       if (!started) {
         await engine.start();
@@ -114,12 +140,16 @@ final engineSessionProvider = Provider<void>((ref) {
           push: token == null ? null : VpPushTokens.paramsFor(token),
         ),
       );
+      registered = true;
       if (token != null) await putPushToken(token);
     } catch (_) {
-      // Offline or refused: the registration stream says so; retried on the
-      // next sign-in or token.
+      // Offline or refused (Android may refuse the engine's service while
+      // the phone is locked): the registration stream says so; retried on
+      // the next resume, sign-in or token.
     }
   }
+
+  Future<void> up() => running ??= upOnce().whenComplete(() => running = null);
 
   // A refreshed token: VpPushTokens has already updated the engine's
   // contact; the API gets it too.
@@ -139,6 +169,7 @@ final engineSessionProvider = Provider<void>((ref) {
     try {
       await engine.unregister();
     } catch (_) {}
+    registered = false;
     if (!started) return;
     try {
       await engine.stop();
@@ -161,6 +192,14 @@ final engineSessionProvider = Provider<void>((ref) {
   ref.listen<String?>(accessTokenProvider, (before, t) {
     if (before == null && t != null) apply(ref.read(authProvider), t);
   });
+  // Back in the foreground after a start or registration that didn't go
+  // through: try again, with fresh credentials.
+  final resumes = ref.read(appResumesProvider).listen((_) {
+    if (registered) return;
+    final s = ref.read(authProvider);
+    if (s is SignedIn && ref.read(accessTokenProvider) != null) unawaited(up());
+  });
+  ref.onDispose(resumes.cancel);
   apply(ref.read(authProvider), ref.read(accessTokenProvider));
 });
 

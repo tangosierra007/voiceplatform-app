@@ -113,4 +113,28 @@ class AccountSetupTest {
         assertTrue("c.verifyServerCertificates(true)" in engine)
         assertTrue("c.verifyServerCn(true)" in engine)
     }
+
+    @Test
+    fun theApisSevenDayExpiryIsSentAsIs() {
+        // Decision 170: the API asks for 604800 s; the old clamp sent 86400.
+        assertEquals(604_800, AccountSetup.expires(604_800))
+        assertEquals(600, AccountSetup.expires(600))
+        assertEquals(86_400, AccountSetup.expires(86_400))
+    }
+
+    @Test
+    fun expiriesOutsideTheRangeAreClamped() {
+        assertEquals(604_800, AccountSetup.expires(604_801))
+        assertEquals(604_800, AccountSetup.expires(Long.MAX_VALUE))
+        assertEquals(60, AccountSetup.expires(30))
+        assertEquals(60, AccountSetup.expires(0))
+        assertEquals(60, AccountSetup.expires(-1))
+    }
+
+    @Test
+    fun thePluginRegistersWithTheClampedApiExpiry() {
+        val plugin = File("src/main/kotlin/au/com/voiceplatform/vp_linphone/VpLinphonePlugin.kt").readText()
+        assertTrue("AccountSetup.expires(expiresSeconds)" in plugin)
+        assertFalse("coerceIn(60, 86400)" in plugin)
+    }
 }

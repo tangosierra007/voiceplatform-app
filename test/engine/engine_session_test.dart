@@ -62,6 +62,7 @@ void main() {
           callEngineProvider.overrideWithValue(engine),
           pushTokensProvider.overrideWithValue(push),
           micPermissionProvider.overrideWithValue(mic),
+          appResumesProvider.overrideWithValue(const Stream.empty()),
           apiConfigProvider.overrideWithValue(
             ApiConfig(
               baseUrl: server.baseUri.toString(),
@@ -121,6 +122,7 @@ void main() {
         callEngineProvider.overrideWithValue(engine),
         pushTokensProvider.overrideWithValue(null),
         micPermissionProvider.overrideWithValue(FakeMic()),
+        appResumesProvider.overrideWithValue(const Stream.empty()),
         apiConfigProvider.overrideWithValue(
           ApiConfig(
             baseUrl: server.baseUri.toString(),
@@ -169,6 +171,7 @@ void main() {
         callEngineProvider.overrideWithValue(engine),
         pushTokensProvider.overrideWithValue(push),
         micPermissionProvider.overrideWithValue(FakeMic()),
+        appResumesProvider.overrideWithValue(const Stream.empty()),
         apiConfigProvider.overrideWithValue(
           ApiConfig(
             baseUrl: own.baseUri.toString(),
@@ -217,6 +220,118 @@ void main() {
     expect(ledger.marks, greaterThanOrEqualTo(1));
     await engine.dispose();
   });
+  // Android refuses the engine's service while the phone is locked: the
+  // start fails, nothing registers but the native copy (the old expiry).
+  // Back in the foreground, the app starts and registers with fresh
+  // credentials, once, and no two runs overlap.
+  test('a start that failed is tried again on resume, with fresh '
+      'credentials; one run at a time, none once registered', () async {
+    SharedPreferences.setMockInitialValues({});
+    final sp = await SharedPreferences.getInstance();
+    final own = await MockServer.start(port: 0);
+    addTearDown(own.close);
+    final engine = _FlakyStartEngine(failures: 1);
+    final resumes = StreamController<void>.broadcast();
+    addTearDown(resumes.close);
+    final c = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(sp),
+        sessionStoreProvider.overrideWithValue(MemorySessionStore()),
+        deviceKeysProvider.overrideWithValue(FakeDeviceKeys()),
+        callEngineProvider.overrideWithValue(engine),
+        pushTokensProvider.overrideWithValue(null),
+        micPermissionProvider.overrideWithValue(FakeMic()),
+        appResumesProvider.overrideWithValue(resumes.stream),
+        apiConfigProvider.overrideWithValue(
+          ApiConfig(
+            baseUrl: own.baseUri.toString(),
+            platform: 'android',
+            appVersion: '1.0.0',
+            deviceModel: 'Pixel 8',
+          ),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    c.read(engineSessionProvider);
+    c.read(authProvider);
+    await pumpEventQueue();
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await pumpEventQueue(times: 50);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    expect(engine.startAttempts, 1);
+    expect(engine.accounts, isEmpty, reason: 'the start failed: no register');
+
+    // Two resumes at once: one run.
+    resumes
+      ..add(null)
+      ..add(null);
+    await pumpEventQueue(times: 50);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(engine.startAttempts, 2);
+    expect(engine.accounts, hasLength(1));
+    expect(engine.registrationState, RegistrationState.ok);
+    expect(
+      engine.accounts.single.expiresSeconds,
+      600,
+      reason: "the API's expiry (the mock server's), not a stored one",
+    );
+
+    // Registered: a later resume does nothing.
+    resumes.add(null);
+    await pumpEventQueue(times: 50);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(engine.startAttempts, 2);
+    expect(engine.accounts, hasLength(1));
+    await engine.dispose();
+  });
+
+  test('a registration that failed is tried again on resume', () async {
+    SharedPreferences.setMockInitialValues({});
+    final sp = await SharedPreferences.getInstance();
+    final own = await MockServer.start(port: 0);
+    addTearDown(own.close);
+    final engine = _FlakyStartEngine(failures: 0, registerFailures: 1);
+    final resumes = StreamController<void>.broadcast();
+    addTearDown(resumes.close);
+    final c = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(sp),
+        sessionStoreProvider.overrideWithValue(MemorySessionStore()),
+        deviceKeysProvider.overrideWithValue(FakeDeviceKeys()),
+        callEngineProvider.overrideWithValue(engine),
+        pushTokensProvider.overrideWithValue(null),
+        micPermissionProvider.overrideWithValue(FakeMic()),
+        appResumesProvider.overrideWithValue(resumes.stream),
+        apiConfigProvider.overrideWithValue(
+          ApiConfig(
+            baseUrl: own.baseUri.toString(),
+            platform: 'android',
+            appVersion: '1.0.0',
+            deviceModel: 'Pixel 8',
+          ),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    c.read(engineSessionProvider);
+    c.read(authProvider);
+    await pumpEventQueue();
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await pumpEventQueue(times: 50);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(engine.registerAttempts, 1);
+    expect(engine.accounts, isEmpty);
+
+    resumes.add(null);
+    await pumpEventQueue(times: 50);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(engine.registerAttempts, 2);
+    expect(engine.accounts, hasLength(1));
+    expect(engine.startAttempts, 1, reason: 'already started: not again');
+    await engine.dispose();
+  });
 }
 
 class _SpyEngine extends FakeCallEngine {
@@ -258,5 +373,38 @@ class _FailingRegisterEngine extends FakeCallEngine {
   Future<void> register(SipAccount account) async {
     registerAttempts++;
     throw StateError('refused in the test');
+  }
+}
+
+/// start() fails [failures] times (Android refusing the service), register()
+/// [registerFailures] times; the accounts that did register are kept.
+class _FlakyStartEngine extends FakeCallEngine {
+  _FlakyStartEngine({required this.failures, this.registerFailures = 0})
+    : super(registerAfter: Duration.zero);
+  int failures;
+  int registerFailures;
+  int startAttempts = 0;
+  int registerAttempts = 0;
+  final accounts = <SipAccount>[];
+
+  @override
+  Future<void> start() async {
+    startAttempts++;
+    if (failures > 0) {
+      failures--;
+      throw StateError('startForegroundService() not allowed');
+    }
+    return super.start();
+  }
+
+  @override
+  Future<void> register(SipAccount account) async {
+    registerAttempts++;
+    if (registerFailures > 0) {
+      registerFailures--;
+      throw StateError('offline');
+    }
+    accounts.add(account);
+    return super.register(account);
   }
 }

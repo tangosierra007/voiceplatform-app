@@ -58,6 +58,16 @@ object AccountSetup {
         return Plan("sip:$authUsername@$sipDomain", server, host.trim('[', ']'))
     }
 
+    /**
+     * The REGISTER expiry from the API's `expiresSeconds` (the only source,
+     * decision 170), kept within [MIN_EXPIRES_S]..[MAX_EXPIRES_S]: up to 7
+     * days, what the edge grants a contact with push parameters.
+     */
+    fun expires(expiresSeconds: Long): Int = expiresSeconds.coerceIn(MIN_EXPIRES_S.toLong(), MAX_EXPIRES_S.toLong()).toInt()
+
+    const val MIN_EXPIRES_S = 60
+    const val MAX_EXPIRES_S = 604_800
+
     /** Server address before outbound proxy: liblinphone makes the server address the route. */
     fun apply(plan: Plan, displayName: String, params: Params) {
         params.setIdentity(plan.identity, displayName)
