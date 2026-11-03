@@ -17,14 +17,23 @@ package au.com.voiceplatform.vp_linphone
  *   it should start the service within [TAKEOVER_MS]. If none has, the call
  *   is declined (480) and the Core stops shortly after ([DECLINE_FLUSH_MS],
  *   so the 480 goes out), or as soon as the call has ended.
+ * - A call answered on the Core cancels both timers (the engine starts the
+ *   service, which takes the Core over); nothing releases the Core while a
+ *   call on it is connected.
+ * - Whenever the Core is released, ringing calls are declined with 480
+ *   first, never ended with the 603 a bare stop may send (that could stop
+ *   the edge trying the user's other devices).
  */
 class HeadlessCore(private val scheduler: Scheduler, private val actions: Actions) {
 
     interface Actions {
         fun stopCore()
 
-        /** Decline every call on the Core with 480 Temporarily Unavailable. */
+        /** Decline every still-ringing (INCOMING) call on the Core with 480 Temporarily Unavailable. */
         fun declineCalls()
+
+        /** A call on the Core is answered or connected: the Core must not stop under it. */
+        fun hasConnectedCall(): Boolean
         fun log(message: String)
     }
 
@@ -57,7 +66,7 @@ class HeadlessCore(private val scheduler: Scheduler, private val actions: Action
             actions.log("background registration over: core left to the starting service")
             return
         }
-        if (liveCall) {
+        if (liveCall || actions.hasConnectedCall()) {
             actions.log("background registration over: core kept for its call")
             return
         }
@@ -72,26 +81,35 @@ class HeadlessCore(private val scheduler: Scheduler, private val actions: Action
         if (!owned || serviceUp || takeover != null || flush != null) return
         takeover = scheduler.schedule(TAKEOVER_MS) {
             takeover = null
-            if (!owned) return@schedule
+            if (!owned || actions.hasConnectedCall()) return@schedule
             actions.log("call on the background core: no service took it over, declined 480")
             actions.declineCalls()
             flush = scheduler.schedule(DECLINE_FLUSH_MS) {
                 flush = null
-                if (owned) release("background core stopped after the declined call")
+                if (owned && !actions.hasConnectedCall()) release("background core stopped after the declined call")
             }
         }
+    }
+
+    /** A call on the Core was answered: no decline, no release under it. */
+    fun onCallAnswered() {
+        if (!owned) return
+        cancelTimers()
+        actions.log("call answered on the background core: waiting for the service")
     }
 
     /** The Core's last call ended. */
     fun onLastCallEnded() {
         if (!owned) return
         if (jobRunning && flush == null) return
+        if (actions.hasConnectedCall()) return
         release("background core stopped: its call ended")
     }
 
     private fun release(message: String) {
         owned = false
         cancelTimers()
+        actions.declineCalls()
         actions.stopCore()
         actions.log(message)
     }

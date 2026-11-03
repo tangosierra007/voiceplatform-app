@@ -183,6 +183,7 @@ object LinphoneEngine {
         lifecycle.onStartFailed(error)
         // A background registration's Core left for this service: nobody else will stop it.
         if (service == null && !headless.owned && core != null) {
+            declineRinging()
             stopCore()
             log("core left for the service stopped: the service did not start")
         }
@@ -469,7 +470,10 @@ object LinphoneEngine {
     }
 
     fun unregister(done: () -> Unit) {
-        appContext?.let { CredentialStore(it).clear() }
+        appContext?.let {
+            CredentialStore(it).clear()
+            PushTokenFlag.markSent(it)
+        }
         val c = core
         val acc = account
         if (c == null || acc == null) {
@@ -617,6 +621,17 @@ object LinphoneEngine {
         val c = requireCore()
         val t = tracked(callId)
         if (t.state != CallStateMsg.INCOMING) throw VpFlutterError("invalid_state", "Call is not ringing")
+        if (headless.owned) {
+            // Answered on the background registration's Core: no 480 or stop
+            // under it, and the service (allowed now: the call screen is in the
+            // foreground) takes the Core over.
+            headless.onCallAnswered()
+            appContext?.let { ctx ->
+                requestStart(ctx, byApp = false) { e ->
+                    if (e != null) log("service start for the answered call failed: ${e.javaClass.simpleName}")
+                }
+            }
+        }
         try {
             if (!micGranted()) throw VpFlutterError("microphone_denied", "Microphone permission not granted")
             requireSrtpOnly(c)
@@ -924,13 +939,26 @@ object LinphoneEngine {
         },
         actions = object : HeadlessCore.Actions {
             override fun stopCore() = this@LinphoneEngine.stopCore()
-            override fun declineCalls() {
-                core?.calls?.forEach { it.decline(Reason.TemporarilyUnavailable) }
+            override fun declineCalls() = declineRinging()
+            override fun hasConnectedCall() = calls.values.any {
+                it.state != CallStateMsg.ENDED && (it.connectedAt != null || it.answering || it.state == CallStateMsg.CONNECTED)
             }
             override fun log(message: String) = this@LinphoneEngine.log(message)
         },
     )
     private var backgroundDone: ((BackgroundRegistration.Outcome) -> Unit)? = null
+
+    /**
+     * 480 for every call still ringing on this device, before its Core stops:
+     * a bare stop could end them with a 603, which may stop the edge trying
+     * the user's other devices.
+     */
+    private fun declineRinging() {
+        for (t in calls.values) {
+            if (t.state != CallStateMsg.INCOMING) continue
+            t.call.decline(Reason.TemporarilyUnavailable)
+        }
+    }
 
     /**
      * After a phone restart or an app update ([ReregisterWorker]): register
@@ -1022,6 +1050,7 @@ object LinphoneEngine {
      */
     fun signOutFromPush(context: Context) {
         CredentialStore(context).clear()
+        PushTokenFlag.markSent(context)
         core?.let { dropAccount(it) }
         account = null
         domain = null

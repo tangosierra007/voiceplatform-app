@@ -11,6 +11,10 @@ class HeadlessCoreTest {
     private val timers = mutableListOf<Triple<Long, () -> Unit, BooleanArray>>()
     private val steps = mutableListOf<String>()
 
+    /** Calls ringing on the Core, and whether one is answered or connected. */
+    private var ringing = 0
+    private var connected = false
+
     private val scheduler = Scheduler { delay, task ->
         val cancelled = booleanArrayOf(false)
         timers += Triple(now + delay, task, cancelled)
@@ -36,11 +40,32 @@ class HeadlessCoreTest {
                 steps += "stop"
             }
             override fun declineCalls() {
+                // Only calls still ringing are declined.
+                if (ringing == 0) return
+                ringing = 0
                 steps += "decline 480"
             }
+            override fun hasConnectedCall() = connected
             override fun log(message: String) {}
         },
     )
+
+    private fun ring() {
+        ringing++
+        core.onIncomingCall(serviceUp = false)
+    }
+
+    private fun answer() {
+        ringing--
+        connected = true
+        core.onCallAnswered()
+    }
+
+    private fun endCall() {
+        ringing = 0
+        connected = false
+        core.onLastCallEnded()
+    }
 
     @Test
     fun theJobsCoreStopsWhenTheJobEndsWithTheEngineStopped() {
@@ -82,7 +107,7 @@ class HeadlessCoreTest {
     @Test
     fun aCallWaitsForThePushStartedServiceToTakeItOver() {
         core.onCoreCreated()
-        core.onIncomingCall(serviceUp = false)
+        ring()
         advance(HeadlessCore.TAKEOVER_MS - 1)
         core.onServiceTookOver()
         advance(HeadlessCore.TAKEOVER_MS)
@@ -92,13 +117,13 @@ class HeadlessCoreTest {
     @Test
     fun aCallNoServiceTakesOverIsDeclinedAndTheCoreStops() {
         core.onCoreCreated()
-        core.onIncomingCall(serviceUp = false)
+        ring()
         advance(HeadlessCore.TAKEOVER_MS - 1)
         assertEquals(emptyList(), steps)
         advance(1)
         assertEquals(listOf("decline 480"), steps)
         // The call ends (the 480 went out): the Core stops at once.
-        core.onLastCallEnded()
+        endCall()
         assertEquals(listOf("decline 480", "stop"), steps)
         advance(HeadlessCore.DECLINE_FLUSH_MS)
         assertEquals(listOf("decline 480", "stop"), steps, "stopped once")
@@ -107,7 +132,7 @@ class HeadlessCoreTest {
     @Test
     fun theCoreStopsAfterTheDeclineEvenIfTheCallNeverEnds() {
         core.onCoreCreated()
-        core.onIncomingCall(serviceUp = false)
+        ring()
         advance(HeadlessCore.TAKEOVER_MS + HeadlessCore.DECLINE_FLUSH_MS)
         assertEquals(listOf("decline 480", "stop"), steps)
     }
@@ -115,10 +140,10 @@ class HeadlessCoreTest {
     @Test
     fun aCallOnTheCoreKeepsItAfterTheJobUntilTheCallEnds() {
         core.onCoreCreated()
-        core.onIncomingCall(serviceUp = false)
+        ring()
         core.onJobEnded(engineStopped = true, liveCall = true)
         assertEquals(emptyList(), steps)
-        core.onLastCallEnded()
+        endCall()
         assertEquals(listOf("stop"), steps)
         advance(HeadlessCore.TAKEOVER_MS + HeadlessCore.DECLINE_FLUSH_MS)
         assertEquals(listOf("stop"), steps, "no decline after the Core stopped")
@@ -127,8 +152,8 @@ class HeadlessCoreTest {
     @Test
     fun aCallThatEndsWhileTheJobStillRunsLeavesTheCoreToTheJob() {
         core.onCoreCreated()
-        core.onIncomingCall(serviceUp = false)
-        core.onLastCallEnded()
+        ring()
+        endCall()
         assertEquals(emptyList(), steps)
         core.onJobEnded(engineStopped = true, liveCall = false)
         assertEquals(listOf("stop"), steps)
@@ -141,5 +166,66 @@ class HeadlessCoreTest {
         core.onIncomingCall(serviceUp = true)
         advance(HeadlessCore.TAKEOVER_MS * 2)
         assertEquals(emptyList(), steps)
+    }
+
+    @Test
+    fun anAnsweredCallIsNeitherDeclinedNorEndedByTheTimers() {
+        // WS6: answered at 5 s, the old timers ended the call at about 12 s.
+        core.onCoreCreated()
+        ring()
+        advance(5_000)
+        answer()
+        advance(HeadlessCore.TAKEOVER_MS + HeadlessCore.DECLINE_FLUSH_MS + 60_000)
+        assertEquals(emptyList(), steps)
+        assertTrue(core.owned, "until the service the answer started takes it over")
+        core.onServiceTookOver()
+        assertFalse(core.owned)
+    }
+
+    @Test
+    fun aConnectedCallKeepsTheCoreThroughTheJobsEnd() {
+        core.onCoreCreated()
+        ring()
+        answer()
+        core.onJobEnded(engineStopped = true, liveCall = true)
+        assertEquals(emptyList(), steps)
+        endCall()
+        assertEquals(listOf("stop"), steps)
+    }
+
+    @Test
+    fun noReleaseWhileACallIsConnected() {
+        core.onCoreCreated()
+        ring()
+        advance(HeadlessCore.TAKEOVER_MS)
+        assertEquals(listOf("decline 480"), steps)
+        // Another call on the Core is answered before the 2 s release.
+        connected = true
+        advance(HeadlessCore.DECLINE_FLUSH_MS)
+        core.onJobEnded(engineStopped = true, liveCall = false)
+        assertEquals(listOf("decline 480"), steps)
+        endCall()
+        assertEquals(listOf("decline 480", "stop"), steps)
+    }
+
+    @Test
+    fun aReleaseDeclinesRingingCallsWith480BeforeTheStop() {
+        // A bare stop could end them with a 603 and stop the edge trying other devices.
+        core.onCoreCreated()
+        ring()
+        advance(HeadlessCore.TAKEOVER_MS)
+        ringing = 1 // a second call rings while the first's 480 goes out
+        advance(HeadlessCore.DECLINE_FLUSH_MS)
+        assertEquals(listOf("decline 480", "decline 480", "stop"), steps)
+    }
+
+    @Test
+    fun theJobEndingWithACallStillRingingKeepsTheCore() {
+        core.onCoreCreated()
+        ring()
+        core.onJobEnded(engineStopped = true, liveCall = true)
+        assertEquals(emptyList(), steps)
+        advance(HeadlessCore.TAKEOVER_MS + HeadlessCore.DECLINE_FLUSH_MS)
+        assertEquals(listOf("decline 480", "stop"), steps)
     }
 }
