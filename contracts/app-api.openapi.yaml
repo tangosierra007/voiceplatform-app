@@ -282,6 +282,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CallSettings" }
+        "422":
+          description: >-
+            A refused `forwardAlwaysTo` or `followMeTo`, with a message to show: `invalid_number`,
+            `number_barred`, or `forward_to_own_number` (one of the tenant's own numbers, decision
+            187: "That's one of your own numbers. Forward to the extension or ring group instead.")
 
   /me/caller-ids:
     get:
