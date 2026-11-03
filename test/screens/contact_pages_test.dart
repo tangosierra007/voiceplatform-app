@@ -206,6 +206,9 @@ void main() {
     expect(labelWord('Main'), 'main');
     expect(labelWord('Apple Watch'), 'Apple Watch');
     expect(labelWord('ISDN'), 'ISDN');
+    expect(labelWord("Rowan's clinic"), "Rowan's clinic", reason: 'typed');
+    expect(labelWord('Front Desk'), 'Front Desk');
+    expect(labelWord('Reception'), 'Reception', reason: 'not a phone word');
   });
 
   testWidgets('884 dp: a phone contact picked shows beside the list, each '
@@ -659,5 +662,64 @@ void main() {
       expect(find.text('Kim Bell'), findsOneWidget);
       await _end(tester, e);
     });
+  });
+
+  testWidgets('a typed label on the first number: Call keeps it exactly as '
+      'written, for a phone contact and a shared entry', (tester) async {
+    _window(tester, _unfolded);
+    final e = _Spy();
+    await e.start();
+    await e.register(_account);
+    await tester.pumpWidget(
+      await appUnderTest(
+        engine: e,
+        clock: () => _now,
+        api: FakeApi({}),
+        phoneContacts: const [
+          PhoneContact(
+            'Dr Rowan Achebe',
+            ['03 5550 1778', '0491 573 770'],
+            labels: ["Rowan's clinic", 'mobile'],
+            id: '7',
+          ),
+        ],
+        sharedContacts: [
+          SharedContact.fromJson({
+            'id': 'shared-2',
+            'name': 'Harbour Cafe',
+            'numbers': [
+              {'label': 'Front Desk', 'number': '+61355501994'},
+            ],
+          }),
+        ],
+      ),
+    );
+    await _settle(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(VpNavRail),
+        matching: find.text('Contacts'),
+      ),
+    );
+    await _settle(tester);
+    await _phoneTab(tester);
+
+    await tester.tap(find.text('Dr Rowan Achebe'));
+    await _settle(tester);
+    expect(_inDetail(find.text("Call Rowan's clinic")), findsOneWidget);
+    expect(_inDetail(find.text("Call rowan's clinic")), findsNothing);
+    await _callAndHangUp(
+      tester,
+      e,
+      _inDetail(find.text("Call Rowan's clinic")),
+    );
+
+    await tester.tap(find.text('Harbour Cafe'));
+    await _settle(tester);
+    expect(_inDetail(find.text('Call Front Desk')), findsOneWidget);
+    expect(_inDetail(_kv('Front Desk: 03 5550 1994')), findsOneWidget);
+    await _callAndHangUp(tester, e, _inDetail(find.text('Call Front Desk')));
+    expect(e.called, ['03 5550 1778', '+61355501994']);
+    await _end(tester, e);
   });
 }

@@ -63,10 +63,12 @@ String labelTitle(String label) {
   return a.toUpperCase() + label.substring(1);
 }
 
-/// "Main" as a button's word: "Call main". Labels with another capital
-/// ("ISDN", "Apple Watch", "iPhone") stay as they are.
+/// "Main" as a button's word: "Call main". Only the phone's standard words
+/// ([isStandardPhoneLabel]) are lowered, and not those with another capital
+/// ("ISDN", "Apple Watch", "iPhone"); a label the person typed ("Rowan's
+/// clinic") stays exactly as written.
 String labelWord(String label) {
-  if (label.isEmpty) return label;
+  if (label.isEmpty || !isStandardPhoneLabel(label)) return label;
   final rest = label.substring(1);
   if (rest.toLowerCase() != rest) return label;
   return label[0].toLowerCase() + rest;
