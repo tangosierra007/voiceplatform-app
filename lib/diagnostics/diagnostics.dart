@@ -50,6 +50,17 @@ abstract final class Diagnostics {
     if (o != null) installScrubbingTransport(o, DiagnosticsScrubber.instance);
   }
 
+  /// A fixed test error, through the same scrubbing as a real one. False when
+  /// this build has no DSN.
+  static Future<bool> sendTestError() async {
+    if (!enabled) return false;
+    await Sentry.captureException(
+      StateError('Test error from the Me screen'),
+      stackTrace: StackTrace.current,
+    );
+    return true;
+  }
+
   /// No PII defaults and the scrubber callbacks. Fails closed: an event or
   /// breadcrumb the scrubber can't process is dropped.
   static void applyPrivacy(SentryOptions o, DiagnosticsScrubber scrubber) {

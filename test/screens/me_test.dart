@@ -111,6 +111,26 @@ void main() {
     expect(find.bySemanticsLabel('Sign out'), findsOneWidget);
   });
 
+  testWidgets('holding the call logs row reports the test error', (
+    tester,
+  ) async {
+    usePhone(tester);
+    String? sent;
+    await tester.pumpWidget(
+      await appUnderTest(
+        clock: () => _now,
+        sendCallLogs: () async => sent = 'VP-7Q2K',
+      ),
+    );
+    await _settle(tester);
+    await openMe(tester);
+    await tester.longPress(find.text('Send call logs to support'));
+    await _settle(tester);
+    // No DSN in a test build; the logs aren't sent by the hold.
+    expect(find.text('Crash reports are off in this build.'), findsOneWidget);
+    expect(sent, isNull);
+  });
+
   testWidgets('Do not disturb asks until when and sends it', (tester) async {
     usePhone(tester);
     final sent = PresetStatus(StatusStatus.available);

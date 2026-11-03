@@ -10,6 +10,7 @@ import '../../auth/app_lock.dart';
 import '../../auth/auth.dart';
 import '../../calls/me_state.dart';
 import '../../calls/numbers.dart';
+import '../../diagnostics/diagnostics.dart';
 import '../../engine/engine_provider.dart';
 import '../../engine/phone_extras.dart';
 import '../../features/me/me_data.dart';
@@ -182,11 +183,16 @@ class MeScreen extends ConsumerWidget {
               subtitle: devices == null ? null : devicesSummary(devices),
               onTap: () => context.push(devicesPath),
             ),
-            _MeRow(
-              icon: VpIcon.info,
-              title: 'Send call logs to support',
-              subtitle: 'For the last call, no passwords included',
-              onTap: () => _sendLogs(context, ref),
+            // Holding the row sends a test error: the check that crash reports
+            // reach the project (nothing else in the app can raise one on demand).
+            GestureDetector(
+              onLongPress: () => _sendTestError(context),
+              child: _MeRow(
+                icon: VpIcon.info,
+                title: 'Send call logs to support',
+                subtitle: 'For the last call, no passwords included',
+                onTap: () => _sendLogs(context, ref),
+              ),
             ),
             const _Band('Appearance'),
             const _Appearance(),
@@ -296,6 +302,16 @@ class MeScreen extends ConsumerWidget {
       );
     } catch (_) {
       if (context.mounted) _say(context, "The logs didn't send. Try again.");
+    }
+  }
+
+  Future<void> _sendTestError(BuildContext context) async {
+    final sent = await Diagnostics.sendTestError();
+    if (context.mounted) {
+      _say(
+        context,
+        sent ? 'Test error sent.' : 'Crash reports are off in this build.',
+      );
     }
   }
 
