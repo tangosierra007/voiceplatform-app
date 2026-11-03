@@ -37,7 +37,7 @@ class ApiConfig {
 
   static const defaultBaseUrl = String.fromEnvironment(
     'VP_API_BASE',
-    defaultValue: 'http://10.0.2.2:3000/app/v1',
+    defaultValue: kReleaseMode ? '' : 'http://10.0.2.2:3000/app/v1',
   );
 
   static String platformName(TargetPlatform p) => switch (p) {
