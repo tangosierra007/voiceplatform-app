@@ -1,6 +1,6 @@
 # Play data safety form (draft answers)
 
-Draft for task 5.4, following spec 22 (Play data safety) and `privacy-policy.md`. Rows marked **decide** need mobile-lead or TJ before the form is submitted.
+Draft for task 5.4, following spec 22 (Play data safety) and `privacy-policy.md`.
 
 ## Overview questions
 
@@ -8,7 +8,7 @@ Draft for task 5.4, following spec 22 (Play data safety) and `privacy-policy.md`
 | --- | --- |
 | Does the app collect or share any of the required user data types? | Yes |
 | Is all user data collected by the app encrypted in transit? | **Yes.** Call audio always uses SRTP: it is mandatory on every app call (APP13), and the app refuses or ends a call that would carry plain RTP. SIP signalling uses TLS; the API and GlitchTip use HTTPS. |
-| Do you provide a way for users to request that their data is deleted? | **Decide.** Accounts are created by the workplace's administrator, not in the app. Proposed: yes, through the workplace administrator or the support contact in the privacy policy, with a web page that says so. |
+| Do you provide a way for users to request that their data is deleted? | **Yes.** Users ask their provider or support@voiceplatform.com.au, and the data is deleted within 30 days. Accounts are created by the workplace's administrator, not in the app. The privacy policy says so: https://tangosierra007.github.io/voiceplatform-app/privacy/ |
 
 ## Data types
 
@@ -19,6 +19,7 @@ Draft for task 5.4, following spec 22 (Play data safety) and `privacy-policy.md`
 | Personal info | Email address | Yes | No | No (needed to sign in) | App functionality, Account management | No |
 | Personal info | Name, address, phone number, other | No | | | | |
 | Device or other IDs | Device or other IDs (FCM push token, device id) | Yes | No | No | App functionality (incoming calls) | No |
+| Device or other IDs | IP address (stored with sign-in requests and call records) | Yes | No | No | App functionality (connecting calls), Fraud prevention, security and compliance (limiting repeated sign-in attempts) | No |
 | App info and performance | Crash logs | Yes | No | No (users can't turn it off; scrubbed on the device) | App functionality (fixing faults) | No |
 | App info and performance | Diagnostics (device model, app version; call logs only when the user taps Send) | Yes | No | Device model and version: No. Call logs: Yes | App functionality, Account management (device list) | No |
 | App info and performance | Other app performance data | No | | | | |

@@ -22,7 +22,7 @@ For TJ and mobile-lead together. Internal testing only; nothing else in Play Con
    - [ ] Data safety (`data-safety.md`), privacy policy URL (`privacy-policy.md` published first), ads (none), content rating, target audience, app access (`reviewer-notes.md`).
    - [ ] Store listing text and graphics (`listing.md`). The app icon is `graphics/ic_launcher-playstore-512.png`.
 5. **Release to testers**
-   - [ ] Internal testing, testers: the `Milavo Staff` list. Start the release.
+   - [ ] Internal testing, testers: the "Internal testers" list. Start the release.
    - [ ] Later releases come from CI: run `android` again; the upload job sends to the internal track.
 6. **After the first upload**
    - [ ] Play Console, Setup, App integrity, App signing: copy the **app signing key** SHA-256 (and SHA-1).

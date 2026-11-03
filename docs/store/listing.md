@@ -10,7 +10,9 @@ Draft for task 5.4. Nothing here is uploaded yet. Plain Australian English, sent
 | Category | Business |
 | Price | Free |
 | Ads | None |
-| Seller shown by Play | Milavo Pty Ltd |
+| Seller shown by Play | VoicePlatform |
+| Contact email | support@voiceplatform.com.au |
+| Privacy policy | https://tangosierra007.github.io/voiceplatform-app/privacy/ |
 | Source code | https://github.com/tangosierra007/voiceplatform-app (AGPL-3.0) |
 
 ## Short description (80 characters at most)
@@ -63,15 +65,17 @@ Encryption line: SIP signalling is TLS and call audio is mandatory SRTP on every
 
 - App icon 512 x 512: `graphics/ic_launcher-playstore-512.png`, a full square with no rounding (Play applies its own mask). It's the same mark as the launcher icon in `android/app/src/main/res`, both from `design/app-icon-android` (28 Oct). Use it as is; don't regenerate it.
 
+- Feature graphic 1024 x 500: done, kept outside this repo.
+
 Still to make:
 
-- Feature graphic 1024 x 500.
 - Phone screenshots (at least 2, from the light and dark artboards with Demo Co sample data and ACMA fictional numbers only).
 
 ## Store settings to fill in Play Console
 
-- Privacy policy URL: where `privacy-policy.md` is published (open question: which public page).
-- Contact email: a support mailbox (open question, for example a `support@` address on the public domain).
+- Privacy policy URL: https://tangosierra007.github.io/voiceplatform-app/privacy/ (the published copy of `privacy-policy.md`).
+- Contact email: support@voiceplatform.com.au.
+- Postal address: VoicePlatform, 574 Plummer Street, Port Melbourne VIC 3207.
 - Content rating questionnaire: business communication app, no user-generated public content, no ads, no gambling, no violence.
 - Target audience: 18 and over (workplace accounts).
 - App access: sign-in needed; the reviewer account is given at review time (see `reviewer-notes.md`).
