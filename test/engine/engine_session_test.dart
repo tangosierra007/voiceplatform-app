@@ -142,6 +142,81 @@ void main() {
     expect(engine.unregisters, greaterThanOrEqualTo(1));
     expect(store.session, isNull);
   });
+
+  // The background registration (after a restart or an update) put a rotated
+  // FCM token in the SIP contact with no app running: the next start sends it
+  // to the API before anything else, and clears the native flag only then.
+  // Each with its own mock server: the QR sign-in token works once.
+  Future<(MockServer, _Ledger)> signInWith({
+    required bool unsent,
+    required FakeCallEngine engine,
+  }) async {
+    SharedPreferences.setMockInitialValues({});
+    final sp = await SharedPreferences.getInstance();
+    final own = await MockServer.start(port: 0);
+    addTearDown(own.close);
+    final ledger = _Ledger(unsent);
+    final push = VpPushTokens(
+      engine: engine,
+      source: _Tokens('fcm-token-3'),
+      ledger: ledger,
+    );
+    final c = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(sp),
+        sessionStoreProvider.overrideWithValue(MemorySessionStore()),
+        deviceKeysProvider.overrideWithValue(FakeDeviceKeys()),
+        callEngineProvider.overrideWithValue(engine),
+        pushTokensProvider.overrideWithValue(push),
+        micPermissionProvider.overrideWithValue(FakeMic()),
+        apiConfigProvider.overrideWithValue(
+          ApiConfig(
+            baseUrl: own.baseUri.toString(),
+            platform: 'android',
+            appVersion: '1.0.0',
+            deviceModel: 'Pixel 8',
+          ),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    c.read(engineSessionProvider);
+    c.read(authProvider);
+    await pumpEventQueue();
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await pumpEventQueue(times: 50);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    return (own, ledger);
+  }
+
+  test('an unsent token goes to the API on start even when the SIP '
+      'registration fails, and the flag is cleared', () async {
+    final engine = _FailingRegisterEngine();
+    final (own, ledger) = await signInWith(unsent: true, engine: engine);
+    expect(engine.registerAttempts, greaterThanOrEqualTo(1));
+    expect(own.lastPushToken, 'fcm-token-3');
+    expect(ledger.flag, isFalse);
+    await engine.dispose();
+  });
+
+  test('with nothing unsent, a failed registration sends no token and '
+      'the flag is left alone', () async {
+    final engine = _FailingRegisterEngine();
+    final (own, ledger) = await signInWith(unsent: false, engine: engine);
+    expect(own.lastPushToken, isNull);
+    expect(ledger.marks, 0);
+    await engine.dispose();
+  });
+
+  test('the usual PUT after registering clears the flag too', () async {
+    final engine = FakeCallEngine(registerAfter: Duration.zero);
+    final (own, ledger) = await signInWith(unsent: true, engine: engine);
+    expect(engine.registrationState, RegistrationState.ok);
+    expect(own.lastPushToken, 'fcm-token-3');
+    expect(ledger.flag, isFalse);
+    expect(ledger.marks, greaterThanOrEqualTo(1));
+    await engine.dispose();
+  });
 }
 
 class _SpyEngine extends FakeCallEngine {
@@ -158,5 +233,30 @@ class _SpyEngine extends FakeCallEngine {
   Future<void> unregister() {
     unregisters++;
     return super.unregister();
+  }
+}
+
+class _Ledger implements PushTokenLedger {
+  _Ledger(this.flag);
+  bool flag;
+  int marks = 0;
+
+  @override
+  Future<bool> unsent() async => flag;
+
+  @override
+  Future<void> markSent() async {
+    marks++;
+    flag = false;
+  }
+}
+
+class _FailingRegisterEngine extends FakeCallEngine {
+  int registerAttempts = 0;
+
+  @override
+  Future<void> register(SipAccount account) async {
+    registerAttempts++;
+    throw StateError('refused in the test');
   }
 }

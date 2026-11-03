@@ -31,35 +31,42 @@ class BackgroundRegistrationTest {
     @Test
     fun signedOutRegistersNothing() {
         for (e in listOf(stopped, starting, upNoAccount, registered)) {
-            assertEquals(Plan.NoAccount, BackgroundRegistration.plan(null, e, "token-1"))
+            assertEquals(Plan.NoAccount, BackgroundRegistration.plan(null, stored = false, e, "token-1"))
+        }
+    }
+
+    @Test
+    fun aStoredAccountThatCantBeReadIsRetriedNotTakenForASignOut() {
+        for (e in listOf(stopped, starting, upNoAccount, registered)) {
+            assertEquals(Plan.Unreadable, BackgroundRegistration.plan(null, stored = true, e, "token-1"))
         }
     }
 
     @Test
     fun nothingRunningRegistersTheStoredAccountWithoutTheService() {
-        assertEquals(Plan.Headless(record), BackgroundRegistration.plan(record, stopped, "token-1"))
-        assertEquals(Plan.Headless(record), BackgroundRegistration.plan(record, stopped, null))
+        assertEquals(Plan.Headless(record), BackgroundRegistration.plan(record, stored = true, stopped, "token-1"))
+        assertEquals(Plan.Headless(record), BackgroundRegistration.plan(record, stored = true, stopped, null))
     }
 
     @Test
     fun aNewTokenBecomesThePnPrid() {
         assertEquals(
             Plan.Headless(record.copy(pushPrid = "token-2")),
-            BackgroundRegistration.plan(record, stopped, "token-2"),
+            BackgroundRegistration.plan(record, stored = true, stopped, "token-2"),
         )
-        assertEquals(Plan.RefreshRunning("token-2"), BackgroundRegistration.plan(record, registered, "token-2"))
+        assertEquals(Plan.RefreshRunning("token-2"), BackgroundRegistration.plan(record, stored = true, registered, "token-2"))
     }
 
     @Test
     fun aRunningEngineIsRefreshedNotReplaced() {
-        assertEquals(Plan.RefreshRunning(null), BackgroundRegistration.plan(record, registered, "token-1"))
-        assertEquals(Plan.RefreshRunning(null), BackgroundRegistration.plan(record, registered, null))
+        assertEquals(Plan.RefreshRunning(null), BackgroundRegistration.plan(record, stored = true, registered, "token-1"))
+        assertEquals(Plan.RefreshRunning(null), BackgroundRegistration.plan(record, stored = true, registered, null))
     }
 
     @Test
     fun aStartingServiceOrOneWithNoAccountYetIsLeftAlone() {
-        assertEquals(Plan.LeaveToEngine, BackgroundRegistration.plan(record, starting, "token-2"))
-        assertEquals(Plan.LeaveToEngine, BackgroundRegistration.plan(record, upNoAccount, "token-2"))
+        assertEquals(Plan.LeaveToEngine, BackgroundRegistration.plan(record, stored = true, starting, "token-2"))
+        assertEquals(Plan.LeaveToEngine, BackgroundRegistration.plan(record, stored = true, upNoAccount, "token-2"))
     }
 
     @Test

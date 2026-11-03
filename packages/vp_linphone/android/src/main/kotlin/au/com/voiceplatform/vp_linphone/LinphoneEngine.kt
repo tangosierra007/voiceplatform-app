@@ -171,11 +171,8 @@ object LinphoneEngine {
             log("engine stop requested while starting: stopping")
             return
         }
-        if (headlessCore) {
-            // A background registration's Core: the service owns it from now on.
-            headlessCore = false
-            log("service took over the background registration's core")
-        }
+        // A background registration's Core: the service owns it from now on.
+        headless.onServiceTookOver()
         startCore(svc.applicationContext)
         lifecycle.onCoreStarted()
     }
@@ -184,10 +181,17 @@ object LinphoneEngine {
     internal fun onServiceStartFailed(error: Throwable) {
         log("engine start failed: ${error.javaClass.simpleName}")
         lifecycle.onStartFailed(error)
+        // A background registration's Core left for this service: nobody else will stop it.
+        if (service == null && !headless.owned && core != null) {
+            stopCore()
+            log("core left for the service stopped: the service did not start")
+        }
     }
 
     internal fun onServiceDestroyed() {
-        stopCore()
+        // A service that never took the background registration's Core over
+        // (call_cancelled while it started) leaves that Core to the job.
+        if (headless.serviceMayStopCore()) stopCore() else log("service stopped: background core kept")
         service = null
         lifecycle.onServiceDestroyed()
     }
@@ -549,7 +553,8 @@ object LinphoneEngine {
     // ---------------------------------------------------------------- calls
 
     private fun micGranted(): Boolean {
-        val ctx = service ?: return false
+        // The app context too: a call on the background Core has no service yet.
+        val ctx = service ?: appContext ?: return false
         return ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
     }
@@ -910,8 +915,21 @@ object LinphoneEngine {
 
     // ---------------------------------------------------------------- background registration
 
-    /** The Core is one [refreshInBackground] created, with no service: it stops when that ends. */
-    private var headlessCore = false
+    /** The Core a [refreshInBackground] created with no service, and who stops it ([HeadlessCore]). */
+    private val headless = HeadlessCore(
+        scheduler = { delay, task ->
+            val r = Runnable { task() }
+            main.postDelayed(r, delay)
+            Cancellable { main.removeCallbacks(r) }
+        },
+        actions = object : HeadlessCore.Actions {
+            override fun stopCore() = this@LinphoneEngine.stopCore()
+            override fun declineCalls() {
+                core?.calls?.forEach { it.decline(Reason.TemporarilyUnavailable) }
+            }
+            override fun log(message: String) = this@LinphoneEngine.log(message)
+        },
+    )
     private var backgroundDone: ((BackgroundRegistration.Outcome) -> Unit)? = null
 
     /**
@@ -920,30 +938,40 @@ object LinphoneEngine {
      * changed. With nothing running, the Core is created here without the
      * foreground service and stopped again once the edge has answered (the
      * binding stays: unregister-at-stop is off). A service that starts in
-     * the meantime (a push, the app) takes that Core over. [done] runs on
-     * the main thread, once.
+     * the meantime (a push, the app) takes that Core over ([HeadlessCore]).
+     * A new pn-prid is noted as not yet sent to the API ([PushTokenFlag]).
+     * [done] runs on the main thread, once.
      */
     fun refreshInBackground(context: Context, fcmToken: String?, done: (BackgroundRegistration.Outcome) -> Unit) {
         attach(context)
         if (backgroundDone != null) {
-            done(BackgroundRegistration.Outcome.ENGINE_RUNNING)
+            done(BackgroundRegistration.Outcome.ENGINE_STARTING)
             return
         }
         val app = context.applicationContext
-        val record = runCatching { CredentialStore(app).load() }.getOrNull()
+        val store = CredentialStore(app)
+        val record = runCatching { store.load() }.getOrNull()
         val engine = BackgroundRegistration.EngineState(
             coreUp = core != null,
             accountUp = account != null,
             stopped = lifecycle.state == EngineLifecycle.State.STOPPED,
         )
-        when (val plan = BackgroundRegistration.plan(record, engine, fcmToken)) {
+        when (val plan = BackgroundRegistration.plan(record, store.exists(), engine, fcmToken)) {
             BackgroundRegistration.Plan.NoAccount -> done(BackgroundRegistration.Outcome.NO_ACCOUNT)
-            BackgroundRegistration.Plan.LeaveToEngine -> done(BackgroundRegistration.Outcome.ENGINE_RUNNING)
+            BackgroundRegistration.Plan.Unreadable -> {
+                log("background registration: stored account unreadable")
+                done(BackgroundRegistration.Outcome.FAILED)
+            }
+            BackgroundRegistration.Plan.LeaveToEngine -> {
+                log("background registration: engine starting, checked again later")
+                done(BackgroundRegistration.Outcome.ENGINE_STARTING)
+            }
             is BackgroundRegistration.Plan.RefreshRunning -> {
                 val r = record!!
                 val prid = plan.newPrid
                 if (prid != null && r.pushProvider != null && r.pushParam != null) {
                     updatePush(r.pushProvider, prid, r.pushParam)
+                    PushTokenFlag.setUnsent(app)
                 } else {
                     account?.refreshRegister()
                 }
@@ -957,11 +985,12 @@ object LinphoneEngine {
                     // The stored device id, so the new Core sends the right +sip.instance.
                     lastInstance = Rules.instanceUuid(r.instanceId)
                     startCore(app)
-                    headlessCore = true
+                    headless.onCoreCreated()
                     register(
                         r.authUsername, r.password, r.domain, r.outboundProxy, r.displayName,
                         r.expiresSeconds, r.instanceId, r.pushProvider, r.pushPrid, r.pushParam,
                     )
+                    if (r.pushPrid != record?.pushPrid) PushTokenFlag.setUnsent(app)
                     log("background registration: registering without the service")
                 } catch (e: VpFlutterError) {
                     log("background registration: register refused ${e.code}")
@@ -974,17 +1003,15 @@ object LinphoneEngine {
         }
     }
 
-    /** Ends [refreshInBackground]: its own Core stops (unless a service took it over). Main thread; once. */
+    /**
+     * Ends [refreshInBackground]. Its own Core stops only with the engine
+     * stopped and no call on it; a service that is starting keeps it
+     * ([HeadlessCore]). Main thread; once.
+     */
     fun endBackgroundRefresh(outcome: BackgroundRegistration.Outcome) {
         val done = backgroundDone ?: return
         backgroundDone = null
-        if (headlessCore) {
-            headlessCore = false
-            if (!hasLiveCall) {
-                stopCore()
-                log("background registration over: core stopped")
-            }
-        }
+        headless.onJobEnded(engineStopped = lifecycle.state == EngineLifecycle.State.STOPPED, liveCall = hasLiveCall)
         done(outcome)
     }
 
@@ -1137,6 +1164,8 @@ object LinphoneEngine {
                     VpPush.get(ctx).onCallArrived()
                     TelecomBridge.addIncoming(ctx, incomingInfo(t))
                 }
+                // On the background registration's Core with no service: wait for the push's.
+                headless.onIncomingCall(serviceUp = service != null)
             }
         }
         // APP13: every checked state is judged, even after the engine has
@@ -1263,6 +1292,8 @@ object LinphoneEngine {
             updateService()
             // A few seconds more so the call's teardown is in the log.
             main.postDelayed({ logFile?.endCall() }, 3000)
+            // A background registration's Core no service took over stops now (posted: not in its own callback).
+            main.post { headless.onLastCallEnded() }
         }
 
         override fun onAudioDevicesListUpdated(core: Core) = emitAudio()

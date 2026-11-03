@@ -28,6 +28,14 @@ class _Host extends VpLinphoneHostApi {
   Future<void> openFullScreenIntentSettings() async => calls.add('fsi');
   @override
   Future<void> updatePush(String provider, String prid, String param) async => calls.add('updatePush $prid');
+  bool unsent = false;
+  @override
+  Future<bool> pushTokenUnsent() async => unsent;
+  @override
+  Future<void> markPushTokenSent() async {
+    unsent = false;
+    calls.add('markPushTokenSent');
+  }
 }
 
 class _Tokens implements PushTokenSource {
@@ -164,6 +172,24 @@ void main() {
       expect(got, ['token-3']);
       await sub.cancel();
     });
+  });
+
+  test('the token ledger is the native "not yet sent to the API" flag', () async {
+    final tokens = VpPushTokens(engine: engine, source: _Tokens());
+    expect(await tokens.tokenUnsent(), isFalse);
+    host.unsent = true;
+    expect(await tokens.tokenUnsent(), isTrue);
+    await tokens.markTokenSent();
+    expect(host.calls, contains('markPushTokenSent'));
+    expect(await tokens.tokenUnsent(), isFalse);
+    await tokens.dispose();
+  });
+
+  test('without the Linphone engine there is no ledger: nothing is unsent', () async {
+    final tokens = VpPushTokens(engine: _FailingEngine(), source: _Tokens());
+    expect(await tokens.tokenUnsent(), isFalse);
+    await tokens.markTokenSent();
+    await tokens.dispose();
   });
 }
 

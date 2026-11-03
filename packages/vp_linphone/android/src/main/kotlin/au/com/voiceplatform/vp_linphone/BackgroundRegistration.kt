@@ -23,8 +23,11 @@ object BackgroundRegistration {
         /** The edge answered 200 OK. */
         REGISTERED,
 
-        /** The engine was already up (the app, or a push wake): it refreshes its own registration. */
+        /** The engine was already up (the app, or a push wake): its registration was refreshed. */
         ENGINE_RUNNING,
+
+        /** The service is starting, or up with no account yet: checked again on the next attempt. */
+        ENGINE_STARTING,
 
         /** Signed out (nothing stored): nothing to register. */
         NO_ACCOUNT,
@@ -39,10 +42,13 @@ object BackgroundRegistration {
     sealed interface Plan {
         data object NoAccount : Plan
 
+        /** The stored account is there but can't be read (Keystore, a bad file): tried again. */
+        data object Unreadable : Plan
+
         /** The Core is up with an account: refresh it, with the new token if there is one. */
         data class RefreshRunning(val newPrid: String?) : Plan
 
-        /** The service is starting, or up with no account yet: it registers by itself. */
+        /** The service is starting, or up with no account yet: it should register by itself; checked again. */
         data object LeaveToEngine : Plan
 
         /** Nothing is running: a Core of our own, just long enough to register [record]. */
@@ -51,8 +57,9 @@ object BackgroundRegistration {
 
     data class EngineState(val coreUp: Boolean, val accountUp: Boolean, val stopped: Boolean)
 
-    fun plan(record: AccountRecord?, engine: EngineState, fcmToken: String?): Plan {
-        if (record == null) return Plan.NoAccount
+    /** [stored]: the account file exists, so a null [record] is a read failure, not a sign-out. */
+    fun plan(record: AccountRecord?, stored: Boolean, engine: EngineState, fcmToken: String?): Plan {
+        if (record == null) return if (stored) Plan.Unreadable else Plan.NoAccount
         val updated = withToken(record, fcmToken)
         val newPrid = updated.pushPrid.takeIf { it != record.pushPrid }
         return when {

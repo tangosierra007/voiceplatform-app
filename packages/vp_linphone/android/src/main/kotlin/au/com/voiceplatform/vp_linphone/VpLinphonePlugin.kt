@@ -205,4 +205,6 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
     override fun openBatteryOptimizationSettings() = VpPush.openBatterySettings(context)
     override fun canUseFullScreenIntent(): Boolean = IncomingCallNotifier.canUseFullScreenIntent(context)
     override fun openFullScreenIntentSettings() = VpPush.openFullScreenIntentSettings(context)
+    override fun pushTokenUnsent(): Boolean = PushTokenFlag.isUnsent(context)
+    override fun markPushTokenSent() = PushTokenFlag.markSent(context)
 }

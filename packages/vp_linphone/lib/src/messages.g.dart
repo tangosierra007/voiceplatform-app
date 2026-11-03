@@ -1084,6 +1084,42 @@ class VpLinphoneHostApi {
 
     _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
   }
+
+  /// True when the background registration put a new FCM token in the SIP
+  /// contact that the API has not been sent yet (`PUT /devices/me/push-token`).
+  Future<bool> pushTokenUnsent() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.pushTokenUnsent$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as bool;
+  }
+
+  /// The app sent the token to the API.
+  Future<void> markPushTokenSent() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.markPushTokenSent$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
+  }
 }
 
 /// Kotlin to Dart events.

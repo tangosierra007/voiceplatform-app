@@ -104,6 +104,9 @@ class CredentialStore(context: Context) {
         file.delete()
     }
 
+    /** The file is there (whether or not it can be read). */
+    fun exists(): Boolean = file.exists()
+
     private fun key(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }

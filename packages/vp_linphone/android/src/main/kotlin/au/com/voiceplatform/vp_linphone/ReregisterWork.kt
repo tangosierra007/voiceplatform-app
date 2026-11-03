@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.VisibleForTesting
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -84,7 +85,8 @@ object ReregisterWork {
             BackgroundRegistration.Outcome.ENGINE_RUNNING,
             BackgroundRegistration.Outcome.NO_ACCOUNT -> ListenableWorker.Result.success()
             BackgroundRegistration.Outcome.REFUSED -> ListenableWorker.Result.failure()
-            BackgroundRegistration.Outcome.FAILED ->
+            BackgroundRegistration.Outcome.FAILED,
+            BackgroundRegistration.Outcome.ENGINE_STARTING ->
                 if (runAttemptCount + 1 < MAX_ATTEMPTS) ListenableWorker.Result.retry() else ListenableWorker.Result.failure()
         }
 }
@@ -119,7 +121,8 @@ class ReregisterWorker(context: Context, params: WorkerParameters) : CoroutineWo
         private const val REGISTER_TIMEOUT_MS = 45_000L
 
         @Volatile
-        var steps: (Context) -> Steps = { EngineSteps(it) }
+        @VisibleForTesting
+        internal var steps: (Context) -> Steps = { EngineSteps(it) }
     }
 
     private class EngineSteps(private val context: Context) : Steps {
@@ -128,7 +131,6 @@ class ReregisterWorker(context: Context, params: WorkerParameters) : CoroutineWo
         override suspend fun fcmToken(): String? = withContext(Dispatchers.IO) {
             runCatching {
                 // The registration token, as the Dart side uses (VpPushTokens).
-                @Suppress("DEPRECATION")
                 Tasks.await(FirebaseMessaging.getInstance().token, TOKEN_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             }.getOrNull()?.takeIf { it.isNotBlank() }
         }

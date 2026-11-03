@@ -58,7 +58,8 @@ final engineSessionProvider = Provider<void>((ref) {
   final engine = ref.watch(callEngineProvider);
   var started = false;
 
-  Future<void> putPushToken(String token) async {
+  /// True when the API took it; the native "not yet sent" flag is cleared then.
+  Future<bool> putPushToken(String token) async {
     try {
       await ref
           .read(appApiProvider)
@@ -71,7 +72,10 @@ final engineSessionProvider = Provider<void>((ref) {
           );
     } catch (_) {
       // Sent again with the next token or sign-in.
+      return false;
     }
+    await ref.read(pushTokensProvider)?.markTokenSent();
+    return true;
   }
 
   Future<void> up() async {
@@ -87,6 +91,13 @@ final engineSessionProvider = Provider<void>((ref) {
       // voiceplatform-app) and for the API; null without push (fake engine).
       final push = ref.read(pushTokensProvider);
       final token = await push?.start();
+      // A token the background registration (after a restart or an update)
+      // put in the SIP contact while the app wasn't running: the API sends
+      // its pushes (signed_out, voicemail, message) to the old one until it
+      // has this. Sent first, whether or not the registration below works.
+      if (token != null && push != null && await push.tokenUnsent()) {
+        await putPushToken(token);
+      }
       final c = await ref
           .read(appApiProvider)
           .device

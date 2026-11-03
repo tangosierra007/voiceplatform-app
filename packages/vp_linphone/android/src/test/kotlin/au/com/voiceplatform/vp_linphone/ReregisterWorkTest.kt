@@ -139,6 +139,24 @@ class ReregisterWorkTest {
     }
 
     @Test
+    fun aStartingEngineIsCheckedAgainOnTheNextAttempt() {
+        assertEquals(ListenableWorker.Result.retry(), runWorker(Outcome.ENGINE_STARTING))
+        assertEquals(
+            ListenableWorker.Result.failure(),
+            runWorker(Outcome.ENGINE_STARTING, ReregisterWork.MAX_ATTEMPTS - 1),
+        )
+    }
+
+    @Test
+    fun theNotYetSentFlagIsKeptUntilTheAppSendsTheToken() {
+        assertFalse(PushTokenFlag.isUnsent(context))
+        PushTokenFlag.setUnsent(context)
+        assertTrue(PushTokenFlag.isUnsent(context))
+        PushTokenFlag.markSent(context)
+        assertFalse(PushTokenFlag.isUnsent(context))
+    }
+
+    @Test
     fun aRefusedAccountIsNotTriedAgain() {
         assertEquals(ListenableWorker.Result.failure(), runWorker(Outcome.REFUSED))
     }

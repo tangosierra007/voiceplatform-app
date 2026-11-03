@@ -183,6 +183,13 @@ abstract class VpLinphoneHostApi {
   /// Android 14+: whether the full-screen incoming-call UI is allowed.
   bool canUseFullScreenIntent();
   void openFullScreenIntentSettings();
+
+  /// True when the background registration put a new FCM token in the SIP
+  /// contact that the API has not been sent yet (`PUT /devices/me/push-token`).
+  bool pushTokenUnsent();
+
+  /// The app sent the token to the API.
+  void markPushTokenSent();
 }
 
 /// Kotlin to Dart events.

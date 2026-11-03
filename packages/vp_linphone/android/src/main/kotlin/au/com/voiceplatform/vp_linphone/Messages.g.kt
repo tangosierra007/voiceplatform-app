@@ -878,6 +878,13 @@ interface VpLinphoneHostApi {
   /** Android 14+: whether the full-screen incoming-call UI is allowed. */
   fun canUseFullScreenIntent(): Boolean
   fun openFullScreenIntentSettings()
+  /**
+   * True when the background registration put a new FCM token in the SIP
+   * contact that the API has not been sent yet (`PUT /devices/me/push-token`).
+   */
+  fun pushTokenUnsent(): Boolean
+  /** The app sent the token to the API. */
+  fun markPushTokenSent()
 
   companion object {
     /** The codec used by VpLinphoneHostApi. */
@@ -1343,6 +1350,37 @@ interface VpLinphoneHostApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               api.openFullScreenIntentSettings()
+              listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.pushTokenUnsent$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.pushTokenUnsent())
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.markPushTokenSent$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.markPushTokenSent()
               listOf(null)
             } catch (exception: Throwable) {
               MessagesPigeonUtils.wrapError(exception)

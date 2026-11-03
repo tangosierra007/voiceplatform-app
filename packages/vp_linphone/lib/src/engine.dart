@@ -321,6 +321,13 @@ final class VpLinphoneEngine implements CallEngine {
   /// Android's battery optimisation list (no permission, no exemption request).
   Future<void> openBatteryOptimizationSettings() => _guard(_host.openBatteryOptimizationSettings);
 
+  /// True when the background registration (after a restart or an update)
+  /// put a new FCM token in the SIP contact that the API hasn't been sent.
+  Future<bool> pushTokenUnsent() => _guard(_host.pushTokenUnsent);
+
+  /// The token reached the API (`PUT /devices/me/push-token`).
+  Future<void> markPushTokenSent() => _guard(_host.markPushTokenSent);
+
   static DateTime? _time(int? ms) => ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
 }
 
