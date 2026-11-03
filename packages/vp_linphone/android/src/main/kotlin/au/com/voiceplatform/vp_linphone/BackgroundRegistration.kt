@@ -95,6 +95,17 @@ object BackgroundRegistration {
         return record.copy(pushPrid = token)
     }
 
+    /**
+     * The job registered [usedPassword] and the edge said 401 or 403: if the
+     * stored account now holds another password (a later POST rotated it
+     * while the job ran), the record to retry with, once; otherwise null.
+     */
+    fun retryWithNewPassword(sipCode: Int, usedPassword: String?, stored: AccountRecord?, alreadyRetried: Boolean): AccountRecord? {
+        if (alreadyRetried || usedPassword == null || stored == null) return null
+        if (sipCode != 401 && sipCode != 403) return null
+        return stored.takeIf { it.password != usedPassword }
+    }
+
     /** A Failed registration: the edge's own refusal (4xx but 408) is final, the rest is retried. */
     fun failure(sipCode: Int): Outcome = if (sipCode in 400..499 && sipCode != 408) Outcome.REFUSED else Outcome.FAILED
 

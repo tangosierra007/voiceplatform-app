@@ -530,6 +530,30 @@ void main() {
     expect(engine.sinceStart, ['start', 'register', 'unregister', 'stop']);
     await engine.dispose();
   });
+  test('a service stopped mid-registration (no account yet) is reported '
+      'cleared: the next resume starts the engine again, once', () async {
+    // WS6 on #53: before, `started` stayed true, so every resume POSTed
+    // (rotating the password) and register() failed with Engine not started.
+    final engine = _GatedEngine()..registerFailures = 1;
+    final (c, resumes) = await session(engine);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    expect(engine.sinceStart, ['start', 'register']);
+    expect(engine.registrationState, isNot(RegistrationState.ok));
+
+    // The native side reports `cleared` for a service the app started that
+    // stopped under it (EngineLifecycle.stoppedUnderTheApp, Kotlin-tested).
+    await engine.unregister();
+    engine.log.clear();
+    resumes.add(null);
+    await settle();
+    expect(engine.log, ['start', 'register']);
+    expect(engine.registrationState, RegistrationState.ok);
+    resumes.add(null);
+    await settle();
+    expect(engine.log, ['start', 'register'], reason: 'registered: no POST');
+    await engine.dispose();
+  });
 }
 
 class _SpyEngine extends FakeCallEngine {

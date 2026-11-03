@@ -110,4 +110,21 @@ class BackgroundRegistrationTest {
         assertEquals(Plan.RefreshRunning(null), BackgroundRegistration.plan(record, stored = true, registeredRunning, "token-1"))
         assertEquals(Plan.NoAccount, BackgroundRegistration.plan(null, stored = false, running, "token-1"))
     }
+
+    @Test
+    fun a401WithANewerStoredPasswordIsRetriedOnceWithIt() {
+        // KEEP kept a job mid-register while a later POST rotated the password.
+        val newer = record.copy(password = "rotated")
+        assertEquals(newer, BackgroundRegistration.retryWithNewPassword(401, "secret", newer, alreadyRetried = false))
+        assertEquals(newer, BackgroundRegistration.retryWithNewPassword(403, "secret", newer, alreadyRetried = false))
+        // Once only.
+        assertEquals(null, BackgroundRegistration.retryWithNewPassword(401, "rotated", newer, alreadyRetried = true))
+        // The same password: a real refusal.
+        assertEquals(null, BackgroundRegistration.retryWithNewPassword(401, "secret", record, alreadyRetried = false))
+        // Not an auth refusal, or nothing stored.
+        assertEquals(null, BackgroundRegistration.retryWithNewPassword(503, "secret", newer, alreadyRetried = false))
+        assertEquals(null, BackgroundRegistration.retryWithNewPassword(408, "secret", newer, alreadyRetried = false))
+        assertEquals(null, BackgroundRegistration.retryWithNewPassword(401, "secret", null, alreadyRetried = false))
+        assertEquals(null, BackgroundRegistration.retryWithNewPassword(401, null, newer, alreadyRetried = false))
+    }
 }

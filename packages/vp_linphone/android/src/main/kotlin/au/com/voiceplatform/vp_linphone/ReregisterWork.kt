@@ -83,11 +83,16 @@ object ReregisterWork {
      * the app. The job itself never comes through here, so it can't queue
      * itself.
      */
-    fun <T> registerOrQueue(context: Context, register: () -> T): T =
+    fun <T> registerOrQueue(
+        context: Context,
+        queue: () -> Unit = { enqueue(context, REASON_REGISTER_FAILED) },
+        register: () -> T,
+    ): T =
         try {
             register()
         } catch (e: Exception) {
-            enqueue(context, REASON_REGISTER_FAILED)
+            // A WorkManager error must not replace the register's own.
+            runCatching(queue)
             throw e
         }
 

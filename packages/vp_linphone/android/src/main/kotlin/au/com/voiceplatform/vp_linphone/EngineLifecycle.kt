@@ -84,6 +84,15 @@ class EngineLifecycle(
         finishStop()
     }
 
+    /**
+     * The service is being destroyed: true when the app should hear it as
+     * `cleared` (so its next resume starts and registers again). That is a
+     * stop with an account, or any stop of a service the app started that
+     * the app didn't ask for ([requestStop] clears [startedByApp] first):
+     * the system or the user stopped it, maybe mid-registration.
+     */
+    fun stoppedUnderTheApp(hadAccount: Boolean): Boolean = hadAccount || startedByApp
+
     fun onServiceDestroyed() {
         state = State.STOPPED
         stopWhenStarted = false

@@ -193,12 +193,13 @@ object LinphoneEngine {
         // A service that never took the background registration's Core over
         // (call_cancelled while it started) leaves that Core to the job.
         if (headless.serviceMayStopCore()) {
-            // Stopped with an account (the system or the user stopped the
-            // service, not a sign-out, which unregisters first): the app hears
-            // `cleared`, so its next resume starts and registers again.
+            // Stopped with an account, or under an app that started it (the
+            // system or the user, not a sign-out, which unregisters and asks
+            // for the stop): the app hears `cleared`, so its next resume starts
+            // and registers again ([EngineLifecycle.stoppedUnderTheApp]).
             val hadAccount = account != null
             stopCore()
-            if (hadAccount) emitRegistration(RegistrationMsg(RegStateMsg.CLEARED))
+            if (lifecycle.stoppedUnderTheApp(hadAccount)) emitRegistration(RegistrationMsg(RegStateMsg.CLEARED))
         } else {
             log("service stopped: background core kept")
         }
@@ -579,9 +580,22 @@ object LinphoneEngine {
             finishUnregister()
         }
         if (backgroundDone != null && acc == account) {
+            val code = acc.errorInfo.protocolCode
+            if (state == RegistrationState.Failed) {
+                // A POST since the job began rotated the password: once more with the new one.
+                val stored = appContext?.let { ctx -> runCatching { CredentialStore(ctx).load() }.getOrNull() }
+                val retry = BackgroundRegistration.retryWithNewPassword(code, backgroundPassword, stored, backgroundRetried)
+                if (retry != null) {
+                    backgroundRetried = true
+                    backgroundPassword = retry.password
+                    log("background registration: $code, the stored password changed: once more")
+                    main.post { registerForJob(retry) }
+                    return
+                }
+            }
             val outcome = when (state) {
                 RegistrationState.Ok -> BackgroundRegistration.Outcome.REGISTERED
-                RegistrationState.Failed -> BackgroundRegistration.failure(acc.errorInfo.protocolCode)
+                RegistrationState.Failed -> BackgroundRegistration.failure(code)
                 else -> null
             }
             // Posted: the Core isn't stopped from inside its own callback.
@@ -986,6 +1000,10 @@ object LinphoneEngine {
     )
     private var backgroundDone: ((BackgroundRegistration.Outcome) -> Unit)? = null
 
+    /** The password the job registered with, and whether it retried with a newer one. */
+    private var backgroundPassword: String? = null
+    private var backgroundRetried = false
+
     /**
      * 480 for every call still ringing on this device, before its Core stops:
      * a bare stop could end them with a 603, which may stop the edge trying
@@ -1039,6 +1057,8 @@ object LinphoneEngine {
                 // job waits for the edge's answer like a Core of its own.
                 val r = plan.record
                 backgroundDone = done
+                backgroundPassword = r.password
+                backgroundRetried = false
                 try {
                     register(
                         r.authUsername, r.password, r.domain, r.outboundProxy, r.displayName,
@@ -1069,6 +1089,8 @@ object LinphoneEngine {
             is BackgroundRegistration.Plan.Headless -> {
                 val r = plan.record
                 backgroundDone = done
+                backgroundPassword = r.password
+                backgroundRetried = false
                 try {
                     // The stored device id, so the new Core sends the right +sip.instance.
                     lastInstance = Rules.instanceUuid(r.instanceId)
@@ -1091,6 +1113,23 @@ object LinphoneEngine {
         }
     }
 
+    /** The job's second try with the stored account's newer password; it waits for the edge as before. */
+    private fun registerForJob(r: AccountRecord) {
+        if (backgroundDone == null) return
+        try {
+            register(
+                r.authUsername, r.password, r.domain, r.outboundProxy, r.displayName,
+                r.expiresSeconds, r.instanceId, r.pushProvider, r.pushPrid, r.pushParam,
+            )
+        } catch (e: VpFlutterError) {
+            log("background registration: register refused ${e.code}")
+            endBackgroundRefresh(BackgroundRegistration.Outcome.REFUSED)
+        } catch (t: Throwable) {
+            log("background registration failed: ${t.javaClass.simpleName}")
+            endBackgroundRefresh(BackgroundRegistration.Outcome.FAILED)
+        }
+    }
+
     /**
      * Ends [refreshInBackground]. Its own Core stops only with the engine
      * stopped and no call on it; a service that is starting keeps it
@@ -1099,6 +1138,8 @@ object LinphoneEngine {
     fun endBackgroundRefresh(outcome: BackgroundRegistration.Outcome) {
         val done = backgroundDone ?: return
         backgroundDone = null
+        backgroundPassword = null
+        backgroundRetried = false
         headless.onJobEnded(engineStopped = lifecycle.state == EngineLifecycle.State.STOPPED, liveCall = hasLiveCall)
         done(outcome)
     }

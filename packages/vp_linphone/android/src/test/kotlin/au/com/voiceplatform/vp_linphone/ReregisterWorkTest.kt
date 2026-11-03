@@ -207,4 +207,15 @@ class ReregisterWorkTest {
         val register = plugin.substringAfter("override fun register(").substringBefore("override suspend fun unregister")
         assertTrue("ReregisterWork.registerOrQueue(context)" in register)
     }
+
+    @Test
+    fun aWorkManagerErrorNeverReplacesTheRegistersOwn() {
+        val e = kotlin.runCatching {
+            ReregisterWork.registerOrQueue(context, queue = { throw IllegalStateException("WorkManager is not initialized") }) {
+                throw VpFlutterError("invalid_state", "Engine not started")
+            }
+        }.exceptionOrNull()
+        assertTrue(e is VpFlutterError)
+        assertEquals("invalid_state", (e as VpFlutterError).code)
+    }
 }
