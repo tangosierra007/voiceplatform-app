@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../calls/numbers.dart';
@@ -20,6 +21,18 @@ typedef CallSettingsSave = Future<CallSettings> Function({
   required String? forwardAlwaysTo,
 });
 
+/// The server refused a number (422): `invalid_number`, `number_barred`, or
+/// `forward_to_own_number` (one of the tenant's own numbers, decision 187),
+/// with the [message] to show as it is.
+class CallSettingsRefused implements Exception {
+  const CallSettingsRefused(this.code, this.message);
+  final String code;
+  final String message;
+
+  @override
+  String toString() => 'CallSettingsRefused($code)';
+}
+
 String? _numberOrNull(String? n) =>
     n == null || n.trim().isEmpty ? null : dialDigits(n);
 
@@ -32,19 +45,32 @@ final callSettingsSaveProvider = Provider<CallSettingsSave>((ref) {
     required forwardAlwaysTo,
   }) async {
     final mobile = _numberOrNull(followMeTo);
-    final r = await ref
-        .read(dioProvider)
-        .patch<Map<String, Object?>>(
-          '/me/call-settings',
-          data: <String, Object?>{
-            'ringSeconds': ringSeconds,
-            'followMeTo': mobile,
-            if (mobile != null) 'followMeSeconds': followMeSeconds,
-            if (mobile != null) 'followMeConfirm': followMeConfirm,
-            'forwardAlwaysTo': _numberOrNull(forwardAlwaysTo),
-          },
+    try {
+      final r = await ref
+          .read(dioProvider)
+          .patch<Map<String, Object?>>(
+            '/me/call-settings',
+            data: <String, Object?>{
+              'ringSeconds': ringSeconds,
+              'followMeTo': mobile,
+              if (mobile != null) 'followMeSeconds': followMeSeconds,
+              if (mobile != null) 'followMeConfirm': followMeConfirm,
+              'forwardAlwaysTo': _numberOrNull(forwardAlwaysTo),
+            },
+          );
+      return CallSettings.fromJson(r.data!);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (e.response?.statusCode == 422 &&
+          data is Map<String, Object?> &&
+          data['message'] is String) {
+        throw CallSettingsRefused(
+          data['error'] as String? ?? '',
+          data['message']! as String,
         );
-    return CallSettings.fromJson(r.data!);
+      }
+      rethrow;
+    }
   };
 });
 

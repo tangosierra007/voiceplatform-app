@@ -625,6 +625,26 @@ class MockServer {
         return r.error(400, 'validation', '$k: send null to clear');
       }
     }
+    // Decision 187: never forward to one of the tenant's own numbers.
+    String national(Object? n) {
+      final d = '$n'.replaceAll(RegExp(r'[^0-9]'), '');
+      return d.startsWith('61') ? '0${d.substring(2)}' : d;
+    }
+
+    final own = {
+      for (final c in callerIds)
+        if (c['value'] != 'withheld') national(c['value']),
+    };
+    for (final k in const ['followMeTo', 'forwardAlwaysTo']) {
+      if (body[k] != null && own.contains(national(body[k]))) {
+        return r.error(
+          422,
+          'forward_to_own_number',
+          "That's one of your own numbers. Forward to the extension or ring "
+              'group instead.',
+        );
+      }
+    }
     _callSettings = {..._callSettings, ...body}
       ..removeWhere((k, v) => v == null);
     return r.json(200, _callSettings);

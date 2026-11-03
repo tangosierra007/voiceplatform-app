@@ -484,6 +484,48 @@ void main() {
       );
     });
 
+    test("a forward to one of the tenant's own numbers is refused: 422 "
+        'forward_to_own_number (decision 187)', () async {
+      final c = ProviderContainer(
+        overrides: [dioProvider.overrideWithValue(dio)],
+      );
+      addTearDown(c.dispose);
+      final save = c.read(callSettingsSaveProvider);
+      await expectLater(
+        save(
+          ringSeconds: 15,
+          followMeTo: null,
+          followMeSeconds: null,
+          followMeConfirm: null,
+          forwardAlwaysTo: '+61 3 5550 1201',
+        ),
+        throwsA(
+          isA<CallSettingsRefused>()
+              .having((e) => e.code, 'code', 'forward_to_own_number')
+              .having(
+                (e) => e.message,
+                'message',
+                startsWith("That's one of your own numbers."),
+              ),
+        ),
+      );
+      final s = await save(
+        ringSeconds: 15,
+        followMeTo: null,
+        followMeSeconds: null,
+        followMeConfirm: null,
+        forwardAlwaysTo: '03 5550 1999',
+      );
+      expect(s.forwardAlwaysTo, '0355501999');
+      await save(
+        ringSeconds: 15,
+        followMeTo: null,
+        followMeSeconds: null,
+        followMeConfirm: null,
+        forwardAlwaysTo: null,
+      );
+    });
+
     test('call logs answer a reference', () async {
       final r = await dio.post<Map<String, Object?>>(
         '/diagnostics/call-logs',

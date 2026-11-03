@@ -318,6 +318,92 @@ void main() {
     expect(body, isNot(contains('""')));
   });
 
+  for (final (what, mobile, forward) in [
+    ('the forward number', '', '03 5550 1200'),
+    ('the mobile', '03 5550 1201', ''),
+    ('with both filled in', '0491 570 156', '03 5550 1200'),
+  ]) {
+    testWidgets('a 422 forward_to_own_number (decision 187), $what: the '
+        "server's words by the field; the typed numbers stay; not sent "
+        'again', (tester) async {
+      usePhone(tester);
+      const words =
+          "That's one of your own numbers. Forward to the extension or ring "
+          'group instead.';
+      final api = FakeApi({
+        'PATCH /me/call-settings': (r) =>
+            (422, {'error': 'forward_to_own_number', 'message': words}),
+      });
+      await tester.pumpWidget(await appUnderTest(clock: () => _now, api: api));
+      await _settle(tester);
+      await openMe(tester);
+      await tester.tap(find.text("When I don't answer"));
+      await _settle(tester);
+      await tester.enterText(find.byType(TextField).first, mobile);
+      await _settle(tester);
+      await tester.enterText(find.byType(TextField).last, forward);
+      await _settle(tester);
+      await tester.ensureVisible(find.bySemanticsLabel('Save'));
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Save'));
+      await _settle(tester);
+
+      expect(find.text(words), findsOneWidget);
+      expect(find.text("When I don't answer"), findsOneWidget, reason: 'kept');
+      expect(find.text("That didn't save. Try again."), findsNothing);
+      final fields = tester.widgetList<TextField>(find.byType(TextField));
+      expect(fields.first.controller!.text, mobile);
+      expect(fields.last.controller!.text, forward);
+      final at = mobile.isNotEmpty && forward.isNotEmpty
+          ? null
+          : mobile.isNotEmpty
+          ? fields.first
+          : fields.last;
+      if (at != null) expect(at.decoration!.errorText, words);
+      await _settle(tester);
+      expect(
+        api.requests.where((r) => r.path == '/me/call-settings'),
+        hasLength(1),
+        reason: 'no retry',
+      );
+
+      // Typing again takes it away.
+      await tester.enterText(find.byType(TextField).last, '0491 570 159');
+      await _settle(tester);
+      expect(find.text(words), findsNothing);
+    });
+  }
+
+  testWidgets("any other failure: 'That didn't save', shown; the numbers "
+      'stay', (tester) async {
+    usePhone(tester);
+    final api = FakeApi({
+      'PATCH /me/call-settings': (r) =>
+          (500, {'error': 'internal', 'message': 'Something went wrong'}),
+    });
+    await tester.pumpWidget(await appUnderTest(clock: () => _now, api: api));
+    await _settle(tester);
+    await openMe(tester);
+    await tester.tap(find.text("When I don't answer"));
+    await _settle(tester);
+    await tester.enterText(find.byType(TextField).last, '03 5550 1999');
+    await _settle(tester);
+    await tester.ensureVisible(find.bySemanticsLabel('Save'));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Save'));
+    await _settle(tester);
+    expect(find.text("That didn't save. Try again."), findsOneWidget);
+    expect(find.text('Something went wrong'), findsNothing);
+    expect(
+      tester
+          .widgetList<TextField>(find.byType(TextField))
+          .last
+          .controller!
+          .text,
+      '03 5550 1999',
+    );
+  });
+
   testWidgets('Sign out asks first', (tester) async {
     usePhone(tester);
     final auth = ScriptedAuth(const SignedIn('d1'));

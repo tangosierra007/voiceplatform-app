@@ -87,6 +87,12 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
   bool _seeded = false;
   bool _saving = false;
 
+  /// The server's words for a refused number (422), shown by the field it
+  /// was about. The body doesn't say which field: so under the one filled
+  /// in, or with both filled in, once below the forward field, above Save.
+  String? _refused;
+  _Refused? _refusedAt;
+
   @override
   void dispose() {
     _mobile.dispose();
@@ -107,7 +113,11 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
   }
 
   Future<void> _save() async {
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _refused = null;
+      _refusedAt = null;
+    });
     try {
       await ref.read(callSettingsSaveProvider)(
         ringSeconds: _ring ?? 15,
@@ -118,6 +128,20 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
       );
       ref.invalidate(callSettingsProvider);
       if (mounted) context.pop();
+    } on CallSettingsRefused catch (e) {
+      // Refused (decision 187's own numbers, a barred or invalid number):
+      // the typed numbers stay, and nothing is sent again until Save.
+      if (!mounted) return;
+      final mobile = _mobile.text.trim().isNotEmpty;
+      final forward = _forward.text.trim().isNotEmpty;
+      setState(() {
+        _refused = e.message;
+        _refusedAt = mobile && forward
+            ? _Refused.both
+            : mobile
+            ? _Refused.mobile
+            : _Refused.forward;
+      });
     } catch (_) {
       if (mounted) _say(context, "That didn't save. Try again.");
     } finally {
@@ -125,13 +149,30 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
     }
   }
 
+  /// Typing again takes the refusal away.
+  void _clearRefused() {
+    _refused = null;
+    _refusedAt = null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
     final s = ref.watch(callSettingsProvider).value;
     if (s != null) _seed(s);
-    InputDecoration field(String hint) => InputDecoration(
+    InputDecoration field(String hint, {String? error}) => InputDecoration(
       hintText: hint,
+      errorText: error,
+      errorMaxLines: 4,
+      errorStyle: VpType.body.copyWith(fontSize: 13, color: c.statusBad),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(VpRadius.md),
+        borderSide: BorderSide(color: c.statusBad),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(VpRadius.md),
+        borderSide: BorderSide(color: c.statusBad, width: 2),
+      ),
       hintStyle: VpType.body.copyWith(color: c.textMuted),
       filled: true,
       fillColor: c.surface,
@@ -191,8 +232,11 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
               controller: _mobile,
               keyboardType: TextInputType.phone,
               style: VpType.body.copyWith(color: c.text),
-              decoration: field('Mobile number'),
-              onChanged: (_) => setState(() {}),
+              decoration: field(
+                'Mobile number',
+                error: _refusedAt == _Refused.mobile ? _refused : null,
+              ),
+              onChanged: (_) => setState(_clearRefused),
             ),
             if (_mobile.text.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -232,8 +276,26 @@ class _CallSettingsState extends ConsumerState<CallSettingsScreen> {
                 controller: _forward,
                 keyboardType: TextInputType.phone,
                 style: VpType.body.copyWith(color: c.text),
-                decoration: field('Number'),
+                decoration: field(
+                  'Number',
+                  error: _refusedAt == _Refused.forward ? _refused : null,
+                ),
+                onChanged: (_) => setState(_clearRefused),
               ),
+              if (_refusedAt == _Refused.both && _refused != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      _refused!,
+                      style: VpType.body.copyWith(
+                        fontSize: 13,
+                        color: c.statusBad,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
           Padding(
@@ -480,3 +542,6 @@ class DevicesScreen extends ConsumerWidget {
     );
   }
 }
+
+/// Which field a refused number is shown by.
+enum _Refused { mobile, forward, both }
