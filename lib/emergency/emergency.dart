@@ -11,18 +11,13 @@ import '../theme/app_theme.dart';
 import '../widgets/vp_controls.dart';
 import '../widgets/vp_icons.dart';
 
-/// The number to put in the phone's dialler: the three emergency digits,
-/// however they were written ("+61 000", "0011 61 112" and "0000" dial 000
-/// and 112; [emergencyNumberIn], the one rule). Anything the rule doesn't
-/// match keeps its digits, with a trunk 0 dropped.
-String emergencyDialString(String dialled) {
-  final known = emergencyNumberIn(dialled);
-  if (known != null) return known;
-  final digits = dialled.replaceAll(RegExp(r'[^0-9]'), '');
-  return digits.length == 4 && digits.startsWith('0')
-      ? digits.substring(1)
-      : digits;
-}
+/// The number to put in the phone's dialler: always 000, 112 or 106, never
+/// anything else. However they were written ("+61 000", "0011 61 112",
+/// "1831 000" and "0000" dial 000 and 112; [emergencyNumberIn], the one
+/// rule). If the sheet ever opens for something the rule doesn't read (the
+/// engine refused it), it offers 000.
+String emergencyDialString(String dialled) =>
+    emergencyNumberIn(dialled) ?? '000';
 
 /// The one way any screen (keypad, Recents, contacts, links) places a call:
 /// [startCall]. Emergency numbers never reach the engine: they open

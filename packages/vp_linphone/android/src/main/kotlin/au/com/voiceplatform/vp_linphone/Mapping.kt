@@ -170,19 +170,22 @@ object Mapping {
 object Rules {
     /**
      * A mirror of the contract's `isEmergencyNumber()` (packages/call_engine),
-     * which stays the one rule. In order, each at most once: a caller-ID
-     * prefix (1831, 1832, #31#, *31#) is dropped; then only the digits count;
-     * a 0011 or 00 in front of 61, then 61 itself, are read past; after an
-     * international form (+61, 0061, 0011 61) a leftover 00 is 000; a trunk 0
-     * is dropped; and what is left must be exactly 000, 112 or 106. The Dart
-     * engine refuses these before anything reaches Kotlin; this copy is the
-     * native backstop so no INVITE can ever be sent for one. Both are tested
-     * against the same table, `test/fixtures/emergency_numbers.txt`.
+     * which stays the one rule. First only the ASCII digits and `+`, `*` and
+     * `#` are kept (the same characters as the Dart rule). Then, in order,
+     * each at most once: a caller-ID prefix (1831, 1832, #31#, *31#) is
+     * dropped; only the digits count; a 0011 or 00 in front of 61, then 61
+     * itself, are read past; after an international form (+61, 0061,
+     * 0011 61) a leftover 00 is 000; a trunk 0 is dropped; and what is left
+     * must be exactly 000, 112 or 106. The Dart engine refuses these before
+     * anything reaches Kotlin; this copy is the native backstop so no INVITE
+     * can ever be sent for one. Both are tested against the same table,
+     * `test/fixtures/emergency_numbers.txt`.
      */
     fun isEmergency(number: String): Boolean {
-        val rest = number.replaceFirst(CALLER_ID_PREFIX, "")
+        val kept = number.filter { it in '0'..'9' || it == '+' || it == '*' || it == '#' }
+        val rest = kept.replaceFirst(CALLER_ID_PREFIX, "")
         var d = rest.filter { it in '0'..'9' }
-        var international = LEADING_PLUS.containsMatchIn(rest)
+        var international = rest.startsWith("+")
         for (idd in listOf("0011", "00")) {
             if (d.startsWith("${idd}61")) {
                 d = d.substring(idd.length)
@@ -198,10 +201,7 @@ object Rules {
         return d in EMERGENCY
     }
 
-    private const val SEP = """[\s().-]*"""
-    private val CALLER_ID_PREFIX =
-        Regex("""(?U)^$SEP(?:[#*]${SEP}3${SEP}1$SEP#|1${SEP}8${SEP}3$SEP[12])""")
-    private val LEADING_PLUS = Regex("""(?U)^$SEP[+]""")
+    private val CALLER_ID_PREFIX = Regex("^(?:[#*]31#|183[12])")
 
     private val EMERGENCY = setOf("000", "112", "106")
 

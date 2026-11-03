@@ -96,6 +96,22 @@ void main() {
     }
   });
 
+  // WS6 on #47: the sheet only ever offers 000, 112 or 106.
+  test('the dial string is never anything but 000, 112 or 106', () {
+    for (final (typed, want) in [
+      ('\u00851831 000', '000'),
+      ('﻿1831 000', '000'),
+      ('1831​112', '112'),
+      (' +61 106', '106'),
+      // Not an emergency number by the rule: still 000, never its digits.
+      ('1831 0001', '000'),
+      ('0491 570 737', '000'),
+      ('', '000'),
+    ]) {
+      expect(emergencyDialString(typed), want, reason: typed.runes.toString());
+    }
+  });
+
   for (final n in [
     '000',
     '112',

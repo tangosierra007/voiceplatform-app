@@ -83,20 +83,129 @@ const zeroZeroForms = [
   '#31# 0011 61 00',
 ];
 
+/// Spaces and invisible characters, in front of and inside forms: only the
+/// digits and + * # count, in Dart and in Kotlin alike (WS6 on #47). BOM,
+/// next line, no-break space and zero-width space.
+const separators = ['﻿', '\u0085', ' ', '​'];
+
+/// Forms with [separators] in them, and the number each dials.
+List<(String, String)> separatedForms() => [
+  for (final s in separators) ...[
+    ('${s}000', '000'),
+    ('$s 112', '112'),
+    ('${s}1831 000', '000'),
+    ('1831${s}000', '000'),
+    ('1${s}8${s}3${s}2 106', '106'),
+    ('#31#${s}106', '106'),
+    ('${s}#31#000', '000'),
+    ('$s+61 112', '112'),
+    ('+61${s}112', '112'),
+    ('0${s}0${s}0', '000'),
+    ('0011${s}61${s}00', '000'),
+    ('${s}+61 00', '000'),
+  ],
+];
+
+/// Near misses with [separators] in them.
+List<String> separatedNearMisses() => [
+  for (final s in separators) ...[
+    '${s}1833 000',
+    '61${s}00',
+    '1831${s}0001',
+    '0${s}0${s}0${s}1',
+  ],
+];
+
+/// Not emergency numbers. In the shared table too, except the 13 number,
+/// which stays in the files the phone number check allows it in.
+const nearMisses = [
+  '',
+  '0',
+  '00',
+  '0001',
+  '0006',
+  '1120',
+  '1122',
+  '1060',
+  '1061',
+  '10612',
+  '00000',
+  '00 000',
+  '000 000',
+  '0000 0',
+  '00112',
+  '01120',
+  // The country code with the wrong number after it, or extra digits.
+  '61',
+  '+61',
+  '0061',
+  '0011 61',
+  '6100',
+  '+61 0001',
+  '+610001',
+  '610001',
+  '61 1120',
+  '61 0 0 000',
+  '+61 0 0000',
+  '+61 61 000',
+  '0061 61 000',
+  '0011 61 61 000',
+  '0011 0061 000',
+  // A bare 61 00 (no +, 0061 or 0011 in front) stays a number.
+  '61 00',
+  '61 0 0',
+  '1831 61 00',
+  // A caller-ID prefix with nothing, or the wrong number, after it.
+  '1831',
+  '1832',
+  '#31#',
+  '*31#',
+  '18310001',
+  '1831 0001',
+  '#31#0001',
+  '1833 000',
+  '1830 112',
+  '#32#000',
+  '#31#*31#000',
+  '1831 1831 000',
+  // An international prefix without 61, or 61 in the wrong place.
+  '0011 000',
+  '0011 112',
+  '00 112',
+  '000 61',
+  '0 61 000',
+  // Ordinary numbers, some with 000 or 112 inside.
+  '0491 570 737',
+  '0491 570 006',
+  '+61 491 570 006',
+  '03 5550 1201',
+  '03 5550 0001',
+  '+61 3 5550 1000',
+  '0011 61 3 5550 1200',
+  '*97',
+  'sos',
+];
+
 void main() {
   // The Kotlin backstop (Rules.isEmergency) is tested on the shared table, so
   // the table has every form above.
-  test('the shared table has every written form', () {
-    final table = File('../vp_linphone/test/fixtures/emergency_numbers.txt')
-        .readAsLinesSync()
-        .where((l) => l.startsWith('E\t'))
-        .map((l) => l.substring(2))
-        .toSet();
+  test('the shared table has every written form and every near miss', () {
+    final lines = File('../vp_linphone/test/fixtures/emergency_numbers.txt')
+        .readAsLinesSync();
+    Set<String> rows(String kind) => {
+      for (final l in lines)
+        if (l.startsWith('$kind\t')) l.substring(2),
+    };
+    final emergency = rows('E'), not = rows('N');
     for (final typed in [
       for (final n in ['000', '112', '106']) ...writtenForms(n),
       ...zeroZeroForms,
+      for (final (typed, _) in separatedForms()) typed,
     ]) {
-      expect(table, contains(typed), reason: typed);
+      expect(emergency, contains(typed), reason: typed.runes.toString());
+    }
+    for (final typed in [...nearMisses, ...separatedNearMisses()]) {
+      expect(not, contains(typed), reason: typed.runes.toString());
     }
   });
 
@@ -147,75 +256,17 @@ void main() {
     }
   });
 
+  test('spaces and invisible characters never hide one', () {
+    for (final (typed, want) in separatedForms()) {
+      expect(emergencyNumberIn(typed), want, reason: typed.runes.toString());
+    }
+    for (final typed in separatedNearMisses()) {
+      expect(emergencyNumberIn(typed), isNull, reason: typed.runes.toString());
+    }
+  });
+
   test('leaves other numbers alone', () {
-    for (final n in [
-      '',
-      '0',
-      '00',
-      '0001',
-      '0006',
-      '1120',
-      '1122',
-      '1060',
-      '1061',
-      '10612',
-      '00000',
-      '00 000',
-      '000 000',
-      '0000 0',
-      '00112',
-      '01120',
-      // The country code with the wrong number after it, or extra digits.
-      '61',
-      '+61',
-      '0061',
-      '0011 61',
-      '6100',
-      '+61 0001',
-      '+610001',
-      '610001',
-      '61 1120',
-      '61 0 0 000',
-      '+61 0 0000',
-      '+61 61 000',
-      '0061 61 000',
-      '0011 61 61 000',
-      '0011 0061 000',
-      // A bare 61 00 (no +, 0061 or 0011 in front) stays a number.
-      '61 00',
-      '61 0 0',
-      '1831 61 00',
-      // A caller-ID prefix with nothing, or the wrong number, after it.
-      '1831',
-      '1832',
-      '#31#',
-      '*31#',
-      '18310001',
-      '1831 0001',
-      '#31#0001',
-      '1833 000',
-      '1830 112',
-      '#32#000',
-      '#31#*31#000',
-      '1831 1831 000',
-      // An international prefix without 61, or 61 in the wrong place.
-      '0011 000',
-      '0011 112',
-      '00 112',
-      '000 61',
-      '0 61 000',
-      // Ordinary numbers, some with 000 or 112 inside.
-      arbitrary13Number,
-      '0491 570 737',
-      '0491 570 006',
-      '+61 491 570 006',
-      '03 5550 1201',
-      '03 5550 0001',
-      '+61 3 5550 1000',
-      '0011 61 3 5550 1200',
-      '*97',
-      'sos',
-    ]) {
+    for (final n in [...nearMisses, arbitrary13Number]) {
       expect(emergencyNumberIn(n), isNull, reason: n);
       expect(isEmergencyNumber(n), isFalse, reason: n);
     }
