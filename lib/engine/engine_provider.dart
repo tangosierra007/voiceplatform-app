@@ -73,6 +73,9 @@ final appResumesProvider = Provider<Stream<void>>((ref) {
 /// the app comes to the foreground, so the API's expiry (decision 170) and
 /// fresh credentials always reach the engine; until then only the copy the
 /// native side keeps for push wakes registers.
+///
+/// Not re-run on a timer or on every resume: each `up()` POSTs
+/// sip-credentials, which rotates the password and drops the binding.
 final engineSessionProvider = Provider<void>((ref) {
   final engine = ref.watch(callEngineProvider);
   var started = false;
@@ -80,8 +83,17 @@ final engineSessionProvider = Provider<void>((ref) {
   /// The last [up] reached `register()`.
   var registered = false;
 
-  /// The [up] in progress: a second request waits for it, never overlaps it.
+  /// Bumped by every sign-out ([down]): a run of [upOnce] from an earlier
+  /// session stops at its next step and never registers.
+  var session = 0;
+
+  /// The [up] in progress and its session: a second request in the same
+  /// session waits for it, never overlaps it; a new session starts its own.
   Future<void>? running;
+  var runningSession = -1;
+
+  /// The [down] in progress: a new sign-in waits for its unregister.
+  Future<void>? stopping;
 
   /// True when the API took it; the native "not yet sent" flag is cleared then.
   Future<bool> putPushToken(String token) async {
@@ -103,12 +115,24 @@ final engineSessionProvider = Provider<void>((ref) {
     return true;
   }
 
-  Future<void> upOnce() async {
+  /// Every `POST /devices/me/sip-credentials` rotates the device's SIP
+  /// password and the API drops its contacts, so everything that can fail
+  /// comes first, and the POST only when `register()` follows at once. The
+  /// native side keeps the new account before it registers, so a failed
+  /// register still leaves push wakes the new password. A sign-out stops a
+  /// run before the POST where it can; after the POST, [down] unregisters,
+  /// which clears the kept account.
+  Future<void> upOnce(int mine) async {
+    bool gone() => mine != session;
     registered = false;
     try {
+      final wait = stopping;
+      if (wait != null) await wait;
+      if (gone()) return;
       if (!started) {
         await engine.start();
         started = true;
+        if (gone()) return;
         // Incoming-call notifications need it on Android 13+ (WS3 3.2):
         // asked once signed in, when the app can start ringing.
         unawaited(ref.read(micPermissionProvider).requestNotifications());
@@ -117,6 +141,7 @@ final engineSessionProvider = Provider<void>((ref) {
       // voiceplatform-app) and for the API; null without push (fake engine).
       final push = ref.read(pushTokensProvider);
       final token = await push?.start();
+      if (gone()) return;
       // A token the background registration (after a restart or an update)
       // put in the SIP contact while the app wasn't running: the API sends
       // its pushes (signed_out, voicemail, message) to the old one until it
@@ -124,10 +149,15 @@ final engineSessionProvider = Provider<void>((ref) {
       if (token != null && push != null && await push.tokenUnsent()) {
         await putPushToken(token);
       }
+      // Last stop before the POST (it rotates the credentials).
+      if (gone()) return;
       final c = await ref
           .read(appApiProvider)
           .device
           .postDevicesMeSipCredentials();
+      // Signed out meanwhile: no register; [down] is unregistering, which
+      // clears the account the native side keeps.
+      if (gone()) return;
       await engine.register(
         SipAccount(
           authUsername: c.authUsername,
@@ -141,6 +171,7 @@ final engineSessionProvider = Provider<void>((ref) {
         ),
       );
       registered = true;
+      if (gone()) return;
       if (token != null) await putPushToken(token);
     } catch (_) {
       // Offline or refused (Android may refuse the engine's service while
@@ -149,7 +180,20 @@ final engineSessionProvider = Provider<void>((ref) {
     }
   }
 
-  Future<void> up() => running ??= upOnce().whenComplete(() => running = null);
+  Future<void> up() {
+    final now = running;
+    if (now != null && runningSession == session) return now;
+    final mine = session;
+    final run = upOnce(mine);
+    running = run;
+    runningSession = mine;
+    unawaited(
+      run.whenComplete(() {
+        if (identical(running, run)) running = null;
+      }),
+    );
+    return run;
+  }
 
   // A refreshed token: VpPushTokens has already updated the engine's
   // contact; the API gets it too.
@@ -165,16 +209,37 @@ final engineSessionProvider = Provider<void>((ref) {
   /// (a cold start that refreshes into `device_revoked`): `unregister()` also
   /// clears the SIP account the native side keeps for push wakes, so a later
   /// push can't register it again.
-  Future<void> down() async {
+  ///
+  /// A run of [up] still going is stopped first (the session moves on) and
+  /// waited for, so its `register()` can never come after this unregister.
+  Future<void> downOnce() async {
+    session++;
+    registered = false;
+    final run = running;
+    if (run != null) {
+      try {
+        await run;
+      } catch (_) {}
+    }
     try {
       await engine.unregister();
     } catch (_) {}
-    registered = false;
     if (!started) return;
     try {
       await engine.stop();
     } catch (_) {}
     started = false;
+  }
+
+  Future<void> down() {
+    final run = downOnce();
+    stopping = run;
+    unawaited(
+      run.whenComplete(() {
+        if (identical(stopping, run)) stopping = null;
+      }),
+    );
+    return run;
   }
 
   void apply(AuthState s, String? token) {
@@ -192,6 +257,14 @@ final engineSessionProvider = Provider<void>((ref) {
   ref.listen<String?>(accessTokenProvider, (before, t) {
     if (before == null && t != null) apply(ref.read(authProvider), t);
   });
+  // Registration cleared (an unregister, or the engine stopped natively by a
+  // signed_out push): the next resume runs [up] again if still signed in.
+  // Not on `none`: a new account reports it before it registers.
+  final cleared = engine.registration.listen((e) {
+    if (e.state == RegistrationState.cleared) registered = false;
+  });
+  ref.onDispose(cleared.cancel);
+
   // Back in the foreground after a start or registration that didn't go
   // through: try again, with fresh credentials.
   final resumes = ref.read(appResumesProvider).listen((_) {

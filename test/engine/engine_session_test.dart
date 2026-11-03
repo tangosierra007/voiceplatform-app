@@ -332,6 +332,144 @@ void main() {
     expect(engine.startAttempts, 1, reason: 'already started: not again');
     await engine.dispose();
   });
+  // Sign-outs during up(), and the credentials POST that rotates the
+  // password (WS6 and mobile-lead on #52).
+  Future<(ProviderContainer, StreamController<void>)> session(
+    _GatedEngine engine,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final sp = await SharedPreferences.getInstance();
+    final own = await MockServer.start(port: 0);
+    addTearDown(own.close);
+    final resumes = StreamController<void>.broadcast();
+    addTearDown(resumes.close);
+    final c = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(sp),
+        sessionStoreProvider.overrideWithValue(MemorySessionStore()),
+        deviceKeysProvider.overrideWithValue(FakeDeviceKeys()),
+        callEngineProvider.overrideWithValue(engine),
+        pushTokensProvider.overrideWithValue(null),
+        micPermissionProvider.overrideWithValue(FakeMic()),
+        appResumesProvider.overrideWithValue(resumes.stream),
+        apiConfigProvider.overrideWithValue(
+          ApiConfig(
+            baseUrl: own.baseUri.toString(),
+            platform: 'android',
+            appVersion: '1.0.0',
+            deviceModel: 'Pixel 8',
+          ),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    c.read(engineSessionProvider);
+    c.read(authProvider);
+    await pumpEventQueue();
+    await pumpEventQueue(times: 50);
+    // The cold start, signed out, unregisters (clearing any kept account).
+    engine.log.clear();
+    return (c, resumes);
+  }
+
+  Future<void> settle() async {
+    await pumpEventQueue(times: 50);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+  }
+
+  test('a sign-out before the credentials POST stops the run: no POST, no '
+      'register; the next sign-in starts a fresh run', () async {
+    final engine = _GatedEngine()..startGate = Completer<void>();
+    final (c, _) = await session(engine);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    expect(engine.sinceStart, ['start']);
+
+    await c.read(authProvider.notifier).signOutLocally();
+    await settle();
+    expect(engine.sinceStart, ['start'], reason: 'down() waits for the run');
+    engine.startGate!.complete();
+    await settle();
+    expect(engine.sinceStart, ['start', 'unregister']);
+    expect(engine.attempted, isEmpty);
+
+    // A new sign-in: its own run, not the old one.
+    await c
+        .read(authProvider.notifier)
+        .requestEmail(SignInFixtures.advancedEmail);
+    await c.read(authProvider.notifier).completeWithCode(SignInFixtures.code);
+    await settle();
+    expect(engine.log.last, 'register');
+    expect(engine.attempted, hasLength(1));
+    expect(engine.registrationState, RegistrationState.ok);
+    await engine.dispose();
+  });
+
+  test('a sign-out while register() runs: the unregister comes after it, '
+      'never a register after the unregister', () async {
+    final engine = _GatedEngine()..registerGate = Completer<void>();
+    final (c, _) = await session(engine);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    expect(engine.sinceStart, ['start', 'register']);
+
+    await c.read(authProvider.notifier).signOutLocally();
+    await settle();
+    expect(engine.sinceStart, ['start', 'register'], reason: 'down() waits');
+    engine.registerGate!.complete();
+    await settle();
+    expect(engine.sinceStart.sublist(0, 3), [
+      'start',
+      'register',
+      'unregister',
+    ]);
+    expect(engine.sinceStart.skip(2).contains('register'), isFalse);
+    await engine.dispose();
+  });
+
+  test('a register that fails after the POST got the rotated credentials; '
+      'the resume retries with newer ones', () async {
+    // The native side keeps the account before it registers
+    // (AccountSetup.keepThenRegister, Kotlin-tested), so push wakes have the
+    // POST's new password even though this register failed.
+    final engine = _GatedEngine()..registerFailures = 1;
+    final (c, resumes) = await session(engine);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    expect(engine.attempted, hasLength(1));
+    expect(engine.attempted.single.authUsername, startsWith('mock-'));
+    expect(engine.attempted.single.password, isNotEmpty);
+    expect(engine.registrationState, isNot(RegistrationState.ok));
+
+    resumes.add(null);
+    await settle();
+    expect(engine.attempted, hasLength(2));
+    expect(
+      engine.attempted[1].password,
+      isNot(engine.attempted[0].password),
+      reason: 'each POST rotates the password',
+    );
+    expect(engine.registrationState, RegistrationState.ok);
+    await engine.dispose();
+  });
+
+  test('a cleared registration lets the next resume register again', () async {
+    final engine = _GatedEngine();
+    final (c, resumes) = await session(engine);
+    await c.read(authProvider.notifier).completeWithQr(SignInFixtures.qrToken);
+    await settle();
+    expect(engine.attempted, hasLength(1));
+    resumes.add(null);
+    await settle();
+    expect(engine.attempted, hasLength(1), reason: 'registered: no new POST');
+
+    await engine.unregister(); // as a signed_out push or native stop would
+    engine.log.clear();
+    resumes.add(null);
+    await settle();
+    expect(engine.attempted, hasLength(2));
+    await engine.dispose();
+  });
 }
 
 class _SpyEngine extends FakeCallEngine {
@@ -406,5 +544,49 @@ class _FlakyStartEngine extends FakeCallEngine {
     }
     accounts.add(account);
     return super.register(account);
+  }
+}
+
+/// Logs start, register and unregister in order; [startGate] and
+/// [registerGate] hold those calls until completed; register() fails
+/// [registerFailures] times after taking the account.
+class _GatedEngine extends FakeCallEngine {
+  _GatedEngine() : super(registerAfter: Duration.zero);
+  Completer<void>? startGate;
+  Completer<void>? registerGate;
+  int registerFailures = 0;
+  final log = <String>[];
+  final attempted = <SipAccount>[];
+
+  /// [log] from the first start (signing in passes through signed-out
+  /// states, whose down() unregisters first).
+  List<String> get sinceStart {
+    final i = log.indexOf('start');
+    return i < 0 ? const [] : log.sublist(i);
+  }
+
+  @override
+  Future<void> start() async {
+    log.add('start');
+    await startGate?.future;
+    return super.start();
+  }
+
+  @override
+  Future<void> register(SipAccount account) async {
+    log.add('register');
+    attempted.add(account);
+    await registerGate?.future;
+    if (registerFailures > 0) {
+      registerFailures--;
+      throw StateError('register failed');
+    }
+    return super.register(account);
+  }
+
+  @override
+  Future<void> unregister() {
+    log.add('unregister');
+    return super.unregister();
   }
 }

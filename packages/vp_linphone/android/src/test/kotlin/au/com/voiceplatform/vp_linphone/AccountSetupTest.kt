@@ -137,4 +137,45 @@ class AccountSetupTest {
         assertTrue("AccountSetup.expires(expiresSeconds)" in plugin)
         assertFalse("coerceIn(60, 86400)" in plugin)
     }
+
+    // Every POST /devices/me/sip-credentials rotates the password: the new
+    // account must be kept for push wakes even when the register fails.
+    @Test
+    fun theAccountIsKeptBeforeTheRegisterAndStaysKeptWhenItFails() {
+        val steps = mutableListOf<String>()
+        val e = kotlin.runCatching {
+            AccountSetup.keepThenRegister(
+                keep = { steps += "keep new password" },
+                onKeepFailed = { steps += "keep failed" },
+            ) {
+                steps += "register"
+                throw VpFlutterError("invalid_state", "Engine not started")
+            }
+        }.exceptionOrNull()
+        assertTrue(e is VpFlutterError)
+        assertEquals(listOf("keep new password", "register"), steps)
+    }
+
+    @Test
+    fun aKeepThatFailsIsReportedAndTheRegisterStillRuns() {
+        val steps = mutableListOf<String>()
+        val r = AccountSetup.keepThenRegister(
+            keep = { throw java.security.KeyStoreException("no keystore") },
+            onKeepFailed = { steps += "reported ${it.javaClass.simpleName}" },
+        ) {
+            steps += "register"
+            42
+        }
+        assertEquals(42, r)
+        assertEquals(listOf("reported KeyStoreException", "register"), steps)
+    }
+
+    @Test
+    fun theEngineKeepsTheAccountOnlyThroughKeepThenRegister() {
+        val register = engine.substringAfter("    fun register(").substringBefore("    private fun registerNow(")
+        assertTrue("AccountSetup.keepThenRegister(" in register)
+        assertTrue("CredentialStore(it).save(" in register)
+        val now = engine.substringAfter("    private fun registerNow(").substringBefore("log(\"register ")
+        assertFalse("CredentialStore" in now, "registerNow must not save after the register steps")
+    }
 }

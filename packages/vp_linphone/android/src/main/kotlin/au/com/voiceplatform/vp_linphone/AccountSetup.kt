@@ -65,6 +65,21 @@ object AccountSetup {
      */
     fun expires(expiresSeconds: Long): Int = expiresSeconds.coerceIn(MIN_EXPIRES_S.toLong(), MAX_EXPIRES_S.toLong()).toInt()
 
+    /**
+     * Keep the account (for push wakes and the background registration),
+     * then register. A keep that fails is reported and the register still
+     * runs; a register that fails leaves the account kept, so the rotated
+     * password from the API is never lost to a failed register.
+     */
+    fun <T> keepThenRegister(keep: () -> Unit, onKeepFailed: (Throwable) -> Unit, register: () -> T): T {
+        try {
+            keep()
+        } catch (e: Exception) {
+            onKeepFailed(e)
+        }
+        return register()
+    }
+
     const val MIN_EXPIRES_S = 60
     const val MAX_EXPIRES_S = 604_800
 

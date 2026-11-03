@@ -375,7 +375,43 @@ object LinphoneEngine {
 
     // ---------------------------------------------------------------- registration
 
+    /**
+     * Every `POST /devices/me/sip-credentials` rotates the password (and the
+     * API drops the device's contacts), so the account is kept for push
+     * wakes and the background registration first, whatever the register
+     * itself then does ([AccountSetup.keepThenRegister]).
+     */
     fun register(
+        authUsername: String,
+        password: String,
+        sipDomain: String,
+        outboundProxy: String,
+        displayName: String,
+        expiresSeconds: Int,
+        instanceId: String,
+        pushProvider: String?,
+        pushPrid: String?,
+        pushParam: String?,
+    ) = AccountSetup.keepThenRegister(
+        keep = {
+            appContext?.let {
+                CredentialStore(it).save(
+                    AccountRecord(
+                        authUsername, password, sipDomain, outboundProxy, displayName, expiresSeconds, instanceId,
+                        pushProvider, pushPrid, pushParam,
+                    ),
+                )
+            }
+        },
+        onKeepFailed = { e -> log("account not kept for push wakes: ${e.javaClass.simpleName}") },
+    ) {
+        registerNow(
+            authUsername, password, sipDomain, outboundProxy, displayName, expiresSeconds, instanceId,
+            pushProvider, pushPrid, pushParam,
+        )
+    }
+
+    private fun registerNow(
         authUsername: String,
         password: String,
         sipDomain: String,
@@ -431,16 +467,6 @@ object LinphoneEngine {
         account = acc
         authInfo = auth
         domain = sipDomain
-        appContext?.let {
-            runCatching {
-                CredentialStore(it).save(
-                    AccountRecord(
-                        authUsername, password, sipDomain, outboundProxy, displayName, expiresSeconds, instanceId,
-                        pushProvider, pushPrid, pushParam,
-                    ),
-                )
-            }.onFailure { e -> log("account not kept for push wakes: ${e.javaClass.simpleName}") }
-        }
         log("register ${if (pushPrid != null) "with" else "without"} push params, expires $expiresSeconds")
     }
 
