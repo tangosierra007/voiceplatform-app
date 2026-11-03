@@ -10,6 +10,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
+import androidx.annotation.VisibleForTesting
 
 /**
  * FCM data messages, received natively so an incoming call wakes the engine
@@ -78,6 +79,23 @@ object VpPush {
         )
         handler = h
         return h
+    }
+
+    /**
+     * Sign-out: the late-wake times, pushes waiting for the app and the "token
+     * not yet sent" flag all go (the whole prefs file). A `signed_out` push is
+     * added as pending after this ([PushHandler]: sign out, then deliver), so
+     * the app still shows why it was signed out.
+     */
+    fun forget(context: Context) {
+        wakeLog?.forget()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
+    @VisibleForTesting
+    internal fun resetForTest() {
+        handler = null
+        wakeLog = null
     }
 
     /** Debug and example-app entry: hand a data message to the handler as FCM would. */

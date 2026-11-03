@@ -22,6 +22,10 @@ import java.util.TimeZone
  *   [maxTotalBytes] in all, whichever limit comes first; the oldest segments
  *   go first, so a very long call loses its beginning (the export says so).
  * - The directory is app-private and excluded from backup (noBackupFilesDir).
+ * - Signing out: [clear] deletes everything and seals the log, so what the
+ *   sign-out itself still writes (the un-REGISTER, the Core stopping, the end
+ *   of a live call) reaches neither the disk nor the next user's lead-in.
+ *   [open] starts a new, empty log at the next sign-in's register.
  */
 class CallLogFile(
     dir: File,
@@ -37,6 +41,7 @@ class CallLogFile(
     private var currentCall: String? = null
     private var segment = 0
     private var currentFile: File? = null
+    private var sealed = false
 
     // "2026 Oct 27 03:15:00.123Z": no run of 6 digits, so scrubbing the whole
     // line again (on export, and in Dart) leaves the timestamp intact.
@@ -54,6 +59,7 @@ class CallLogFile(
 
     @Synchronized
     fun write(level: String, message: String) {
+        if (sealed) return
         val line = "${format.format(Date(clock()))} $level ${scrubber.scrub(message)}"
         if (currentCall != null) {
             append(line)
@@ -65,7 +71,7 @@ class CallLogFile(
 
     @Synchronized
     fun beginCall() {
-        if (currentCall != null) return
+        if (sealed || currentCall != null) return
         callsDir.mkdirs()
         // Numbered, not timed: a clock that goes back or two starts in the same
         // millisecond must not reorder or overwrite calls.
@@ -102,10 +108,20 @@ class CallLogFile(
         return sb.toString().toByteArray(Charsets.UTF_8)
     }
 
+    /** Sign-out: every log and the lead-in go, a call being logged included, and the log stays shut until [open]. */
     @Synchronized
     fun clear() {
+        sealed = true
+        currentCall = null
+        currentFile = null
         ring.clear()
         callsDir.listFiles()?.forEach { it.delete() }
+    }
+
+    /** A new account is registering: logging starts again, from empty. */
+    @Synchronized
+    fun open() {
+        sealed = false
     }
 
     /** For tests: the files kept, oldest first. */

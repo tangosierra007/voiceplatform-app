@@ -393,4 +393,23 @@ class AccountRecordTest {
         assertNull(AccountRecord.decode("v1|3:abc".toByteArray()))
         assertNull(AccountRecord.decode("v1|99:abc".toByteArray()))
     }
+
+    @Test
+    fun signingOutForgetsTheWakeTimes() {
+        val lateTimes = mutableListOf<Long>()
+        val wakeLog = WakeLog(object : WakeLog.Store {
+            override fun load() = lateTimes.toList()
+            override fun save(times: List<Long>) {
+                lateTimes.clear()
+                lateTimes += times
+            }
+        })
+        val now = 1_761_534_900_123L
+        wakeLog.recordLate(now, 9_000, 9_500)
+        assertEquals(1, wakeLog.lateInLastWeek(now))
+        wakeLog.forget()
+        assertEquals(0, wakeLog.lateInLastWeek(now))
+        assertNull(wakeLog.lastLate)
+        assertTrue(lateTimes.isEmpty())
+    }
 }

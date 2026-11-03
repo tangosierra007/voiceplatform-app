@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import java.io.File
 import java.util.concurrent.CopyOnWriteArraySet
@@ -404,6 +405,8 @@ object LinphoneEngine {
         pushParam: String?,
     ) = AccountSetup.keepThenRegister(
         keep = {
+            // After a sign-out the log stays shut until an account registers.
+            logFile?.open()
             appContext?.let {
                 CredentialStore(it).save(
                     AccountRecord(
@@ -506,10 +509,7 @@ object LinphoneEngine {
     }
 
     fun unregister(done: () -> Unit) {
-        appContext?.let {
-            CredentialStore(it).clear()
-            PushTokenFlag.markSent(it)
-        }
+        appContext?.let { forgetLocalData(it) }
         val c = core
         val acc = account
         if (c == null || acc == null) {
@@ -529,6 +529,24 @@ object LinphoneEngine {
         params.isRegisterEnabled = false
         acc.setParams(params)
         main.postDelayed(unregisterTimeout, UNREGISTER_TIMEOUT_MS)
+    }
+
+    /**
+     * Every sign-out path (the app's unregister, the native `signed_out`): what
+     * the engine keeps on the phone goes. The stored account, the call logs and
+     * their lead-in, and the push prefs: late-wake times, pending pushes, the
+     * unsent-token flag. The next account's register opens an empty log.
+     */
+    private fun forgetLocalData(context: Context) {
+        CredentialStore(context).clear()
+        VpPush.forget(context)
+        logFile?.clear()
+    }
+
+    @VisibleForTesting
+    internal fun resetLogForTest() {
+        logFile = null
+        appContext = null
     }
 
     private val unregisterTimeout = Runnable { finishUnregister() }
@@ -1150,8 +1168,9 @@ object LinphoneEngine {
      * still gets the push and shows AppSignedOut.
      */
     fun signOutFromPush(context: Context) {
-        CredentialStore(context).clear()
-        PushTokenFlag.markSent(context)
+        // A push may arrive with no Flutter running: nothing has attached the log yet.
+        attach(context)
+        forgetLocalData(context)
         core?.let { dropAccount(it) }
         account = null
         domain = null

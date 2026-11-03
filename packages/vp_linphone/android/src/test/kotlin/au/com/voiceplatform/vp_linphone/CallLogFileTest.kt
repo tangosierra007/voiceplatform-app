@@ -157,4 +157,53 @@ class CallLogFileTest {
         CallLogFile(d, LogScrubber())
         assertFalse(File(d, "lastcall.log").exists())
     }
+
+    @Test
+    fun clearDeletesEveryCallsLogAndTheLeadIn() {
+        val log = CallLogFile(dir(), LogScrubber(), clock = ticking())
+        log.beginCall()
+        log.write("ENGINE", "first user's call")
+        log.endCall()
+        log.write("ENGINE", "first user's lead-in")
+        log.clear()
+        assertTrue(log.keptFiles().isEmpty())
+        assertEquals(0, log.export().size)
+    }
+
+    @Test
+    fun whatTheSignOutStillWritesReachesNeitherDiskNorTheNextLeadIn() {
+        val log = CallLogFile(dir(), LogScrubber(), clock = ticking())
+        log.beginCall()
+        log.write("ENGINE", "first user's live call")
+        log.clear()
+        // The sign-out's own teardown, and the live call's end.
+        log.write("ENGINE", "first user's teardown")
+        log.beginCall()
+        log.write("ENGINE", "first user's teardown in a call")
+        log.endCall()
+        assertTrue(log.keptFiles().isEmpty(), "a live call's file isn't grown back")
+        assertEquals(0, log.export().size)
+    }
+
+    @Test
+    fun aNewSignInStartsEmpty() {
+        val log = CallLogFile(dir(), LogScrubber(), clock = ticking())
+        log.beginCall()
+        log.write("ENGINE", "first user's call")
+        log.endCall()
+        log.clear()
+        log.write("ENGINE", "first user's teardown")
+
+        log.open()
+        assertEquals(0, log.export().size, "nothing to send before the new user's first call")
+        log.write("ENGINE", "second user's lead-in")
+        log.beginCall()
+        log.write("ENGINE", "second user's call")
+        log.endCall()
+        val text = log.export().toString(Charsets.UTF_8)
+        assertTrue("second user's lead-in" in text)
+        assertTrue("second user's call" in text)
+        assertFalse("first user" in text)
+        assertEquals(1, log.keptFiles().size)
+    }
 }

@@ -162,6 +162,12 @@ class WakeLog(private val store: Store) {
     var lastLate: Late? = null
         private set
 
+    /** Sign-out: the phone keeps no wake times. */
+    fun forget() {
+        store.save(emptyList())
+        lastLate = null
+    }
+
     companion object {
         const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
         private const val MAX = 50
