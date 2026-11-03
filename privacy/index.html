@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>VoicePlatform Privacy Policy</title>
+<meta name="description" content="What the VoicePlatform app for Android collects, why, how long it's kept, and what it never collects.">
+<style>
+:root {
+  --bg: #f5f2ee;
+  --surface: #ffffff;
+  --text: #14110f;
+  --muted: #4d4741;
+  --line: #e3ddd6;
+  --accent: #a85400;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14110f;
+    --surface: #1f1b18;
+    --text: #f5f2ee;
+    --muted: #9b948d;
+    --line: #4d4741;
+    --accent: #ff8f1f;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 Manrope, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; }
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; font-weight: 700; font-size: 18px; }
+.brand svg { width: 40px; height: 40px; flex: none; }
+h1 { font-size: 32px; line-height: 1.2; margin: 0 0 8px; }
+h2 { font-size: 22px; line-height: 1.3; margin: 36px 0 10px; color: var(--accent); }
+p, ul { margin: 0 0 14px; }
+ul { padding-left: 22px; }
+li { margin-bottom: 8px; }
+.updated { color: var(--muted); margin-bottom: 20px; }
+code { font-size: 0.9em; overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); font-size: 16px; }
+th, td { padding: 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+th { font-weight: 700; }
+td:first-child { font-weight: 600; width: 24%; }
+td:nth-child(3) { width: 32%; }
+tbody tr:last-child td { border-bottom: 0; }
+@media (max-width: 640px) {
+  h1 { font-size: 28px; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table { background: none; border: 0; }
+  tr { background: var(--surface); border: 1px solid var(--line); margin-bottom: 12px; padding: 12px; }
+  td, td:first-child, td:nth-child(3) { width: 100%; padding: 0; border: 0; }
+  td:first-child { margin-bottom: 8px; font-size: 17px; font-weight: 700; }
+  td + td { margin-bottom: 8px; }
+  td:last-child { margin-bottom: 0; }
+  td:nth-child(n+2)::before { content: attr(data-label) ": "; font-weight: 700; color: var(--muted); }
+}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#ea7500"/><rect x="16" y="27" width="11" height="18" rx="5.5" fill="#14110f"/><rect x="30.25" y="33" width="11" height="26" rx="5.5" fill="#14110f"/><rect x="44.5" y="38" width="11" height="40" rx="5.5" fill="#14110f"/><rect x="58.75" y="33" width="11" height="26" rx="5.5" fill="#14110f"/><rect x="73" y="27" width="11" height="18" rx="5.5" fill="#14110f"/></svg>
+    <span>VoicePlatform</span>
+  </div>
+
+  <h1>VoicePlatform app privacy policy</h1>
+  <p class="updated">Last updated: 4 November 2026</p>
+
+  <p>This policy covers the VoicePlatform app for Android (package <code>au.com.voiceplatform.app</code>), published by VoicePlatform ("we"). It explains what the app collects, why, how long it's kept, and what the app never collects. Your workplace's VoicePlatform account (calls, voicemail, call history, texts) is run for your workplace under its agreement with its phone provider; ask your administrator about that account.</p>
+
+  <h2 id="what-the-app-collects">What the app collects</h2>
+  <table>
+    <thead><tr><th scope="col">What</th><th scope="col">Why</th><th scope="col">Where it goes</th></tr></thead>
+    <tbody>
+      <tr><td>Your work email address</td><td data-label="Why">To sign you in. You type it, or scan a sign-in code from the portal.</td><td data-label="Where it goes">VoicePlatform's servers, and the email service that delivers your sign-in email.</td></tr>
+      <tr><td>Your phone's model and the app version</td><td data-label="Why">To show your signed-in devices in the app and the portal, and to tell you when an update is needed.</td><td data-label="Where it goes">VoicePlatform's servers.</td></tr>
+      <tr><td>Your phone's internet (IP) address</td><td data-label="Why">To connect your calls, and to limit repeated sign-in attempts.</td><td data-label="Where it goes">VoicePlatform's servers, where it's kept with your sign-in requests for a short time and with your call records.</td></tr>
+      <tr><td>A push token from Google Firebase Cloud Messaging</td><td data-label="Why">To wake the app when a call or text comes in. Push messages carry no names, numbers or message text.</td><td data-label="Where it goes">VoicePlatform's servers and Google, which delivers the push.</td></tr>
+      <tr><td>Crash and error reports</td><td data-label="Why">To find and fix faults. Each report is cleaned on your phone before it's sent: passwords, sign-in codes, tokens, email addresses, phone numbers and anything from your phone's contacts are removed. Short numbers such as internal extensions can remain. A report also carries technical details such as your phone's model, its Android version and the app version. No screenshots are included and no IP address is attached.</td><td data-label="Where it goes">A crash reporting server we run ourselves (GlitchTip), not a third-party service.</td></tr>
+      <tr><td>Call logs you choose to send</td><td data-label="Why">Only when you tap "Send call logs to support". The log of your last call is cleaned on your phone the same way, then cleaned again on our servers.</td><td data-label="Where it goes">VoicePlatform's servers, seen by platform and reseller support for your workplace.</td></tr>
+      <tr><td>Voicemail greetings you record</td><td data-label="Why">So callers hear your greeting.</td><td data-label="Where it goes">Your workplace's voicemail on VoicePlatform.</td></tr>
+      <tr><td>Texts you send and read</td><td data-label="Why">To send and show texts on your workplace's mobile line.</td><td data-label="Where it goes">Your workplace's account on VoicePlatform, like texts sent from the portal.</td></tr>
+      <tr><td>Your voice during a call</td><td data-label="Why">To carry the call to the other person.</td><td data-label="Where it goes">Passes through VoicePlatform's servers while the call is in progress. It isn't end-to-end encrypted, and the app doesn't record or store it.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="what-the-app-never-collects">What the app never collects</h2>
+  <ul>
+    <li>Your phone's contacts. The app reads them on your phone, only after you allow it, to show names. They are never sent to us, to crash reports, to call logs or to push messages. If you call or text someone in your contacts, their number goes through VoicePlatform like any other number you call or text, but their name and the rest of your contacts stay on your phone.</li>
+    <li>Your location.</li>
+    <li>Recordings of your calls. The app doesn't record calls. If your workplace records calls, that happens on its phone system, not in the app. If your account allows it, you can play your own recordings in the app; they aren't saved on your phone.</li>
+    <li>The content of messages, other than the texts you send and read through your workplace's SMS service.</li>
+    <li>Photos. The camera is used only to scan a sign-in code, and the image stays on your phone.</li>
+    <li>Advertising identifiers. There are no ads and no analytics or tracking.</li>
+  </ul>
+
+  <h2 id="permissions">Permissions</h2>
+  <p>The app asks for the microphone when a call starts or when you record a voicemail greeting, the camera when you tap to scan a sign-in code, and your contacts when you first open the phone contacts tab. Refusing any of them leaves the rest of the app working. It also uses notifications, Bluetooth for headsets and car audio, and Android's calling service to show incoming calls. After your phone restarts or the app updates, it briefly connects to VoicePlatform so calls keep reaching you.</p>
+  <p>You can choose to unlock the app with your fingerprint, face or screen lock. It's off by default. Android does that check, and the app never sees your fingerprint or face.</p>
+
+  <h2 id="sharing">Sharing</h2>
+  <p>We don't sell your data or share it for advertising. Google delivers push messages, and an email service delivers sign-in emails. Calls and texts to people outside your workplace pass through the phone carriers that connect them. Your workplace's administrators and its phone provider can see your workplace's account. Nothing else is shared with third parties, except where the law requires it.</p>
+
+  <h2 id="how-long-we-keep-it">How long we keep it</h2>
+  <ul>
+    <li>Call and billing records: up to 10 years.</li>
+    <li>Call recordings, if your workplace records calls: 60 days by default. Your workplace can choose a different period.</li>
+    <li>Voicemail messages and texts: 365 days by default. Your workplace can choose a different period.</li>
+    <li>Crash reports: 90 days.</li>
+    <li>Call logs you send to support: 30 days.</li>
+    <li>Your phone's contacts: we keep none, because they never leave your phone.</li>
+  </ul>
+
+  <h2 id="security">Security</h2>
+  <p>Everything the app sends travels encrypted. Sign-in, data and call setup use TLS, and your voice uses SRTP. The app won't connect a call without it.</p>
+  <p>When you sign out, or an administrator signs your phone out, the app deletes your sign-in details, its settings and any crash reports still waiting to be sent. A short technical log of your most recent calls, cleaned as described above, can stay in the app's private storage until newer calls replace it or you uninstall the app.</p>
+
+  <h2 id="your-choices">Your choices</h2>
+  <ul>
+    <li>You can sign out at any time in Me. Your administrator can also sign your phone out from the portal.</li>
+    <li id="deleting-your-data">To ask about or delete data held for your account, contact your phone provider, or email support@voiceplatform.com.au. We delete it within 30 days of your request. Call and billing records stay for up to the 10 years listed above, and we keep anything else the law requires us to keep. Deleted data leaves our backups as those backups expire.</li>
+  </ul>
+
+  <h2 id="children">Children</h2>
+  <p>The app is for workplace accounts and is not meant for children.</p>
+
+  <h2 id="changes">Changes</h2>
+  <p>We'll update this page when the app changes what it collects, and change the date at the top.</p>
+
+  <h2 id="contact">Contact</h2>
+  <p>VoicePlatform, support@voiceplatform.com.au, 574 Plummer Street, Port Melbourne VIC 3207.</p>
+  <h2 id="complaints">Complaints</h2>
+  <p>If you have a complaint about how we handle your information, contact us first at support@voiceplatform.com.au. If it isn't resolved, you can complain to the Office of the Australian Information Commissioner at oaic.gov.au.</p>
+  <p>Questions about your account, or about data your provider holds, are best sent to your provider.</p>
+</main>
+</body>
+</html>
