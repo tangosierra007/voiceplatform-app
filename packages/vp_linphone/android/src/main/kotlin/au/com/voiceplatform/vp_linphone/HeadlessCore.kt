@@ -91,6 +91,18 @@ class HeadlessCore(private val scheduler: Scheduler, private val actions: Action
         }
     }
 
+    /**
+     * The answer itself: [accept] runs the checks (microphone, SRTP) and sends
+     * the 200 OK, throwing if any fails. Only an answer that went out stops
+     * the timers; a failed one leaves them, so the ringing call still gets
+     * its 480.
+     */
+    fun <T> answer(accept: () -> T): T {
+        val result = accept()
+        onCallAnswered()
+        return result
+    }
+
     /** A call on the Core was answered: no decline, no release under it. */
     fun onCallAnswered() {
         if (!owned) return

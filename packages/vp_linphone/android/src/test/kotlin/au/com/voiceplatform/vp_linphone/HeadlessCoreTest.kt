@@ -1,6 +1,7 @@
 package au.com.voiceplatform.vp_linphone
 
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
@@ -55,10 +56,14 @@ class HeadlessCoreTest {
         core.onIncomingCall(serviceUp = false)
     }
 
-    private fun answer() {
+    private fun answer() = core.answer {
         ringing--
         connected = true
-        core.onCallAnswered()
+    }
+
+    /** An answer whose check fails (microphone, SRTP, or acceptWithParams not 0): the call rings on. */
+    private fun failedAnswer(why: String) {
+        assertFailsWith<IllegalStateException> { core.answer { throw IllegalStateException(why) } }
     }
 
     private fun endCall() {
@@ -227,5 +232,31 @@ class HeadlessCoreTest {
         assertEquals(emptyList(), steps)
         advance(HeadlessCore.TAKEOVER_MS + HeadlessCore.DECLINE_FLUSH_MS)
         assertEquals(listOf("decline 480", "stop"), steps)
+    }
+
+    @Test
+    fun aFailedAnswerStillGetsThe480After10Seconds() {
+        // WS6: a failed microphone, SRTP or accept check must not cancel the fallback.
+        core.onCoreCreated()
+        ring()
+        advance(3_000)
+        failedAnswer("microphone_denied")
+        advance(HeadlessCore.TAKEOVER_MS - 3_000 - 1)
+        assertEquals(emptyList(), steps)
+        advance(1)
+        assertEquals(listOf("decline 480"), steps)
+        advance(HeadlessCore.DECLINE_FLUSH_MS)
+        assertEquals(listOf("decline 480", "stop"), steps)
+    }
+
+    @Test
+    fun aFailedAnswerThenASuccessfulOneKeepsTheCall() {
+        core.onCoreCreated()
+        ring()
+        failedAnswer("Answer failed")
+        advance(2_000)
+        answer()
+        advance(HeadlessCore.TAKEOVER_MS + HeadlessCore.DECLINE_FLUSH_MS)
+        assertEquals(emptyList(), steps)
     }
 }

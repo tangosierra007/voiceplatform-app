@@ -622,10 +622,9 @@ object LinphoneEngine {
         val t = tracked(callId)
         if (t.state != CallStateMsg.INCOMING) throw VpFlutterError("invalid_state", "Call is not ringing")
         if (headless.owned) {
-            // Answered on the background registration's Core: no 480 or stop
-            // under it, and the service (allowed now: the call screen is in the
-            // foreground) takes the Core over.
-            headless.onCallAnswered()
+            // An answer on the background registration's Core: the service
+            // (allowed now: the call screen is in the foreground) takes the Core
+            // over. The 480 timer stops only once the answer went out, below.
             appContext?.let { ctx ->
                 requestStart(ctx, byApp = false) { e ->
                     if (e != null) log("service start for the answered call failed: ${e.javaClass.simpleName}")
@@ -633,13 +632,17 @@ object LinphoneEngine {
             }
         }
         try {
-            if (!micGranted()) throw VpFlutterError("microphone_denied", "Microphone permission not granted")
-            requireSrtpOnly(c)
-            val params = c.createCallParams(t.call) ?: throw VpFlutterError("invalid_state", "No call params")
-            params.isVideoEnabled = false
-            MediaSecurity.applyToCall(CallEncryption(params))
-            val rc = t.call.acceptWithParams(params)
-            if (rc != 0) throw VpFlutterError("invalid_state", "Answer failed")
+            // Through [HeadlessCore.answer]: only an answer that went out stops
+            // the 480 timer on the background registration's Core.
+            headless.answer {
+                if (!micGranted()) throw VpFlutterError("microphone_denied", "Microphone permission not granted")
+                requireSrtpOnly(c)
+                val params = c.createCallParams(t.call) ?: throw VpFlutterError("invalid_state", "No call params")
+                params.isVideoEnabled = false
+                MediaSecurity.applyToCall(CallEncryption(params))
+                val rc = t.call.acceptWithParams(params)
+                if (rc != 0) throw VpFlutterError("invalid_state", "Answer failed")
+            }
         } catch (e: Throwable) {
             // Not answered after all (the microphone denied, say). The Answer tap
             // took the notification away, so show it again: the call still rings,
