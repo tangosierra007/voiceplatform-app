@@ -171,9 +171,10 @@ object Rules {
     /**
      * A mirror of the contract's `isEmergencyNumber()` (packages/call_engine),
      * which stays the one rule. First only the ASCII digits and `+`, `*` and
-     * `#` are kept (the same characters as the Dart rule). Then, in order,
-     * each at most once: a caller-ID prefix (1831, 1832, #31#, *31#) is
-     * dropped; only the digits count; a 0011 or 00 in front of 61, then 61
+     * `#` are kept (the same characters as the Dart rule). Then every leading
+     * caller-ID prefix (1831, 1832, #31#, *31#; "1831 1831 000" too) is
+     * dropped, and, each at most once: only the digits count; a 0011 or 00 in
+     * front of 61, then 61
      * itself, are read past; after an international form (+61, 0061,
      * 0011 61) a leftover 00 is 000; a trunk 0 is dropped; and what is left
      * must be exactly 000, 112 or 106. The Dart engine refuses these before
@@ -183,7 +184,10 @@ object Rules {
      */
     fun isEmergency(number: String): Boolean {
         val kept = number.filter { it in '0'..'9' || it == '+' || it == '*' || it == '#' }
-        val rest = kept.replaceFirst(CALLER_ID_PREFIX, "")
+        var rest = kept
+        while (CALLER_ID_PREFIX.containsMatchIn(rest)) {
+            rest = rest.replaceFirst(CALLER_ID_PREFIX, "")
+        }
         var d = rest.filter { it in '0'..'9' }
         var international = rest.startsWith("+")
         for (idd in listOf("0011", "00")) {

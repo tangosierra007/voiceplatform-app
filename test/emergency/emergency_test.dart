@@ -91,6 +91,9 @@ void main() {
       ('1832 +61 112', '112'),
       ('#31#106', '106'),
       ('*31# 0061 000', '000'),
+      ('1831 1831 000', '000'),
+      ('#31#*31#112', '112'),
+      ('1832 1831 +61 00', '000'),
     ]) {
       expect(emergencyDialString(typed), want, reason: typed);
     }
@@ -132,6 +135,8 @@ void main() {
     '1831 000',
     '#31#000',
     '*31# +61 112',
+    '1831 1831 000',
+    '#31#1832 +61 00',
   ]) {
     testWidgets('$n opens AppEmergency and never reaches the engine', (
       tester,
@@ -193,6 +198,7 @@ void main() {
     '61 00',
     '1833 000',
     '18310001',
+    '1831 1833 000',
   ]) {
     testWidgets('$n is not an emergency number: it goes to the engine', (
       tester,

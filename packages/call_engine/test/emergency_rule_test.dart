@@ -97,12 +97,12 @@ List<(String, String)> separatedForms() => [
     ('1831${s}000', '000'),
     ('1${s}8${s}3${s}2 106', '106'),
     ('#31#${s}106', '106'),
-    ('${s}#31#000', '000'),
+    ('$s#31#000', '000'),
     ('$s+61 112', '112'),
     ('+61${s}112', '112'),
     ('0${s}0${s}0', '000'),
     ('0011${s}61${s}00', '000'),
-    ('${s}+61 00', '000'),
+    ('$s+61 00', '000'),
   ],
 ];
 
@@ -114,6 +114,25 @@ List<String> separatedNearMisses() => [
     '1831${s}0001',
     '0${s}0${s}0${s}1',
   ],
+];
+
+/// Caller-ID prefixes one after another: every leading one is dropped (TJ),
+/// and the number each dials.
+const repeatedPrefixForms = [
+  ('1831 1831 000', '000'),
+  ('#31#*31#000', '000'),
+  ('1832 1831 112', '112'),
+  ('*31#*31#106', '106'),
+  ('1831 1832 1831 000', '000'),
+  ('#31# #31# #31# 112', '112'),
+  ('#31#1832 000', '000'),
+  ('1832#31#106', '106'),
+  ('*31#1831#31#1832 112', '112'),
+  ('1831 1831 +61 00', '000'),
+  ('#31#1832 +61 00', '000'),
+  ('1832 1832 0011 61 00', '000'),
+  ('1831 1831 0061 112', '112'),
+  ('#31#*31# +61 (0) 106', '106'),
 ];
 
 /// Not emergency numbers. In the shared table too, except the 13 number,
@@ -166,8 +185,14 @@ const nearMisses = [
   '1833 000',
   '1830 112',
   '#32#000',
-  '#31#*31#000',
-  '1831 1831 000',
+  '1831 1833 000',
+  '18311831',
+  '1831 1832',
+  '#31#*31#',
+  '#31#1831',
+  '1831 1831 0001',
+  '#31#1833 112',
+  '1831 1831 61 00',
   // An international prefix without 61, or 61 in the wrong place.
   '0011 000',
   '0011 112',
@@ -200,6 +225,7 @@ void main() {
     for (final typed in [
       for (final n in ['000', '112', '106']) ...writtenForms(n),
       ...zeroZeroForms,
+      for (final (typed, _) in repeatedPrefixForms) typed,
       for (final (typed, _) in separatedForms()) typed,
     ]) {
       expect(emergency, contains(typed), reason: typed.runes.toString());
@@ -217,6 +243,12 @@ void main() {
           expect(isEmergencyNumber(typed), isTrue, reason: typed);
         }
       });
+    }
+  });
+
+  test('every leading caller-ID prefix is dropped, not just one', () {
+    for (final (typed, want) in repeatedPrefixForms) {
+      expect(emergencyNumberIn(typed), want, reason: typed);
     }
   });
 

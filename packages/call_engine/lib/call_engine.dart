@@ -219,9 +219,11 @@ final class EmergencyNumberUseDialler extends CallEngineError {
 ///
 /// First only the ASCII digits and "+", "*" and "#" are kept, so spaces of
 /// any kind, punctuation and invisible characters never hide one (the Kotlin
-/// backstop keeps the same characters). Then, in order, each at most once:
-/// - a caller-ID prefix: "1831", "1832", "#31#" or "*31#" ("1831 000");
-/// - then only the digits count, so a "+", "*" or "#" doesn't hide one;
+/// backstop keeps the same characters). Then, in order:
+/// - every leading caller-ID prefix: "1831", "1832", "#31#" or "*31#"
+///   ("1831 000", "1831 1831 000", "#31#1832 112"; TJ);
+/// - then only the digits count, so a "+", "*" or "#" doesn't hide one, and
+///   each step below applies at most once;
 /// - an international prefix in front of 61: "0011 61" (from Australia) or
 ///   "00 61";
 /// - the country code 61: "+61 000", "61 000", "0061 000", and also
@@ -233,7 +235,11 @@ final class EmergencyNumberUseDialler extends CallEngineError {
 /// "+61 0001" and "1833 000" are not emergency numbers.
 String? emergencyNumberIn(String dialled) {
   final kept = dialled.replaceAll(RegExp(r'[^0-9+*#]'), '');
-  final rest = kept.replaceFirst(RegExp(r'^(?:[#*]31#|183[12])'), '');
+  final prefix = RegExp(r'^(?:[#*]31#|183[12])');
+  var rest = kept;
+  while (prefix.hasMatch(rest)) {
+    rest = rest.replaceFirst(prefix, '');
+  }
   var d = rest.replaceAll(RegExp(r'[^0-9]'), '');
   var international = rest.startsWith('+');
   for (final idd in ['0011', '00']) {
