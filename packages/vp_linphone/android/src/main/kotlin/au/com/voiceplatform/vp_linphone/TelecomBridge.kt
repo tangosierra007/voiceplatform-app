@@ -46,6 +46,8 @@ object TelecomBridge {
 
     private val pending = HashMap<String, CallInfo>()
     private val connections = HashMap<String, VpConnection>()
+    /** The newest snapshot of a call Telecom hasn't made a connection for yet: a quick answer gets there first. */
+    private val beforeConnection = HashMap<String, CallMsg>()
     private var appContext: Context? = null
 
     val hasConnections: Boolean get() = connections.isNotEmpty()
@@ -88,6 +90,7 @@ object TelecomBridge {
             log("placeCall ${info.callId}")
         } catch (e: RuntimeException) {
             // SecurityException without MANAGE_OWN_CALLS, IllegalStateException...
+            beforeConnection.remove(info.callId)
             pending.remove(info.callId)
             log("placeCall refused: ${e.javaClass.simpleName}")
         }
@@ -115,11 +118,13 @@ object TelecomBridge {
 
     /** Every engine snapshot. */
     fun onSnapshot(context: Context, call: CallMsg) {
-        connections[call.id]?.apply(call)
+        val connection = connections[call.id]
+        if (connection != null) connection.apply(call) else if (call.id in pending) beforeConnection[call.id] = call
         if (call.state != CallStateMsg.INCOMING) IncomingCallNotifier.cancel(context, call.id)
         if (call.state == CallStateMsg.ENDED) {
             connections.remove(call.id)
             pending.remove(call.id)
+            beforeConnection.remove(call.id)
         }
     }
 
@@ -152,6 +157,7 @@ object TelecomBridge {
         val c = VpConnection(context.applicationContext, info)
         connections[callId] = c
         log("connection created ${info.callId}")
+        beforeConnection.remove(callId)?.let { c.apply(it) }
         return c
     }
 
@@ -159,6 +165,7 @@ object TelecomBridge {
         val bundleKey = if (incoming) TelecomManager.EXTRA_INCOMING_CALL_EXTRAS else TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS
         val callId = request?.extras?.getBundle(bundleKey)?.getString(EXTRA_CALL_ID)
             ?: request?.extras?.getString(EXTRA_CALL_ID) ?: return
+        beforeConnection.remove(callId)
         val info = pending.remove(callId)
         log("connection refused by Telecom $callId")
         if (incoming && info != null) appContext?.let { IncomingCallNotifier.show(it, info) }

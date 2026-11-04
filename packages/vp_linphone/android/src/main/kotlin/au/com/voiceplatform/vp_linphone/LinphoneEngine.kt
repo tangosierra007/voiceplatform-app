@@ -223,6 +223,10 @@ object LinphoneEngine {
         // A config with no file: nothing (auth info included) is written to disk.
         val config = factory.createConfigFromString("")
         lastInstance?.let { config.setString("misc", "uuid", it) }
+        // Telecom owns hold (VpConnection.onHold) and takes the audio focus just
+        // after placeCall. Left at its default, liblinphone reads that as a loss
+        // and pauses a call already answered, for good: *97 on a fresh start.
+        config.setBool("audio", "android_pause_calls_when_audio_focus_lost", false)
         val c = factory.createCoreWithConfig(config, context)
         coreInstance = lastInstance
         try {
