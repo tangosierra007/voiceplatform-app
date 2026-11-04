@@ -40,7 +40,7 @@ We don't sell your data or share it for advertising. Google delivers push messag
 ## How long we keep it
 
 - Call and billing records: up to 10 years.
-- Call recordings, if your workplace records calls: 60 days by default. Your workplace can choose a different period.
+- Call recordings, if your workplace records calls: 90 days by default. Your workplace can choose a different period.
 - Voicemail messages and texts: 365 days by default. Your workplace can choose a different period.
 - Crash reports: 90 days.
 - Call logs you send to support: 30 days.
@@ -50,7 +50,7 @@ We don't sell your data or share it for advertising. Google delivers push messag
 
 Everything the app sends travels encrypted. Sign-in, data and call setup use TLS, and your voice uses SRTP. The app won't connect a call without it.
 
-When you sign out, or an administrator signs your phone out, the app deletes your sign-in details, its settings and any crash reports still waiting to be sent. A short technical log of your most recent calls, cleaned as described above, can stay in the app's private storage until newer calls replace it or you uninstall the app.
+When you sign out, or an administrator signs your phone out, the app deletes your sign-in details, its settings, its call logs and any crash reports still waiting to be sent.
 
 ## Your choices
 
