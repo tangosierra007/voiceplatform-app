@@ -2,6 +2,7 @@
 // sign-in, and again after a denied call at most once a day.
 import 'dart:async';
 
+import 'package:call_engine/call_engine.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -220,6 +221,39 @@ void main() {
       await pumpEventQueue();
       expect(c.read(fullScreenPromptProvider), isFalse);
       engine.remoteHangup(second);
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isTrue);
+    });
+
+    test('an outgoing call ending last still shows the waiting sheet', () async {
+      // An engine that registers at once and leaves outgoing calls to the test.
+      await engine.dispose();
+      engine = FakeCallEngine(
+        outgoing: OutgoingScript.manual,
+        registerAfter: Duration.zero,
+      );
+      extras.fullScreenAllowed = false;
+      final c = await container();
+      c.listen(fullScreenPromptProvider, (_, _) {});
+      final incoming = await deniedCall();
+      await engine.register(
+        const SipAccount(
+          authUsername: 'mock-202-pixel8',
+          password: 'test-password',
+          domain: 'sip.demo-co.example',
+          outboundProxy: 'sip:sip.voiceplatform.example:5061;transport=tls',
+          displayName: 'Ava Nguyen',
+          expiresSeconds: 600,
+          instanceId: 'urn:uuid:60000000-0000-4000-8000-000000000001',
+        ),
+      );
+      await pumpEventQueue();
+      final outgoing = await engine.call('0255501234');
+      await pumpEventQueue();
+      engine.remoteHangup(incoming);
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isFalse);
+      engine.remoteHangup(outgoing);
       await pumpEventQueue();
       expect(c.read(fullScreenPromptProvider), isTrue);
     });

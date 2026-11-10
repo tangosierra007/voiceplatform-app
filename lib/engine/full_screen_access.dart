@@ -65,16 +65,19 @@ class FullScreenPromptNotifier extends Notifier<bool> {
     final rang = <String, Future<bool>>{};
     var pending = false;
     Future<void> onCall(CallSnapshot c) async {
-      if (c.direction != CallDirection.incoming && !rang.containsKey(c.id)) {
+      if (c.direction == CallDirection.incoming || rang.containsKey(c.id)) {
+        final denied = rang[c.id] ??= extras.canUseFullScreen().then(
+          (allowed) => !allowed,
+          onError: (_) => false,
+        );
+        if (c.state != CallState.ended) return;
+        if (await denied) pending = true;
+        rang.remove(c.id);
+      } else if (c.state != CallState.ended) {
+        // An outgoing call: only its end matters, to show a sheet put off
+        // while it was up.
         return;
       }
-      final denied = rang[c.id] ??= extras.canUseFullScreen().then(
-        (allowed) => !allowed,
-        onError: (_) => false,
-      );
-      if (c.state != CallState.ended) return;
-      if (await denied) pending = true;
-      rang.remove(c.id);
       final left = engine.activeCalls.any(
         (o) => o.id != c.id && o.state != CallState.ended,
       );
