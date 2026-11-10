@@ -29,7 +29,9 @@ A normal permission with no declaration form; listed here for the permissions re
 
 Declaration: **calling app** (the app's core function is making and receiving calls).
 
-> VoicePlatform rings for incoming calls on the user's work number. On a locked phone it shows the incoming call screen with Answer and Decline through a full-screen intent, as the phone's own dialler does. When the phone is unlocked it shows a heads-up notification instead. Full-screen intents are used for incoming calls only.
+> VoicePlatform is a business calling app. It rings for incoming calls on the user's work number. On a locked phone it shows the incoming call screen with Answer and Decline through a full-screen intent, as the phone's own dialler does. When the phone is unlocked it shows a heads-up notification instead. Full-screen intents are used for incoming calls only. If the user turns full-screen alerts off, the app tells them that calls can't show on the locked screen and opens the setting so they can turn it back on.
+
+Since 1.0.2 (task 2): if access is off, the app asks once after sign-in and again after a call that rang without it (at most once a day), and the Me screen shows a card with a link to the setting. Play grants the permission at install only once Google has approved this declaration, and Play sends nothing for review until the app dashboard (store listing and every App content item) is complete.
 
 ## Permissions not requested
 
