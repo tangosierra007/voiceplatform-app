@@ -12,6 +12,7 @@ import '../../calls/me_state.dart';
 import '../../calls/numbers.dart';
 import '../../diagnostics/diagnostics.dart';
 import '../../engine/engine_provider.dart';
+import '../../engine/full_screen_access.dart';
 import '../../engine/phone_extras.dart';
 import '../../features/me/me_data.dart';
 import '../../net/api.dart';
@@ -72,6 +73,7 @@ class MeScreen extends ConsumerWidget {
     final hours = ref.watch(officeHoursProvider).value;
     final devices = ref.watch(devicesProvider).value;
     final battery = ref.watch(batteryCardProvider).value;
+    final fullScreen = ref.watch(fullScreenAccessProvider);
     final version = ref.watch(apiConfigProvider).appVersion;
     final canHours = me?.permissions.officeHours ?? false;
     final canRecordings = me?.permissions.recordings ?? false;
@@ -149,6 +151,7 @@ class MeScreen extends ConsumerWidget {
               ),
             const _StatusPicker(),
             if (battery != null) _BatteryCard(status: battery),
+            if (!fullScreen) const _FullScreenCard(),
             const _Band('Calls'),
             _MeRow(
               icon: VpIcon.phone,
@@ -677,6 +680,43 @@ class _BatteryCard extends ConsumerWidget {
           VpLink(
             'Open battery settings',
             onTap: () => ref.read(phoneExtrasProvider).openBatterySettings(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-screen notifications are off (Android 14+): shown until they're on.
+class _FullScreenCard extends ConsumerWidget {
+  const _FullScreenCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.vp;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.statusWarn),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Calls can't show on your locked screen",
+            style: VpType.body.copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              fontVariations: const [FontVariation('wght', 700)],
+              color: c.text,
+            ),
+          ),
+          VpLink(
+            'Open settings',
+            onTap: () => ref.read(phoneExtrasProvider).openFullScreenSettings(),
           ),
         ],
       ),

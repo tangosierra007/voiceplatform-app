@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../calls/directory.dart';
 import '../diagnostics/scrubber.dart';
+import '../engine/full_screen_access.dart' show fullScreenPromptProvider;
 import '../features/messages/messages_data.dart';
 import '../features/recents/recents_data.dart' show pickedRecentProvider;
 import '../net/api.dart';
@@ -119,12 +120,14 @@ class SignInFailure implements Exception {
 final localDataWipersProvider = Provider<List<Future<void> Function()>>(
   (ref) => [
     // Settings and remembered choices (theme, biometric unlock, contacts
-    // asked, update banner, the last known tab set): back to a new install.
+    // asked, update banner, full-screen sheet, the last known tab set): back
+    // to a new install.
     () async {
       await ref.read(sharedPreferencesProvider).clear();
       ref.invalidate(themePreferenceProvider);
       ref.invalidate(lastKnownShellProvider);
       ref.invalidate(biometricUnlockProvider);
+      ref.invalidate(fullScreenPromptProvider);
     },
     // The address-book values held for the scrubber, and the contacts read:
     // signed in again, they are read and registered afresh.

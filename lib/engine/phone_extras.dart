@@ -22,6 +22,18 @@ abstract interface class PhoneExtras {
   Future<VpBatteryStatus?> battery();
 
   Future<void> openBatterySettings();
+
+  /// Whether an incoming call may show over the lock screen (full-screen
+  /// notifications, Android 14 and later). True where it can't be told, so
+  /// a failed check never nags.
+  Future<bool> canUseFullScreen();
+
+  /// Android's full-screen notifications page for this app.
+  Future<void> openFullScreenSettings();
+
+  /// The id of each call that rang while full-screen was denied, so it
+  /// showed only as a notification.
+  Stream<String> get fullScreenDeniedCalls;
 }
 
 class _LinphoneExtras implements PhoneExtras {
@@ -52,6 +64,27 @@ class _LinphoneExtras implements PhoneExtras {
   @override
   Future<void> openBatterySettings() =>
       engine.openBatteryOptimizationSettings();
+
+  @override
+  Future<bool> canUseFullScreen() async {
+    try {
+      return await engine.canUseFullScreenIntent();
+    } catch (_) {
+      return true;
+    }
+  }
+
+  @override
+  Future<void> openFullScreenSettings() async {
+    try {
+      await engine.openFullScreenIntentSettings();
+    } catch (_) {
+      // No settings page to open: nothing more to do.
+    }
+  }
+
+  @override
+  Stream<String> get fullScreenDeniedCalls => engine.fullScreenIntentDenied;
 }
 
 class _NoExtras implements PhoneExtras {
@@ -68,6 +101,15 @@ class _NoExtras implements PhoneExtras {
 
   @override
   Future<void> openBatterySettings() async {}
+
+  @override
+  Future<bool> canUseFullScreen() async => true;
+
+  @override
+  Future<void> openFullScreenSettings() async {}
+
+  @override
+  Stream<String> get fullScreenDeniedCalls => const Stream.empty();
 }
 
 final phoneExtrasProvider = Provider<PhoneExtras>((ref) {

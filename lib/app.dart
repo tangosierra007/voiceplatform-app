@@ -5,6 +5,7 @@ import 'auth/app_lock.dart';
 import 'auth/links.dart';
 import 'auth/version.dart';
 import 'engine/engine_provider.dart';
+import 'engine/full_screen_access.dart';
 import 'engine/push_handler.dart';
 import 'nav/call_flow.dart';
 import 'nav/routes.dart';
@@ -34,6 +35,9 @@ class _VoicePlatformAppState extends ConsumerState<VoicePlatformApp> {
     ref.watch(engineSessionProvider);
     // Data pushes: a text, a voicemail, signed out, new config.
     ref.watch(pushHandlerProvider);
+    // Kept listening across call screens, so a call that rang while
+    // full-screen access was denied is noticed when it ends.
+    ref.listen(fullScreenPromptProvider, (_, _) {});
     // Kept listening, so the audio routes are known when a call screen opens.
     ref.watch(audioStateProvider);
     final preference = ref.watch(themePreferenceProvider);
