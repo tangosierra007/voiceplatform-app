@@ -59,6 +59,17 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   static const _signIn = 'signIn';
   static const _afterCall = 'afterCall';
 
+  /// When this sign-in began: the history check's baseline when no sheet
+  /// has shown yet (access was allowed at sign-in, turned off later).
+  static const sinceKey = 'vp.fullScreenPromptSince';
+
+  /// History is read again only after this long: opening the app over and
+  /// over while denied doesn't ask the API each time.
+  static const historyEvery = Duration(minutes: 2);
+
+  bool _historyBusy = false;
+  DateTime? _historyReadAt;
+
   @override
   bool build() {
     final extras = ref.watch(phoneExtrasProvider);
@@ -162,6 +173,10 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   /// Straight after the notifications prompt: once, if access is denied.
   Future<void> afterSignIn() async {
     try {
+      final prefs = ref.read(sharedPreferencesProvider);
+      if (prefs.getString(sinceKey) == null) {
+        await prefs.setString(sinceKey, _now().toIso8601String());
+      }
       if (!await _denied() || !ref.mounted) return;
       if (ref.read(sharedPreferencesProvider).getBool(shownKey) ?? false) {
         return;
@@ -184,28 +199,40 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   }
 
   /// On opening the app (start and each resume), still denied: an incoming
-  /// call in history since the sheet last showed asks again, at most once a
-  /// day. This catches a call the app never saw, answered from the lock
-  /// screen without its screens coming to the front. Before the sheet has
-  /// shown after sign-in, [afterSignIn] asks instead. A failed history
-  /// read asks nothing.
+  /// call in history since the sheet last showed (or, if it never has,
+  /// since sign-in) asks again, at most once a day. This catches a call the
+  /// app never saw, answered from the lock screen without its screens
+  /// coming to the front. One read at a time, and none within
+  /// [historyEvery] of the last. A failed history read asks nothing.
   Future<void> checkHistory() async {
-    if (!ref.mounted || state) return;
+    if (!ref.mounted || state || _historyBusy) return;
+    _historyBusy = true;
     try {
       if (ref.read(accessTokenProvider) == null) return;
       if (ref.read(authProvider) is! SignedIn) return;
-      if (!(ref.read(sharedPreferencesProvider).getBool(shownKey) ?? false)) {
-        return;
-      }
-      final last = _lastShown();
+      final since = DateTime.tryParse(
+        ref.read(sharedPreferencesProvider).getString(sinceKey) ?? '',
+      );
+      final shown = _lastShown();
+      final last = since == null
+          ? shown
+          : shown == null || since.isAfter(shown)
+          ? since
+          : shown;
       if (last == null || _afterCallShownToday()) return;
+      final readAt = _historyReadAt;
+      final now = _now();
+      if (readAt != null && now.difference(readAt) < historyEvery) return;
       if (!await _denied() || !ref.mounted) return;
+      _historyReadAt = now;
       final latest = await ref.read(latestIncomingCallProvider)();
       if (!ref.mounted || latest == null || !latest.isAfter(last)) return;
       if (_afterCallShownToday()) return;
       _ask(_afterCall);
     } catch (_) {
       // Offline or refused: no sheet.
+    } finally {
+      _historyBusy = false;
     }
   }
 

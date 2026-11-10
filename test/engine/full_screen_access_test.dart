@@ -404,6 +404,7 @@ void main() {
       expect(c.read(fullScreenPromptProvider), isFalse);
       // A call the app never saw, answered from the lock screen.
       history = () async => DateTime(2026, 11, 10, 8, 40);
+      now = now.add(const Duration(minutes: 3));
       resumes.add(null);
       await pumpEventQueue();
       expect(c.read(fullScreenPromptProvider), isTrue);
@@ -438,7 +439,7 @@ void main() {
       expect(c.read(fullScreenPromptProvider), isFalse);
     });
 
-    test('not shown since sign-in: left to the after-sign-in sheet', () async {
+    test('no sign-in baseline and never shown: no history read', () async {
       history = () async => DateTime(2026, 11, 10, 8, 40);
       final c = await opened(stored: {});
       expect(c.read(fullScreenPromptProvider), isFalse);
@@ -451,6 +452,7 @@ void main() {
       final c = await opened(stored: shownAt('2026-11-9'));
       expect(c.read(fullScreenPromptProvider), isFalse);
       history = () async => DateTime(2026, 11, 10, 7);
+      now = now.add(const Duration(minutes: 3));
       resumes.add(null);
       await pumpEventQueue();
       expect(c.read(fullScreenPromptProvider), isTrue);
@@ -463,6 +465,74 @@ void main() {
         prefs.getString(FullScreenPromptNotifier.dayKey),
         now.toIso8601String(),
       );
+    });
+
+    test('history read at most once in 2 minutes', () async {
+      final c = await opened(stored: shownAt(yesterday10));
+      expect(historyReads, 1);
+      // 30 s later: not read again.
+      now = now.add(const Duration(seconds: 30));
+      resumes.add(null);
+      await pumpEventQueue();
+      expect(historyReads, 1);
+      // 3 minutes after the first read: read again, and a new call asks.
+      history = () async => DateTime(2026, 11, 10, 9, 2);
+      now = DateTime(2026, 11, 10, 9, 3);
+      resumes.add(null);
+      await pumpEventQueue();
+      expect(historyReads, 2);
+      expect(c.read(fullScreenPromptProvider), isTrue);
+    });
+
+    test('one history read at a time', () async {
+      final held = Completer<DateTime?>();
+      history = () => held.future;
+      final c = await opened(stored: shownAt(yesterday10));
+      expect(historyReads, 1);
+      now = now.add(const Duration(minutes: 5));
+      resumes.add(null);
+      await pumpEventQueue();
+      expect(historyReads, 1);
+      held.complete(null);
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isFalse);
+    });
+
+    test('allowed at sign-in, turned off later: a call after sign-in asks '
+        'on the next open', () async {
+      // Signed in at 09:00 with access allowed: no sheet, nothing shown.
+      extras.fullScreenAllowed = true;
+      final c = await opened(stored: {});
+      await c.read(fullScreenPromptProvider.notifier).afterSignIn();
+      expect(c.read(fullScreenPromptProvider), isFalse);
+      expect(
+        prefs.getString(FullScreenPromptNotifier.sinceKey),
+        now.toIso8601String(),
+      );
+      // Turned off later; a call at 12:10 the app never saw.
+      extras.fullScreenAllowed = false;
+      history = () async => DateTime(2026, 11, 10, 12, 10);
+      now = DateTime(2026, 11, 10, 12, 30);
+      resumes.add(null);
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isTrue);
+    });
+
+    test('a call before sign-in never asks', () async {
+      history = () async => DateTime(2026, 11, 10, 8, 30);
+      final c = await opened(
+        stored: {
+          FullScreenPromptNotifier.sinceKey: DateTime(
+            2026,
+            11,
+            10,
+            8,
+            45,
+          ).toIso8601String(),
+        },
+      );
+      expect(historyReads, 1);
+      expect(c.read(fullScreenPromptProvider), isFalse);
     });
 
     test('a call after the sign-in sheet the same day: the sheet', () async {
