@@ -268,6 +268,37 @@ void main() {
       await pumpEventQueue();
       expect(c.read(fullScreenPromptProvider), isFalse);
     });
+
+    test('the sign-in sheet does not use up the day', () async {
+      // Device tests 4 and 5: signed in at 09:00, the sheet shows.
+      extras.fullScreenAllowed = false;
+      final c = await container();
+      c.listen(fullScreenPromptProvider, (_, _) {});
+      await c.read(fullScreenPromptProvider.notifier).afterSignIn();
+      expect(c.read(fullScreenPromptProvider), isTrue);
+      await c.read(fullScreenPromptProvider.notifier).shown();
+      expect(prefs.getString(FullScreenPromptNotifier.kindKey), 'signIn');
+
+      // 10:00, a denied call: the sheet again.
+      now = DateTime(2026, 11, 10, 10);
+      engine.remoteHangup(await deniedCall());
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isTrue);
+      await c.read(fullScreenPromptProvider.notifier).shown();
+      expect(prefs.getString(FullScreenPromptNotifier.kindKey), 'afterCall');
+
+      // 11:00, another: not again today.
+      now = DateTime(2026, 11, 10, 11);
+      engine.remoteHangup(await deniedCall());
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isFalse);
+
+      // The next day: once more.
+      now = DateTime(2026, 11, 11, 9);
+      engine.remoteHangup(await deniedCall());
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isTrue);
+    });
   });
 
   test(
@@ -388,9 +419,14 @@ void main() {
       expect(historyReads, 0);
     });
 
-    test('already shown today: no sheet', () async {
+    test('already shown after a call today: no sheet', () async {
       history = () async => DateTime(2026, 11, 10, 8, 40);
-      final c = await opened(stored: shownAt(DateTime(2026, 11, 10, 8)));
+      final c = await opened(
+        stored: {
+          ...shownAt(DateTime(2026, 11, 10, 8)),
+          FullScreenPromptNotifier.kindKey: 'afterCall',
+        },
+      );
       expect(c.read(fullScreenPromptProvider), isFalse);
       expect(historyReads, 0);
     });
@@ -427,6 +463,18 @@ void main() {
         prefs.getString(FullScreenPromptNotifier.dayKey),
         now.toIso8601String(),
       );
+    });
+
+    test('a call after the sign-in sheet the same day: the sheet', () async {
+      // The sign-in sheet at 08:00 today, a call at 08:40 the app never saw.
+      history = () async => DateTime(2026, 11, 10, 8, 40);
+      final c = await opened(
+        stored: {
+          ...shownAt(DateTime(2026, 11, 10, 8)),
+          FullScreenPromptNotifier.kindKey: 'signIn',
+        },
+      );
+      expect(c.read(fullScreenPromptProvider), isTrue);
     });
   });
 }

@@ -54,6 +54,11 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   static const shownKey = 'vp.fullScreenPromptShown';
   static const dayKey = 'vp.fullScreenPromptDay';
 
+  /// Which sheet showed last: `signIn` or `afterCall`.
+  static const kindKey = 'vp.fullScreenPromptKind';
+  static const _signIn = 'signIn';
+  static const _afterCall = 'afterCall';
+
   @override
   bool build() {
     final extras = ref.watch(phoneExtrasProvider);
@@ -133,9 +138,22 @@ class FullScreenPromptNotifier extends Notifier<bool> {
     return DateTime.tryParse(v);
   }
 
-  bool _shownToday() {
+  /// The once-a-day limit: only a sheet after a call uses up the day, not
+  /// the one after sign-in. With no [kindKey] (an earlier build), the last
+  /// showing counts as after a call, so it never asks twice in a day.
+  bool _afterCallShownToday() {
+    final kind = ref.read(sharedPreferencesProvider).getString(kindKey);
+    if (kind == _signIn) return false;
     final last = _lastShown();
     return last != null && _sameDay(last.toLocal(), _now().toLocal());
+  }
+
+  /// What the waiting sheet is for: [_signIn] or [_afterCall].
+  String _kind = _afterCall;
+
+  void _ask(String kind) {
+    _kind = kind;
+    state = true;
   }
 
   Future<bool> _denied() async =>
@@ -148,7 +166,7 @@ class FullScreenPromptNotifier extends Notifier<bool> {
       if (ref.read(sharedPreferencesProvider).getBool(shownKey) ?? false) {
         return;
       }
-      state = true;
+      _ask(_signIn);
     } catch (_) {
       // No answer or no storage: better not to ask than to ask wrongly.
     }
@@ -157,9 +175,9 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   Future<void> _afterDeniedCall() async {
     if (!ref.mounted) return;
     try {
-      if (_shownToday()) return;
+      if (_afterCallShownToday()) return;
       if (!await _denied() || !ref.mounted) return;
-      state = true;
+      _ask(_afterCall);
     } catch (_) {
       // As above.
     }
@@ -180,12 +198,12 @@ class FullScreenPromptNotifier extends Notifier<bool> {
         return;
       }
       final last = _lastShown();
-      if (last == null || _shownToday()) return;
+      if (last == null || _afterCallShownToday()) return;
       if (!await _denied() || !ref.mounted) return;
       final latest = await ref.read(latestIncomingCallProvider)();
       if (!ref.mounted || latest == null || !latest.isAfter(last)) return;
-      if (_shownToday()) return;
-      state = true;
+      if (_afterCallShownToday()) return;
+      _ask(_afterCall);
     } catch (_) {
       // Offline or refused: no sheet.
     }
@@ -195,13 +213,14 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   /// remembered.
   void skip() => state = false;
 
-  /// The sheet is on screen: not again after sign-in, nor again today, and
-  /// only for incoming calls after this moment.
+  /// The sheet is on screen: not again after sign-in, only for incoming
+  /// calls after this moment, and (after a call) not again today.
   Future<void> shown() async {
     state = false;
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setBool(shownKey, true);
     await prefs.setString(dayKey, _now().toIso8601String());
+    await prefs.setString(kindKey, _kind);
   }
 }
 
