@@ -10,6 +10,7 @@ import '../auth/auth.dart';
 import '../calls/call_actions.dart';
 import '../net/api.dart';
 import 'fake_call_engine.dart';
+import 'full_screen_access.dart';
 
 /// Which CallEngine the build uses: `--dart-define=VP_ENGINE=linphone|fake`.
 /// Debug builds default to the fake (screens without SIP); release and
@@ -152,7 +153,17 @@ final engineSessionProvider = Provider<void>((ref) {
           askedNotifications = true;
           // Incoming-call notifications need it on Android 13+ (WS3 3.2):
           // asked once signed in, when the app can start ringing.
-          unawaited(ref.read(micPermissionProvider).requestNotifications());
+          // Then, once that is answered, full-screen access, so a call can
+          // show on a locked phone (Android 14+).
+          unawaited(
+            ref
+                .read(micPermissionProvider)
+                .requestNotifications()
+                .whenComplete(
+                  () =>
+                      ref.read(fullScreenPromptProvider.notifier).afterSignIn(),
+                ),
+          );
         }
       }
       // The FCM token for RFC 8599 (pn-provider fcm, pn-param

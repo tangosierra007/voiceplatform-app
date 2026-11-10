@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,9 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../auth/version.dart';
 import '../calls/directory.dart';
 import '../calls/me_state.dart';
+import '../engine/full_screen_access.dart';
 import '../net/api.dart';
 import '../net/live_events.dart';
 import '../screens/signin/update_screen.dart';
+import 'full_screen_sheet.dart';
 import 'layout.dart';
 import 'me_failed_banner.dart';
 import 'shell_status.dart';
@@ -34,6 +38,25 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   StatefulNavigationShell get shell => widget.shell;
+
+  @override
+  void initState() {
+    super.initState();
+    // Full-screen access, asked over the tabs: after sign-in, or after a
+    // call that rang while it was denied (one that may have ended before
+    // the tabs came back).
+    ref.listenManual(fullScreenPromptProvider, (_, show) {
+      if (show) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _fullScreen());
+      }
+    }, fireImmediately: true);
+  }
+
+  void _fullScreen() {
+    if (!mounted || !ref.read(fullScreenPromptProvider)) return;
+    unawaited(ref.read(fullScreenPromptProvider.notifier).shown());
+    unawaited(showFullScreenSheet(context));
+  }
 
   @override
   Widget build(BuildContext context) {
