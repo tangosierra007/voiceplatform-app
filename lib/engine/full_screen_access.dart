@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:call_engine/call_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/auth.dart' show clockProvider;
+import '../auth/auth.dart';
+import '../net/api.dart';
 import '../theme/theme_preference.dart';
 import 'engine_provider.dart';
 import 'phone_extras.dart';
@@ -93,6 +94,15 @@ class FullScreenPromptNotifier extends Notifier<bool> {
       }),
       engine.calls.listen((c) => unawaited(onCall(c))),
     ];
+    // Calls the app never saw: history, each time the app opens.
+    final resumes = ref
+        .watch(appResumesProvider)
+        .listen((_) => unawaited(checkHistory()));
+    ref.onDispose(resumes.cancel);
+    ref.listen(accessTokenProvider, (was, token) {
+      if (was == null && token != null) unawaited(checkHistory());
+    });
+    scheduleMicrotask(checkHistory);
     for (final c in engine.activeCalls) {
       unawaited(onCall(c));
     }
@@ -104,9 +114,28 @@ class FullScreenPromptNotifier extends Notifier<bool> {
     return false;
   }
 
-  String _today() {
-    final d = ref.read(clockProvider)();
-    return '${d.year}-${d.month}-${d.day}';
+  DateTime _now() => ref.read(clockProvider)();
+
+  static bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// When the sheet last showed, from [dayKey]: a full timestamp, or from
+  /// an earlier build only the day (`2026-11-10`), read as the end of that
+  /// day, so a call that day never asks again. Null when never shown.
+  DateTime? _lastShown() {
+    final v = ref.read(sharedPreferencesProvider).getString(dayKey);
+    if (v == null) return null;
+    final day = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(v);
+    if (day != null) {
+      final [y, m, d] = [for (var i = 1; i <= 3; i++) int.parse(day[i]!)];
+      return DateTime(y, m, d + 1).subtract(const Duration(milliseconds: 1));
+    }
+    return DateTime.tryParse(v);
+  }
+
+  bool _shownToday() {
+    final last = _lastShown();
+    return last != null && _sameDay(last.toLocal(), _now().toLocal());
   }
 
   Future<bool> _denied() async =>
@@ -128,8 +157,7 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   Future<void> _afterDeniedCall() async {
     if (!ref.mounted) return;
     try {
-      final prefs = ref.read(sharedPreferencesProvider);
-      if (prefs.getString(dayKey) == _today()) return;
+      if (_shownToday()) return;
       if (!await _denied() || !ref.mounted) return;
       state = true;
     } catch (_) {
@@ -137,15 +165,57 @@ class FullScreenPromptNotifier extends Notifier<bool> {
     }
   }
 
+  /// On opening the app (start and each resume), still denied: an incoming
+  /// call in history since the sheet last showed asks again, at most once a
+  /// day. This catches a call the app never saw, answered from the lock
+  /// screen without its screens coming to the front. Before the sheet has
+  /// shown after sign-in, [afterSignIn] asks instead. A failed history
+  /// read asks nothing.
+  Future<void> checkHistory() async {
+    if (!ref.mounted || state) return;
+    try {
+      if (ref.read(accessTokenProvider) == null) return;
+      if (ref.read(authProvider) is! SignedIn) return;
+      if (!(ref.read(sharedPreferencesProvider).getBool(shownKey) ?? false)) {
+        return;
+      }
+      final last = _lastShown();
+      if (last == null || _shownToday()) return;
+      if (!await _denied() || !ref.mounted) return;
+      final latest = await ref.read(latestIncomingCallProvider)();
+      if (!ref.mounted || latest == null || !latest.isAfter(last)) return;
+      if (_shownToday()) return;
+      state = true;
+    } catch (_) {
+      // Offline or refused: no sheet.
+    }
+  }
+
   /// Allowed by the time the sheet would show: nothing to ask, and nothing
   /// remembered.
   void skip() => state = false;
 
-  /// The sheet is on screen: not again after sign-in, nor again today.
+  /// The sheet is on screen: not again after sign-in, nor again today, and
+  /// only for incoming calls after this moment.
   Future<void> shown() async {
     state = false;
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setBool(shownKey, true);
-    await prefs.setString(dayKey, _today());
+    await prefs.setString(dayKey, _now().toIso8601String());
   }
 }
+
+/// The time of the newest incoming call in the first page of history
+/// (`GET /history`, newest first, 10 entries), or null with none. Tests
+/// replace it.
+final latestIncomingCallProvider = Provider<Future<DateTime?> Function()>(
+  (ref) => () async {
+    final page = await ref.read(appApiProvider).history.getHistory(limit: 10);
+    DateTime? latest;
+    for (final e in page.items) {
+      if (e.direction != HistoryEntryDirection.incoming) continue;
+      if (latest == null || e.at.isAfter(latest)) latest = e.at;
+    }
+    return latest;
+  },
+);

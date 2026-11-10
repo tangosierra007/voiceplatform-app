@@ -308,6 +308,127 @@ void main() {
       expect(mic.notificationAsks, 1);
     },
   );
+
+  group('history on opening the app', () {
+    late Future<DateTime?> Function() history;
+    late int historyReads;
+
+    Future<ProviderContainer> opened({
+      required Map<String, Object> stored,
+    }) async {
+      SharedPreferences.setMockInitialValues(stored);
+      prefs = await SharedPreferences.getInstance();
+      final c = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          phoneExtrasProvider.overrideWithValue(extras),
+          callEngineProvider.overrideWithValue(engine),
+          appResumesProvider.overrideWithValue(resumes.stream),
+          clockProvider.overrideWithValue(() => now),
+          authProvider.overrideWith(() => ScriptedAuth(const SignedIn('d1'))),
+          latestIncomingCallProvider.overrideWithValue(() {
+            historyReads++;
+            return history();
+          }),
+        ],
+      );
+      addTearDown(c.dispose);
+      c.listen(fullScreenPromptProvider, (_, _) {});
+      // The app starts: the access token arrives.
+      c.read(accessTokenProvider.notifier).set('tok');
+      await pumpEventQueue();
+      return c;
+    }
+
+    // Shown yesterday at 10:00, once since sign-in.
+    final yesterday10 = DateTime(2026, 11, 9, 10);
+    Map<String, Object> shownAt(Object when) => {
+      FullScreenPromptNotifier.shownKey: true,
+      FullScreenPromptNotifier.dayKey: when is DateTime
+          ? when.toIso8601String()
+          : when,
+    };
+
+    setUp(() {
+      extras.fullScreenAllowed = false;
+      historyReads = 0;
+      history = () async => null;
+    });
+
+    test('an incoming call before the sheet last showed: no sheet', () async {
+      history = () async => DateTime(2026, 11, 9, 9, 30);
+      final c = await opened(stored: shownAt(yesterday10));
+      expect(historyReads, greaterThan(0));
+      expect(c.read(fullScreenPromptProvider), isFalse);
+    });
+
+    test('an incoming call after it showed: the sheet', () async {
+      history = () async => DateTime(2026, 11, 9, 21, 5).toUtc();
+      final c = await opened(stored: shownAt(yesterday10));
+      expect(c.read(fullScreenPromptProvider), isTrue);
+    });
+
+    test('checked again on each resume', () async {
+      final c = await opened(stored: shownAt(yesterday10));
+      expect(c.read(fullScreenPromptProvider), isFalse);
+      // A call the app never saw, answered from the lock screen.
+      history = () async => DateTime(2026, 11, 10, 8, 40);
+      resumes.add(null);
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isTrue);
+    });
+
+    test('access allowed: never a sheet', () async {
+      extras.fullScreenAllowed = true;
+      history = () async => DateTime(2026, 11, 10, 8, 40);
+      final c = await opened(stored: shownAt(yesterday10));
+      resumes.add(null);
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isFalse);
+      expect(historyReads, 0);
+    });
+
+    test('already shown today: no sheet', () async {
+      history = () async => DateTime(2026, 11, 10, 8, 40);
+      final c = await opened(stored: shownAt(DateTime(2026, 11, 10, 8)));
+      expect(c.read(fullScreenPromptProvider), isFalse);
+      expect(historyReads, 0);
+    });
+
+    test('history fails: no sheet', () async {
+      history = () async => throw Exception('offline');
+      final c = await opened(stored: shownAt(yesterday10));
+      expect(historyReads, greaterThan(0));
+      expect(c.read(fullScreenPromptProvider), isFalse);
+    });
+
+    test('not shown since sign-in: left to the after-sign-in sheet', () async {
+      history = () async => DateTime(2026, 11, 10, 8, 40);
+      final c = await opened(stored: {});
+      expect(c.read(fullScreenPromptProvider), isFalse);
+      expect(historyReads, 0);
+    });
+
+    test('a day-only value from an earlier build counts to the end of that '
+        'day', () async {
+      history = () async => DateTime(2026, 11, 9, 20);
+      final c = await opened(stored: shownAt('2026-11-9'));
+      expect(c.read(fullScreenPromptProvider), isFalse);
+      history = () async => DateTime(2026, 11, 10, 7);
+      resumes.add(null);
+      await pumpEventQueue();
+      expect(c.read(fullScreenPromptProvider), isTrue);
+    });
+
+    test('shown stores the exact moment', () async {
+      final c = await opened(stored: {});
+      await c.read(fullScreenPromptProvider.notifier).shown();
+      expect(
+        prefs.getString(FullScreenPromptNotifier.dayKey),
+        now.toIso8601String(),
+      );
+    });
+  });
 }
 
 class _Auth extends ScriptedAuth {
