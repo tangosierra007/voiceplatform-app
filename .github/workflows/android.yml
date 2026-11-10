@@ -298,7 +298,7 @@ jobs:
           serviceAccountJson: ${{ runner.temp }}/play-upload.json
           packageName: ${{ env.APP_ID }}
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
-          track: internal
+          tracks: internal
           status: ${{ github.event_name == 'workflow_dispatch' && inputs.release_status || 'completed' }}
       - name: Remove key files
         if: always()
