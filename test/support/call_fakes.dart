@@ -270,13 +270,16 @@ class FakeExtras implements PhoneExtras {
   /// Full-screen notifications: allowed unless a test says otherwise.
   bool fullScreenAllowed = true;
   int fullScreenChecks = 0;
+
+  /// In place of [fullScreenAllowed] when set: an answer that changes.
+  bool Function()? fullScreenAnswer;
   int fullScreenSettingsOpened = 0;
   final deniedCalls = StreamController<String>.broadcast();
 
   @override
   Future<bool> canUseFullScreen() async {
     fullScreenChecks++;
-    return fullScreenAllowed;
+    return fullScreenAnswer?.call() ?? fullScreenAllowed;
   }
 
   @override

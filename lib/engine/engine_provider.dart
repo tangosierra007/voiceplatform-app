@@ -85,6 +85,10 @@ final engineSessionProvider = Provider<void>((ref) {
   /// the engine.
   var askedNotifications = false;
 
+  /// The [session] whose sign-in has had the full-screen check. Signing out
+  /// clears the "asked" flag, so each new sign-in checks again.
+  var fullScreenAskedSession = -1;
+
   /// The last [up] reached `register()`.
   var registered = false;
 
@@ -140,6 +144,7 @@ final engineSessionProvider = Provider<void>((ref) {
       final wait = stopping;
       if (wait != null) await wait;
       if (gone()) return;
+      var notifications = Future<void>.value();
       if (!started) {
         inLocalStep = true;
         try {
@@ -153,18 +158,21 @@ final engineSessionProvider = Provider<void>((ref) {
           askedNotifications = true;
           // Incoming-call notifications need it on Android 13+ (WS3 3.2):
           // asked once signed in, when the app can start ringing.
-          // Then, once that is answered, full-screen access, so a call can
-          // show on a locked phone (Android 14+).
-          unawaited(
-            ref
-                .read(micPermissionProvider)
-                .requestNotifications()
-                .whenComplete(
-                  () =>
-                      ref.read(fullScreenPromptProvider.notifier).afterSignIn(),
-                ),
-          );
+          notifications = ref
+              .read(micPermissionProvider)
+              .requestNotifications();
         }
+      }
+      // Then, once that is answered, full-screen access, so a call can show
+      // on a locked phone (Android 14+): on every sign-in, since signing out
+      // forgets that it was asked.
+      if (fullScreenAskedSession != mine) {
+        fullScreenAskedSession = mine;
+        unawaited(
+          notifications.whenComplete(
+            () => ref.read(fullScreenPromptProvider.notifier).afterSignIn(),
+          ),
+        );
       }
       // The FCM token for RFC 8599 (pn-provider fcm, pn-param
       // voiceplatform-app) and for the API; null without push (fake engine).

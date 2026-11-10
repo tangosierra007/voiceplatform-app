@@ -30,6 +30,8 @@ class FullScreenAccessNotifier extends Notifier<bool> {
 
   /// Asks the engine now; the answer is also the new state.
   Future<bool> check() async {
+    // Rebuilt or disposed before this ran (it is also a microtask).
+    if (!ref.mounted) return true;
     final allowed = await ref.read(phoneExtrasProvider).canUseFullScreen();
     if (ref.mounted) state = allowed;
     return allowed;
@@ -55,16 +57,42 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   bool build() {
     final extras = ref.watch(phoneExtrasProvider);
     final engine = ref.watch(callEngineProvider);
-    // Calls that rang as a notification only: the sheet once each ends.
-    final denied = <String>{};
+    // Calls that rang as a notification only: the sheet once none is left.
+    // Known two ways: the engine's report, which is lost when no Flutter
+    // engine was attached (app swiped away, the call came by push), and
+    // access being denied while an incoming call is seen, which covers the
+    // app starting at Answer, mid-call.
+    final rang = <String, Future<bool>>{};
+    var pending = false;
+    Future<void> onCall(CallSnapshot c) async {
+      if (c.direction != CallDirection.incoming && !rang.containsKey(c.id)) {
+        return;
+      }
+      final denied = rang[c.id] ??= extras.canUseFullScreen().then(
+        (allowed) => !allowed,
+        onError: (_) => false,
+      );
+      if (c.state != CallState.ended) return;
+      if (await denied) pending = true;
+      rang.remove(c.id);
+      final left = engine.activeCalls.any(
+        (o) => o.id != c.id && o.state != CallState.ended,
+      );
+      if (pending && !left) {
+        pending = false;
+        await _afterDeniedCall();
+      }
+    }
+
     final subs = [
-      extras.fullScreenDeniedCalls.listen(denied.add),
-      engine.calls.listen((c) {
-        if (c.state == CallState.ended && denied.remove(c.id)) {
-          unawaited(_afterDeniedCall());
-        }
+      extras.fullScreenDeniedCalls.listen((id) {
+        rang[id] = Future.value(true);
       }),
+      engine.calls.listen((c) => unawaited(onCall(c))),
     ];
+    for (final c in engine.activeCalls) {
+      unawaited(onCall(c));
+    }
     ref.onDispose(() {
       for (final s in subs) {
         s.cancel();
@@ -95,6 +123,7 @@ class FullScreenPromptNotifier extends Notifier<bool> {
   }
 
   Future<void> _afterDeniedCall() async {
+    if (!ref.mounted) return;
     try {
       final prefs = ref.read(sharedPreferencesProvider);
       if (prefs.getString(dayKey) == _today()) return;
@@ -104,6 +133,10 @@ class FullScreenPromptNotifier extends Notifier<bool> {
       // As above.
     }
   }
+
+  /// Allowed by the time the sheet would show: nothing to ask, and nothing
+  /// remembered.
+  void skip() => state = false;
 
   /// The sheet is on screen: not again after sign-in, nor again today.
   Future<void> shown() async {

@@ -52,8 +52,15 @@ class _AppShellState extends ConsumerState<AppShell> {
     }, fireImmediately: true);
   }
 
-  void _fullScreen() {
+  Future<void> _fullScreen() async {
     if (!mounted || !ref.read(fullScreenPromptProvider)) return;
+    // Asked a moment ago, perhaps before a trip to Settings: check again.
+    final allowed = await ref.read(fullScreenAccessProvider.notifier).check();
+    if (!mounted || !ref.read(fullScreenPromptProvider)) return;
+    if (allowed) {
+      ref.read(fullScreenPromptProvider.notifier).skip();
+      return;
+    }
     unawaited(ref.read(fullScreenPromptProvider.notifier).shown());
     unawaited(showFullScreenSheet(context));
   }

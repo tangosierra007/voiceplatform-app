@@ -1,9 +1,11 @@
 // The full-screen sheet after sign-in and the Me card (task 2): denied,
 // allowed, and allowed after a trip to Settings.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/engine/full_screen_access.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
+import 'package:voiceplatform_app/theme/theme_preference.dart';
 
 import '../support/app_harness.dart';
 import '../support/phone.dart';
@@ -129,5 +131,26 @@ void main() {
     expect(find.text(_sheetTitle), findsNothing);
     await _openMe(tester);
     expect(find.text(_cardTitle), findsNothing);
+  });
+
+  testWidgets('allowed again before the sheet shows: no sheet', (tester) async {
+    usePhone(tester);
+    ProviderContainer? c;
+    // Denied when asked after sign-in, allowed by the time the tabs would
+    // show the sheet (for example back from Settings in between).
+    final extras = FakeExtras()
+      ..fullScreenAnswer = () => c?.read(fullScreenPromptProvider) ?? false;
+    await tester.pumpWidget(
+      await appUnderTest(extras: extras, api: FakeApi(), accessToken: 'tok'),
+    );
+    c = ProviderScope.containerOf(tester.element(find.byType(Navigator).first));
+    await _settle(tester);
+    await _settle(tester);
+    expect(extras.fullScreenChecks, greaterThanOrEqualTo(2));
+    expect(find.text(_sheetTitle), findsNothing);
+    expect(c.read(fullScreenPromptProvider), isFalse);
+    // Not marked as asked: a later denial can still ask.
+    final prefs = c.read(sharedPreferencesProvider);
+    expect(prefs.getBool(FullScreenPromptNotifier.shownKey), isNull);
   });
 }
