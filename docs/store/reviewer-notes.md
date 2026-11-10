@@ -6,7 +6,7 @@ Draft for task 5.4. Paste the quoted text into Play Console, under App access an
 
 > VoicePlatform is a business phone app for workplaces that use the VoicePlatform phone system. Accounts are created by the workplace's administrator, so there is no sign-up in the app.
 >
-> Reviewer account: [given at review time]. Sign in with the email address below; the app sends a 6-digit code, and the review account accepts the code given here. The review account belongs to a demo workplace. It can make internal calls and call the echo test on extension [given at review time], but cannot call outside numbers.
+> Reviewer account: [given at review time]. Sign in with the email address below and tap "Email me a sign-in link"; on the next screen type the 6-digit code given here (no email needs to be opened). The review account belongs to a demo workplace. To try a call, dial *43 from the keypad: the echo test answers, and you hear your own voice back for up to 60 seconds. The account can make internal calls, but calls to outside numbers are blocked.
 
 ## How calls work in the background
 
