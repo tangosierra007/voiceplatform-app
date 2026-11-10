@@ -2,6 +2,11 @@
 
 For TJ and mobile-lead together. Internal testing only; nothing else in Play Console changes.
 
+**Releases**
+
+- **1.0.1 (376):** first internal release, 4 Nov 2026, uploaded by hand.
+- **1.0.2:** tag `v1.0.2` on `49d00c6`, 10 Nov 2026. The app asks for full-screen access when it's off (task 2, #62; A53 tests passed 10 Nov). Run #390; the first upload attempt failed because the Google Play Android Developer API was off in the Cloud project (TJ enabled it 10 Nov). First release item: the full-screen intent declaration (`declarations.md`), which goes to Google's review only once the whole app dashboard is complete.
+
 1. **Before the run**
    - [ ] `main` is green; `pubspec.yaml` `version:` is the versionName wanted (for example `1.0.0`). The versionCode is the run number of `android.yml` (it only goes up).
    - [x] The `play-internal` environment has its five secrets (set 27 Oct), a required reviewer (TJ) with admin bypass off, and deploys only from `main` and `v*` tags.
@@ -14,9 +19,9 @@ For TJ and mobile-lead together. Internal testing only; nothing else in Play Con
 3. **First upload (by hand, if Play refuses the API)**
    - [ ] Play may refuse API uploads until a first bundle has been uploaded by hand. If the upload step fails that way, download the artifact `android-signed-<run>` (kept 7 days).
    - [ ] Play Console, VoicePlatform, Testing, Internal testing, Create new release: upload `app-release.aab`, release name as the version, save as draft.
-4. **Declarations and listing** (texts in this folder)
+4. **Declarations and listing** (texts in this folder). All of these are required: Play sends nothing for review, the full-screen intent declaration included, until the dashboard is complete.
+   - [ ] Full-screen intent: calling app (`declarations.md`). First, so it reaches Google's review as early as possible.
    - [ ] Foreground service types: phone call and microphone, with the video (`declarations.md`).
-   - [ ] Full-screen intent: calling app (`declarations.md`).
    - [ ] Data safety (`data-safety.md`), privacy policy URL (`privacy-policy.md` published first), ads (none), content rating, target audience, app access (`reviewer-notes.md`).
    - [ ] Store listing text and graphics (`listing.md`). The app icon is `graphics/ic_launcher-playstore-512.png`.
 5. **Release to testers**
