@@ -200,6 +200,11 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
     );
   }
 
+  /// An incoming call with no line label: "INCOMING CALL" until it's
+  /// answered, then "CONNECTED" (FU44).
+  static String _incomingState(CallSnapshot c) =>
+      c.connectedAt == null ? 'INCOMING CALL' : 'CONNECTED';
+
   /// "SALES · 03 5550 1201" for a call to a group; "MAIN · 03 5550 1200" for
   /// an outgoing call, from the caller ID it used.
   String _lineCalled(CallSnapshot c, CallBook book) {
@@ -218,9 +223,9 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
       ].whereType<String>().join(' · ').toUpperCase();
       // The platform sends the line called in X-VP-Called (A7); until it
       // does, the header still says what the call is, never blank.
-      return line.isEmpty ? 'INCOMING CALL' : line;
+      return line.isEmpty ? _incomingState(c) : line;
     }
-    if (c.direction == CallDirection.incoming) return 'INCOMING CALL';
+    if (c.direction == CallDirection.incoming) return _incomingState(c);
     // Outgoing: the caller ID the platform presented (X-VP-Caller-Applied,
     // follow-up 51), never the one asked for: a choice it refused shows the
     // number it really used. Until it says (dialling, or a platform that

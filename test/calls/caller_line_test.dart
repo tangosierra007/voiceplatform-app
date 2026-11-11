@@ -268,7 +268,9 @@ void main() {
       expect(find.text('INCOMING CALL'), findsOneWidget);
       await tester.tap(find.bySemanticsLabel('Answer'));
       await _settle(tester);
-      expect(find.text('INCOMING CALL'), findsOneWidget);
+      expect(find.text('CONNECTED'), findsOneWidget);
+      // FU44: answered, the header no longer says INCOMING CALL.
+      expect(find.text('INCOMING CALL'), findsNothing);
       await _end(tester, e);
     });
   });
