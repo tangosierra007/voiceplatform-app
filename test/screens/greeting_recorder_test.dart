@@ -1,5 +1,4 @@
 // FU54: the greeting sheet keeps its recorder alive while it records.
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';

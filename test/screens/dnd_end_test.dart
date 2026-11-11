@@ -20,14 +20,20 @@ void main() {
   test('an end just gone (a frozen app back, or the platform late) asks '
       'again soon', () {
     expect(
-      dndEndRefreshIn(_s('dnd', _now.subtract(const Duration(seconds: 30))), _now),
+      dndEndRefreshIn(
+        _s('dnd', _now.subtract(const Duration(seconds: 30))),
+        _now,
+      ),
       dndEndRetry,
     );
   });
 
   test('an end long gone is not asked about again and again', () {
     expect(
-      dndEndRefreshIn(_s('dnd', _now.subtract(const Duration(minutes: 3))), _now),
+      dndEndRefreshIn(
+        _s('dnd', _now.subtract(const Duration(minutes: 3))),
+        _now,
+      ),
       isNull,
     );
   });
@@ -35,7 +41,10 @@ void main() {
   test('no end, or not on Do not disturb: nothing to fetch', () {
     expect(dndEndRefreshIn(_s('dnd'), _now), isNull);
     expect(
-      dndEndRefreshIn(_s('available', _now.add(const Duration(hours: 1))), _now),
+      dndEndRefreshIn(
+        _s('available', _now.add(const Duration(hours: 1))),
+        _now,
+      ),
       isNull,
     );
     expect(dndEndRefreshIn(_s('away'), _now), isNull);
