@@ -93,6 +93,7 @@ void main() {
       expect(mic.notificationAsks, 1);
       // FU43: then the microphone, before any call.
       expect(mic.requests, 1);
+      expect(sp.getBool(micAskedAtSignInKey), isTrue);
 
       source.refresh.add('fcm-token-2');
       await Future<void>.delayed(const Duration(milliseconds: 300));

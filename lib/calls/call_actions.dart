@@ -38,9 +38,16 @@ class DeviceMicPermission implements MicPermission {
   @override
   Future<bool> isGranted() => Permission.microphone.isGranted;
 
+  /// A prompt already open (Answer while the sign-in ask is up) makes
+  /// permission_handler throw; then the answer is whatever is granted now.
   @override
-  Future<bool> request() async =>
-      (await Permission.microphone.request()).isGranted;
+  Future<bool> request() async {
+    try {
+      return (await Permission.microphone.request()).isGranted;
+    } catch (_) {
+      return Permission.microphone.isGranted;
+    }
+  }
 
   @override
   Future<void> openSettings() => openAppSettings();

@@ -9,6 +9,7 @@ import 'package:vp_linphone/vp_linphone.dart';
 import '../auth/auth.dart';
 import '../calls/call_actions.dart';
 import '../net/api.dart';
+import '../theme/theme_preference.dart';
 import 'fake_call_engine.dart';
 import 'full_screen_access.dart';
 
@@ -89,6 +90,23 @@ final engineSessionProvider = Provider<void>((ref) {
   /// clears the "asked" flag, so each new sign-in checks again.
   var fullScreenAskedSession = -1;
 
+  /// The microphone, asked once per sign-in after the notifications prompt
+  /// (FU43). Asked only when a call started, a first call answered on a
+  /// locked phone raised the prompt behind the lock screen and went out with
+  /// no audio. Refused here, the call screens ask again when a call starts;
+  /// it isn't asked again on the next app start (a second refusal would make
+  /// Android stop asking), nor with a call up (Answer asks for it itself).
+  Future<void> micAtSignIn(bool Function() gone) async {
+    try {
+      final prefs = ref.read(sharedPreferencesProvider);
+      if (gone() || (prefs.getBool(micAskedAtSignInKey) ?? false)) return;
+      if (engine.activeCalls.isNotEmpty) return;
+      await prefs.setBool(micAskedAtSignInKey, true);
+      final perms = ref.read(micPermissionProvider);
+      if (!gone() && !await perms.isGranted()) await perms.request();
+    } catch (_) {}
+  }
+
   /// The last [up] reached `register()`.
   var registered = false;
 
@@ -158,27 +176,22 @@ final engineSessionProvider = Provider<void>((ref) {
           askedNotifications = true;
           // Incoming-call notifications need it on Android 13+ (WS3 3.2):
           // asked once signed in, when the app can start ringing.
-          // Then the microphone (FU43): asked only when a call started, a
-          // first call answered on a locked phone raised the prompt behind
-          // the lock screen and went out with no audio. Refused here, the
-          // call screens ask again as before.
-          final perms = ref.read(micPermissionProvider);
-          notifications = perms.requestNotifications().then((_) async {
-            try {
-              if (!gone() && !await perms.isGranted()) await perms.request();
-            } catch (_) {}
-          });
+          notifications = ref
+              .read(micPermissionProvider)
+              .requestNotifications();
         }
       }
-      // Then, once that is answered, full-screen access, so a call can show
-      // on a locked phone (Android 14+): on every sign-in, since signing out
-      // forgets that it was asked.
+      // Then the microphone, once per sign-in (FU43), then full-screen
+      // access, so a call can show on a locked phone (Android 14+): on every
+      // sign-in, since signing out forgets that it was asked.
       if (fullScreenAskedSession != mine) {
         fullScreenAskedSession = mine;
         unawaited(
-          notifications.whenComplete(
-            () => ref.read(fullScreenPromptProvider.notifier).afterSignIn(),
-          ),
+          notifications.then((_) => micAtSignIn(gone)).whenComplete(() {
+            if (!gone()) {
+              ref.read(fullScreenPromptProvider.notifier).afterSignIn();
+            }
+          }),
         );
       }
       // The FCM token for RFC 8599 (pn-provider fcm, pn-param
@@ -383,3 +396,7 @@ final engineUiProvider = Provider<EngineUi>((ref) {
   final engine = ref.watch(callEngineProvider);
   return engine is VpLinphoneEngine ? _LinphoneUi(engine) : const _NoUi();
 });
+
+/// Set once the microphone has been asked for at sign-in (FU43); signing out
+/// clears it with the other stored settings.
+const micAskedAtSignInKey = 'vp.micAskedAtSignIn';

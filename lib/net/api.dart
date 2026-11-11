@@ -142,10 +142,11 @@ final meProvider = FutureProvider<Me?>((ref) async {
     if (!ref.mounted) return null;
   }
   final me = await api.me.getMe();
-  if (ref.mounted) ref.read(lastKnownShellProvider.notifier).record(me);
+  if (!ref.mounted) return me;
+  ref.read(lastKnownShellProvider.notifier).record(me);
   // A timed Do not disturb: fetch again once the platform has ended it.
   final end = dndEndRefreshIn(me.status, ref.read(clockProvider)());
-  if (end != null && ref.mounted) {
+  if (end != null) {
     final t = Timer(end, () {
       if (ref.mounted) ref.invalidateSelf();
     });
