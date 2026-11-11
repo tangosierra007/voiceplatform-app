@@ -496,8 +496,11 @@ class _StatusPicker extends ConsumerWidget {
       (StatusInputStatus.dnd, StatusStatus.dnd, 'Do not disturb', c.statusBad),
       (StatusInputStatus.away, StatusStatus.away, 'Away', c.borderStrong),
     ];
-    final note = status == StatusStatus.dnd && until != null
-        ? 'Do not disturb until ${_untilText(until, ref.read(clockProvider)())}. '
+    final now = ref.read(clockProvider)();
+    // An end already gone isn't shown while Me is fetched again (FU60).
+    final note =
+        status == StatusStatus.dnd && until != null && until.isAfter(now)
+        ? 'Do not disturb until ${_untilText(until, now)}. '
               'Your desk phone shows the same status.'
         : 'Your desk phone shows the same status.';
     return Column(

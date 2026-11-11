@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -141,5 +143,35 @@ final meProvider = FutureProvider<Me?>((ref) async {
   }
   final me = await api.me.getMe();
   if (ref.mounted) ref.read(lastKnownShellProvider.notifier).record(me);
+  // A timed Do not disturb: fetch again once the platform has ended it.
+  final end = dndEndRefreshIn(me.status, ref.read(clockProvider)());
+  if (end != null && ref.mounted) {
+    final t = Timer(end, () {
+      if (ref.mounted) ref.invalidateSelf();
+    });
+    ref.onDispose(t.cancel);
+  }
   return me;
 });
+
+/// How long after a timed Do not disturb ends the app fetches Me again.
+const dndEndSettle = Duration(seconds: 5);
+
+/// When the platform still reports an end that has passed, ask again after
+/// this.
+const dndEndRetry = Duration(seconds: 15);
+
+/// An end older than this isn't asked about again.
+const dndEndGrace = Duration(minutes: 2);
+
+/// When to fetch Me again for a timed Do not disturb, or null. The platform
+/// ends it by itself at the time; the app kept showing it until a cold start
+/// (FU60). A timer that came due while Android froze the app runs as soon as
+/// the app is back.
+Duration? dndEndRefreshIn(Status s, DateTime now) {
+  final until = s.dndUntil;
+  if (s.status != StatusStatus.dnd || until == null) return null;
+  final wait = until.difference(now);
+  if (wait < -dndEndGrace) return null;
+  return wait.isNegative ? dndEndRetry : wait + dndEndSettle;
+}

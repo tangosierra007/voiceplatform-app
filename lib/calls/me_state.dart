@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:call_engine/call_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth.dart';
 import '../engine/engine_provider.dart';
 import '../net/api.dart';
 import 'numbers.dart';
@@ -40,8 +43,13 @@ final myStatusProvider = NotifierProvider<MyStatusNotifier, StatusStatus?>(
 );
 
 class MyStatusNotifier extends Notifier<StatusStatus?> {
+  Timer? _end;
+
   @override
-  StatusStatus? build() => ref.watch(meProvider).value?.status.status;
+  StatusStatus? build() {
+    ref.onDispose(() => _end?.cancel());
+    return ref.watch(meProvider).value?.status.status;
+  }
 
   /// `PUT /me/status` (built by WS1 1.3a; the mock answers today).
   /// [dndUntil] ends Do not disturb at that time; null is until changed.
@@ -56,6 +64,10 @@ class MyStatusNotifier extends Notifier<StatusStatus?> {
             body: StatusInput(status: s, dndUntil: dndUntil?.toUtc()),
           );
       state = r.status;
+      // Set here, Me isn't fetched again: arm the end refresh for it (FU60).
+      _end?.cancel();
+      final end = dndEndRefreshIn(r, ref.read(clockProvider)());
+      if (end != null) _end = Timer(end, () => ref.invalidate(meProvider));
     } catch (_) {
       state = before;
       rethrow;
