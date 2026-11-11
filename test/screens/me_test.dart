@@ -218,6 +218,7 @@ void main() {
     await tester.tap(find.text('Signed-in devices'));
     await _settle(tester);
     expect(find.text('Pixel 8 (this phone)'), findsOneWidget);
+    expect(find.text('Rings for your calls'), findsOneWidget);
     expect(find.text('Windows PC'), findsOneWidget);
     // Rings for the phone and the PC; the desk phone is set by the admin.
     expect(find.byType(Switch), findsNWidgets(2));

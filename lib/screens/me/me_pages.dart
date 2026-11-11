@@ -518,7 +518,9 @@ class DevicesScreen extends ConsumerWidget {
                               ? '${d.label} (this phone)'
                               : d.label,
                           subtitle: d.isThisDevice
-                              ? 'Rings for your calls'
+                              ? (d.rings
+                                    ? 'Rings for your calls'
+                                    : "Doesn't ring for your calls")
                               : d.lastSeenAt == null
                               ? null
                               : 'Last used ${recentsWhen(d.lastSeenAt!, now)}',
