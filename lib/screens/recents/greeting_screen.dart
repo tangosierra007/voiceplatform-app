@@ -239,7 +239,13 @@ class RecordGreetingSheet extends ConsumerStatefulWidget {
 }
 
 class _RecordGreetingSheetState extends ConsumerState<RecordGreetingSheet> {
-  late final GreetingRecorder _rec = ref.read(greetingRecorderProvider);
+  // Held for as long as the sheet is open: a bare read of this auto-dispose
+  // provider let it dispose the recorder before start() ran (FU54).
+  late final ProviderSubscription<GreetingRecorder> _recSub = ref.listenManual(
+    greetingRecorderProvider,
+    (_, _) {},
+  );
+  GreetingRecorder get _rec => _recSub.read();
   _Step _step = _Step.recording;
   final _clock = Stopwatch();
   Timer? _tick;
@@ -334,6 +340,7 @@ class _RecordGreetingSheetState extends ConsumerState<RecordGreetingSheet> {
   void dispose() {
     _tick?.cancel();
     unawaited(_discard());
+    _recSub.close();
     super.dispose();
   }
 
