@@ -10,7 +10,9 @@ import '../net/api.dart';
 import '../screens/calls/microphone_sheet.dart';
 import 'me_state.dart';
 
-/// RECORD_AUDIO, asked only when a call starts (spec 22, Microphone).
+/// RECORD_AUDIO: asked once at sign-in, after notifications and before the
+/// full-screen sheet (FU43), and again when a call starts if refused (spec 22,
+/// Microphone).
 abstract interface class MicPermission {
   Future<bool> isGranted();
 

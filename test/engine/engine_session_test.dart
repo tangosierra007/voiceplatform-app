@@ -52,7 +52,7 @@ void main() {
       final engine = FakeCallEngine(registerAfter: Duration.zero);
       final source = _Tokens('fcm-token-1');
       final push = VpPushTokens(engine: engine, source: source);
-      final mic = FakeMic();
+      final mic = FakeMic(granted: false);
       final store = MemorySessionStore();
       final c = ProviderContainer(
         overrides: [
@@ -91,6 +91,8 @@ void main() {
       expect(engine.pushParams!.param, 'voiceplatform-app');
       expect(server.lastPushToken, 'fcm-token-1');
       expect(mic.notificationAsks, 1);
+      // FU43: then the microphone, before any call.
+      expect(mic.requests, 1);
 
       source.refresh.add('fcm-token-2');
       await Future<void>.delayed(const Duration(milliseconds: 300));

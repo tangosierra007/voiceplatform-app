@@ -158,9 +158,16 @@ final engineSessionProvider = Provider<void>((ref) {
           askedNotifications = true;
           // Incoming-call notifications need it on Android 13+ (WS3 3.2):
           // asked once signed in, when the app can start ringing.
-          notifications = ref
-              .read(micPermissionProvider)
-              .requestNotifications();
+          // Then the microphone (FU43): asked only when a call started, a
+          // first call answered on a locked phone raised the prompt behind
+          // the lock screen and went out with no audio. Refused here, the
+          // call screens ask again as before.
+          final perms = ref.read(micPermissionProvider);
+          notifications = perms.requestNotifications().then((_) async {
+            try {
+              if (!gone() && !await perms.isGranted()) await perms.request();
+            } catch (_) {}
+          });
         }
       }
       // Then, once that is answered, full-screen access, so a call can show
