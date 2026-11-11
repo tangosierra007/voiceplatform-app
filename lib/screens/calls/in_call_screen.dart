@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../api/models/caller_id.dart';
 import '../../calls/call_actions.dart';
 import '../../calls/directory.dart';
+import '../../calls/me_state.dart';
 import '../../calls/numbers.dart';
 import '../../engine/engine_provider.dart';
 import '../../nav/routes.dart';
@@ -218,17 +220,24 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
       // does, the header still says what the call is, never blank.
       return line.isEmpty ? 'INCOMING CALL' : line;
     }
-    final id = book.callerIds[c.id];
-    if (id == null) {
-      return c.direction == CallDirection.incoming
-          ? 'INCOMING CALL'
-          : 'CALLING';
-    }
-    if (id.value == 'withheld') return 'NUMBER WITHHELD';
-    final name = id.label.replaceAll(RegExp(r'[\d\s+]+$'), '').trim();
+    if (c.direction == CallDirection.incoming) return 'INCOMING CALL';
+    // Outgoing: the caller ID the platform presented (X-VP-Caller-Applied,
+    // follow-up 51), never the one asked for: a choice it refused shows the
+    // number it really used. Until it says (dialling, or a platform that
+    // doesn't send it), nothing about the caller ID.
+    final applied = c.callerApplied;
+    if (applied == null) return 'CALLING';
+    if (applied == 'withheld') return 'NUMBER WITHHELD';
+    final known = [
+      book.callerIds[c.id],
+      ...(ref.watch(callerIdsProvider).value ?? const <CallerId>[]),
+    ].whereType<CallerId>().where((id) => id.value == applied).firstOrNull;
+    final name = (known?.label ?? '')
+        .replaceAll(RegExp(r'[\d\s+]+$'), '')
+        .trim();
     return [
       if (name.isNotEmpty) name,
-      formatAuNumber(id.value),
+      formatAuNumber(applied),
     ].join(' · ').toUpperCase();
   }
 

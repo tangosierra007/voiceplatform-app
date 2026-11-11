@@ -68,6 +68,14 @@ object LinphoneEngine {
 
     private var pendingUnregister: (() -> Unit)? = null
 
+    /** Outgoing call states whose reply may carry X-VP-Caller-Applied (180/183, 200). */
+    private val APPLIED_STATES = setOf(
+        Call.State.OutgoingRinging,
+        Call.State.OutgoingEarlyMedia,
+        Call.State.Connected,
+        Call.State.StreamsRunning,
+    )
+
     private class Tracked(val id: String, val call: Call, val incoming: Boolean, val startedAt: Long) {
         var state: CallStateMsg = if (incoming) CallStateMsg.INCOMING else CallStateMsg.DIALLING
         var connectedAt: Long? = null
@@ -78,6 +86,7 @@ object LinphoneEngine {
         var hdrAlsoRinging: String? = null
         var hdrRepeat: String? = null
         var hdrLastAnswered: String? = null
+        var hdrCallerApplied: String? = null
         var announced = false
         var answering = false
         val retry = MediaSecurity.Retry()
@@ -1257,6 +1266,17 @@ object LinphoneEngine {
         t.hdrLastAnswered = remote.getCustomHeader("X-VP-Last-Answered")
     }
 
+    /**
+     * Outgoing calls: the caller ID the platform presented, X-VP-Caller-Applied
+     * on its 18x or 200 (follow-up 51), from the first reply that carries it.
+     * Raw; the Dart side accepts only `withheld` or an E.164 number.
+     */
+    private fun readApplied(t: Tracked) {
+        val value = t.call.remoteParams?.getCustomHeader("X-VP-Caller-Applied")
+            ?: t.call.getToHeader("X-VP-Caller-Applied")
+        if (!value.isNullOrBlank()) t.hdrCallerApplied = value.take(32)
+    }
+
     private fun snapshot(t: Tracked): CallMsg {
         val c = core
         val call = t.call
@@ -1282,6 +1302,7 @@ object LinphoneEngine {
             headerAlsoRinging = t.hdrAlsoRinging,
             headerRepeat = t.hdrRepeat,
             headerLastAnswered = t.hdrLastAnswered,
+            headerCallerApplied = t.hdrCallerApplied,
         )
     }
 
@@ -1321,6 +1342,7 @@ object LinphoneEngine {
                 headless.onIncomingCall(serviceUp = service != null)
             }
         }
+        if (!t.incoming && t.hdrCallerApplied == null && state in APPLIED_STATES) readApplied(t)
         // APP13: every checked state is judged, even after the engine has
         // asked for the call to end; early media only once its streams run.
         val endingNow = MediaSecurity.runCheck(

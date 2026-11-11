@@ -62,6 +62,10 @@ class CallMsg {
   String? headerAlsoRinging;
   String? headerRepeat;
   String? headerLastAnswered;
+
+  /// Outgoing calls: X-VP-Caller-Applied from the platform's 18x or 200
+  /// (follow-up 51), raw; parsed on the Dart side.
+  String? headerCallerApplied;
 }
 
 class AudioMsg {

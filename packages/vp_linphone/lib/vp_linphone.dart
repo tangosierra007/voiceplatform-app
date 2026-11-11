@@ -3,7 +3,7 @@
 library;
 
 export 'src/engine.dart' show VpLinphoneEngine, levelFromDbm0;
-export 'src/incoming_headers.dart' show IncomingHeaders;
+export 'src/incoming_headers.dart' show IncomingHeaders, parseCallerApplied;
 export 'src/log_scrubber.dart' show LogScrubber;
 export 'src/licenses.dart' show addVpLinphoneLicenses, bundledLicences, BundledLicence;
 export 'src/platform_types.dart';

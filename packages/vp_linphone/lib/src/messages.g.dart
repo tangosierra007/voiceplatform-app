@@ -183,6 +183,7 @@ class CallMsg {
     this.headerAlsoRinging,
     this.headerRepeat,
     this.headerLastAnswered,
+    this.headerCallerApplied,
   });
 
   String id;
@@ -215,6 +216,10 @@ class CallMsg {
 
   String? headerLastAnswered;
 
+  /// Outgoing calls: X-VP-Caller-Applied from the platform's 18x or 200
+  /// (follow-up 51), raw; parsed on the Dart side.
+  String? headerCallerApplied;
+
   List<Object?> _toList() {
     return <Object?>[
       id,
@@ -232,6 +237,7 @@ class CallMsg {
       headerAlsoRinging,
       headerRepeat,
       headerLastAnswered,
+      headerCallerApplied,
     ];
   }
 
@@ -257,6 +263,7 @@ class CallMsg {
       headerAlsoRinging: result[12] as String?,
       headerRepeat: result[13] as String?,
       headerLastAnswered: result[14] as String?,
+      headerCallerApplied: result[15] as String?,
     );
   }
 
@@ -283,7 +290,8 @@ class CallMsg {
         _deepEquals(headerCalled, other.headerCalled) &&
         _deepEquals(headerAlsoRinging, other.headerAlsoRinging) &&
         _deepEquals(headerRepeat, other.headerRepeat) &&
-        _deepEquals(headerLastAnswered, other.headerLastAnswered);
+        _deepEquals(headerLastAnswered, other.headerLastAnswered) &&
+        _deepEquals(headerCallerApplied, other.headerCallerApplied);
   }
 
   @override
@@ -292,7 +300,7 @@ class CallMsg {
 
   @override
   String toString() {
-    return 'CallMsg(id: $id, incoming: $incoming, state: $state, remoteNumber: $remoteNumber, remoteName: $remoteName, startedAtMs: $startedAtMs, connectedAtMs: $connectedAtMs, muted: $muted, encrypted: $encrypted, hdAudio: $hdAudio, endReason: $endReason, headerCalled: $headerCalled, headerAlsoRinging: $headerAlsoRinging, headerRepeat: $headerRepeat, headerLastAnswered: $headerLastAnswered)';
+    return 'CallMsg(id: $id, incoming: $incoming, state: $state, remoteNumber: $remoteNumber, remoteName: $remoteName, startedAtMs: $startedAtMs, connectedAtMs: $connectedAtMs, muted: $muted, encrypted: $encrypted, hdAudio: $hdAudio, endReason: $endReason, headerCalled: $headerCalled, headerAlsoRinging: $headerAlsoRinging, headerRepeat: $headerRepeat, headerLastAnswered: $headerLastAnswered, headerCallerApplied: $headerCallerApplied)';
   }
 }
 

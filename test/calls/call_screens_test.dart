@@ -154,8 +154,16 @@ void main() {
         expect(e.called.single, ('0491570737', '+61491571266'));
         expect(find.byType(InCallScreen), findsOneWidget);
         expect(find.text('Jordan Price'), findsOneWidget);
-        expect(find.text('SALES MOBILE · 0491 571 266'), findsOneWidget);
         expect(find.text('Calling'), findsOneWidget);
+        // The line shows what the platform presented, once it says (its 180,
+        // X-VP-Caller-Applied; follow-up 51), never the pick alone.
+        expect(find.text('SALES MOBILE · 0491 571 266'), findsNothing);
+        expect(find.text('CALLING'), findsOneWidget);
+        await tester.runAsync(
+          () async => e.remoteRinging(e.activeCalls.single.id),
+        );
+        await _settle(tester);
+        expect(find.text('SALES MOBILE · 0491 571 266'), findsOneWidget);
         await _end(tester);
       },
     );

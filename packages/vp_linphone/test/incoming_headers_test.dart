@@ -126,4 +126,31 @@ void main() {
     expect(info.alsoRinging, isEmpty);
     expect(info.repeatCount, isNull);
   });
+
+  group('X-VP-Caller-Applied (follow-up 51)', () {
+    test('withheld or an E.164 number, trimmed', () {
+      expect(parseCallerApplied('withheld'), 'withheld');
+      expect(parseCallerApplied(' withheld '), 'withheld');
+      expect(parseCallerApplied('+61355501200'), '+61355501200');
+      expect(parseCallerApplied('+61491570737'), '+61491570737');
+    });
+    test('anything else is null: never a value the platform did not send', () {
+      for (final v in <String?>[
+        null,
+        '',
+        '   ',
+        'WITHHELD',
+        'Withheld',
+        'anonymous',
+        '0355501200',
+        '+0355501200',
+        '+61',
+        '+6135550120012345',
+        '+61355501200;x=1',
+        'withheld,+61355501200',
+      ]) {
+        expect(parseCallerApplied(v), isNull, reason: '$v');
+      }
+    });
+  });
 }

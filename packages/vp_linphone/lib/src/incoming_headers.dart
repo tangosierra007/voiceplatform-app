@@ -166,3 +166,13 @@ class _Reader {
     if (c == ',' && i < s.length) i++;
   }
 }
+
+/// X-VP-Caller-Applied on an outgoing call (follow-up 51): the caller ID the
+/// platform presented, `withheld` or an E.164 number. Anything else is null,
+/// so the in-call screen never shows a value the platform didn't send.
+String? parseCallerApplied(String? value) {
+  final v = value?.trim();
+  if (v == null || v.isEmpty) return null;
+  if (v == 'withheld') return v;
+  return RegExp(r'^\+[1-9]\d{5,14}$').hasMatch(v) ? v : null;
+}

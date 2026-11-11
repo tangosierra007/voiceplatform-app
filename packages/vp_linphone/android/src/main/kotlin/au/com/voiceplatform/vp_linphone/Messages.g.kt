@@ -377,7 +377,12 @@ data class CallMsg (
   val headerCalled: String? = null,
   val headerAlsoRinging: String? = null,
   val headerRepeat: String? = null,
-  val headerLastAnswered: String? = null
+  val headerLastAnswered: String? = null,
+  /**
+   * Outgoing calls: X-VP-Caller-Applied from the platform's 18x or 200
+   * (follow-up 51), raw; parsed on the Dart side.
+   */
+  val headerCallerApplied: String? = null
 )
  {
   companion object {
@@ -397,7 +402,8 @@ data class CallMsg (
       val headerAlsoRinging = pigeonVar_list[12] as String?
       val headerRepeat = pigeonVar_list[13] as String?
       val headerLastAnswered = pigeonVar_list[14] as String?
-      return CallMsg(id, incoming, state, remoteNumber, remoteName, startedAtMs, connectedAtMs, muted, encrypted, hdAudio, endReason, headerCalled, headerAlsoRinging, headerRepeat, headerLastAnswered)
+      val headerCallerApplied = pigeonVar_list[15] as String?
+      return CallMsg(id, incoming, state, remoteNumber, remoteName, startedAtMs, connectedAtMs, muted, encrypted, hdAudio, endReason, headerCalled, headerAlsoRinging, headerRepeat, headerLastAnswered, headerCallerApplied)
     }
   }
   fun toList(): List<Any?> {
@@ -417,6 +423,7 @@ data class CallMsg (
       headerAlsoRinging,
       headerRepeat,
       headerLastAnswered,
+      headerCallerApplied,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -427,7 +434,7 @@ data class CallMsg (
       return true
     }
     val other = other as CallMsg
-    return MessagesPigeonUtils.deepEquals(this.id, other.id) && MessagesPigeonUtils.deepEquals(this.incoming, other.incoming) && MessagesPigeonUtils.deepEquals(this.state, other.state) && MessagesPigeonUtils.deepEquals(this.remoteNumber, other.remoteNumber) && MessagesPigeonUtils.deepEquals(this.remoteName, other.remoteName) && MessagesPigeonUtils.deepEquals(this.startedAtMs, other.startedAtMs) && MessagesPigeonUtils.deepEquals(this.connectedAtMs, other.connectedAtMs) && MessagesPigeonUtils.deepEquals(this.muted, other.muted) && MessagesPigeonUtils.deepEquals(this.encrypted, other.encrypted) && MessagesPigeonUtils.deepEquals(this.hdAudio, other.hdAudio) && MessagesPigeonUtils.deepEquals(this.endReason, other.endReason) && MessagesPigeonUtils.deepEquals(this.headerCalled, other.headerCalled) && MessagesPigeonUtils.deepEquals(this.headerAlsoRinging, other.headerAlsoRinging) && MessagesPigeonUtils.deepEquals(this.headerRepeat, other.headerRepeat) && MessagesPigeonUtils.deepEquals(this.headerLastAnswered, other.headerLastAnswered)
+    return MessagesPigeonUtils.deepEquals(this.id, other.id) && MessagesPigeonUtils.deepEquals(this.incoming, other.incoming) && MessagesPigeonUtils.deepEquals(this.state, other.state) && MessagesPigeonUtils.deepEquals(this.remoteNumber, other.remoteNumber) && MessagesPigeonUtils.deepEquals(this.remoteName, other.remoteName) && MessagesPigeonUtils.deepEquals(this.startedAtMs, other.startedAtMs) && MessagesPigeonUtils.deepEquals(this.connectedAtMs, other.connectedAtMs) && MessagesPigeonUtils.deepEquals(this.muted, other.muted) && MessagesPigeonUtils.deepEquals(this.encrypted, other.encrypted) && MessagesPigeonUtils.deepEquals(this.hdAudio, other.hdAudio) && MessagesPigeonUtils.deepEquals(this.endReason, other.endReason) && MessagesPigeonUtils.deepEquals(this.headerCalled, other.headerCalled) && MessagesPigeonUtils.deepEquals(this.headerAlsoRinging, other.headerAlsoRinging) && MessagesPigeonUtils.deepEquals(this.headerRepeat, other.headerRepeat) && MessagesPigeonUtils.deepEquals(this.headerLastAnswered, other.headerLastAnswered) && MessagesPigeonUtils.deepEquals(this.headerCallerApplied, other.headerCallerApplied)
   }
 
   override fun hashCode(): Int {
@@ -447,10 +454,11 @@ data class CallMsg (
     result = 31 * result + MessagesPigeonUtils.deepHash(this.headerAlsoRinging)
     result = 31 * result + MessagesPigeonUtils.deepHash(this.headerRepeat)
     result = 31 * result + MessagesPigeonUtils.deepHash(this.headerLastAnswered)
+    result = 31 * result + MessagesPigeonUtils.deepHash(this.headerCallerApplied)
     return result
   }
   override fun toString(): String {
-    return "CallMsg(id=$id, incoming=$incoming, state=$state, remoteNumber=$remoteNumber, remoteName=$remoteName, startedAtMs=$startedAtMs, connectedAtMs=$connectedAtMs, muted=$muted, encrypted=$encrypted, hdAudio=$hdAudio, endReason=$endReason, headerCalled=$headerCalled, headerAlsoRinging=$headerAlsoRinging, headerRepeat=$headerRepeat, headerLastAnswered=$headerLastAnswered)"
+    return "CallMsg(id=$id, incoming=$incoming, state=$state, remoteNumber=$remoteNumber, remoteName=$remoteName, startedAtMs=$startedAtMs, connectedAtMs=$connectedAtMs, muted=$muted, encrypted=$encrypted, hdAudio=$hdAudio, endReason=$endReason, headerCalled=$headerCalled, headerAlsoRinging=$headerAlsoRinging, headerRepeat=$headerRepeat, headerLastAnswered=$headerLastAnswered, headerCallerApplied=$headerCallerApplied)"
   }
 }
 
