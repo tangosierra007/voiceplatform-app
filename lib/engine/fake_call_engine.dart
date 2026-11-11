@@ -202,6 +202,7 @@ class FakeCallEngine implements CallEngine {
     if (_regState != RegistrationState.ok) throw const NotRegistered();
     if (!microphoneGranted) throw const MicrophoneDenied();
     final id = _newId();
+    _requested[id] = callerId;
     _emit(
       CallSnapshot(
         id: id,
@@ -386,11 +387,23 @@ class FakeCallEngine implements CallEngine {
     return id;
   }
 
+  /// The fake platform's main number: what it presents for a call made with
+  /// no caller ID chosen (an ACMA drama number).
+  static const defaultCallerId = '+61355501200';
+
+  /// What the fake platform presents for an outgoing call's chosen caller ID,
+  /// in its 180 and 200 (X-VP-Caller-Applied, follow-up 51): by default the
+  /// choice itself, or [defaultCallerId] with none. Tests replace it to model
+  /// a choice the platform refused, or a platform that doesn't say (null).
+  String? Function(String? requested) platformCallerId = _honour;
+  static String? _honour(String? requested) => requested ?? defaultCallerId;
+  final Map<String, String?> _requested = {};
+
   /// Outgoing call reached the far end's phone (180/183).
   void remoteRinging(String callId) {
     final c = _call(callId);
     _requireState(c, {CallState.dialling}, 'ring');
-    _emit(_copy(c, state: CallState.ringing));
+    _emit(_copy(c, state: CallState.ringing, callerApplied: _applied(callId)));
   }
 
   /// The far end picked up an outgoing call.
@@ -400,8 +413,10 @@ class FakeCallEngine implements CallEngine {
       CallState.dialling,
       CallState.ringing,
     }, 'answer remotely');
-    _connect(c);
+    _connect(_copy(c, callerApplied: _applied(callId)));
   }
+
+  String? _applied(String callId) => platformCallerId(_requested[callId]);
 
   /// The far end hung up, or an incoming caller gave up.
   void remoteHangup(String callId) => _end(callId, EndReason.remote);
@@ -490,6 +505,7 @@ class FakeCallEngine implements CallEngine {
     final c = _call(callId);
     _active.remove(callId);
     merged.remove(callId);
+    _requested.remove(callId);
     final ended = _copy(c, state: CallState.ended, endReason: reason);
     _calls.add(ended);
     _logLine('ended ${c.id} ${reason.name}');
@@ -588,6 +604,7 @@ class FakeCallEngine implements CallEngine {
     bool? encrypted,
     bool? hdAudio,
     EndReason? endReason,
+    String? callerApplied,
   }) => CallSnapshot(
     id: c.id,
     direction: c.direction,
@@ -601,5 +618,6 @@ class FakeCallEngine implements CallEngine {
     hdAudio: hdAudio ?? c.hdAudio,
     incoming: c.incoming,
     endReason: endReason ?? c.endReason,
+    callerApplied: callerApplied ?? c.callerApplied,
   );
 }

@@ -170,6 +170,7 @@ final class CallSnapshot {
     this.hdAudio = false,
     this.incoming,
     this.endReason,
+    this.callerApplied,
   });
 
   /// Engine-local call id, stable for the life of the call.
@@ -192,6 +193,12 @@ final class CallSnapshot {
   final bool hdAudio;
   final IncomingInfo? incoming;
   final EndReason? endReason;
+
+  /// On an outgoing call, the caller ID the platform actually presented:
+  /// `withheld` or an E.164 number, from `X-VP-Caller-Applied` in its 18x or
+  /// 200 (follow-up 51). Null until the platform says, and on an incoming
+  /// call. The in-call screen shows this, never what the user asked for.
+  final String? callerApplied;
 }
 
 /// Engine-wide audio facts for the in-call screen.
@@ -295,7 +302,10 @@ abstract interface class CallEngine {
 
   /// Places a call. [callerId] is an E.164 from GET /app/v1/me/caller-ids or
   /// `withheld`; null uses the extension default. Sent as the X-VP-Caller-Id
-  /// header, which the platform checks against the tenant's numbers.
+  /// header; the edge passes it on from an app device only, and the dialplan
+  /// checks it against the numbers the extension may present (rule 6; a
+  /// refused one keeps the extension's own). What was really presented comes
+  /// back as [CallSnapshot.callerApplied] (follow-up 51).
   /// Throws [EmergencyNumberUseDialler] for any number [isEmergencyNumber]
   /// matches, before any other check; otherwise [NotRegistered] when no
   /// account is held.

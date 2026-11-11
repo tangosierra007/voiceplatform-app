@@ -68,6 +68,7 @@ List<String> _texts(WidgetTester t) => [
 
 void main() {
   setUpAll(loadAppFonts);
+  outgoingGroup();
 
   group('(a) service codes', () {
     test('keep their star and hash', () {
@@ -270,5 +271,80 @@ void main() {
       expect(find.text('INCOMING CALL'), findsOneWidget);
       await _end(tester, e);
     });
+  });
+}
+
+/// Places an outgoing call from the keypad (the default caller ID: none sent).
+Future<String> _dial(
+  WidgetTester tester,
+  FakeCallEngine e,
+  String digits,
+) async {
+  for (final d in digits.split('')) {
+    await tester.tap(
+      find
+          .byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.button == true &&
+                (w.properties.label ?? '').startsWith(d),
+          )
+          .first,
+    );
+    await tester.pump();
+  }
+  await tester.tap(find.bySemanticsLabel('Call'));
+  await _settle(tester);
+  return e.activeCalls.single.id;
+}
+
+void outgoingGroup() {
+  group('(d) outgoing: the caller ID the platform applied (follow-up 51)', () {
+    testWidgets('withheld only when the platform says it withheld', (
+      tester,
+    ) async {
+      final e = await _app(tester);
+      e.platformCallerId = (_) => 'withheld';
+      final id = await _dial(tester, e, '206');
+      expect(find.text('CALLING'), findsOneWidget);
+      await tester.runAsync(() async => e.remoteRinging(id));
+      await _settle(tester);
+      expect(find.text('NUMBER WITHHELD'), findsOneWidget);
+      await _end(tester, e);
+    });
+
+    testWidgets(
+      'a withheld request the platform refused shows the number it used',
+      (tester) async {
+        final e = await _app(tester);
+        e.platformCallerId = (_) => FakeCallEngine.defaultCallerId;
+        final id = await tester.runAsync(
+          () async => e.call('+61491570737', callerId: 'withheld'),
+        );
+        await _settle(tester);
+        await tester.runAsync(() async => e.remoteAnswer(id!));
+        await _settle(tester);
+        expect(find.text('NUMBER WITHHELD'), findsNothing);
+        expect(find.textContaining('03 5550 1200'), findsWidgets);
+        await _end(tester, e);
+      },
+    );
+
+    testWidgets(
+      'a platform that doesn\'t say: no caller ID claimed, never "withheld"',
+      (tester) async {
+        final e = await _app(tester);
+        e.platformCallerId = (_) => null;
+        final id = await tester.runAsync(
+          () async => e.call('+61491570737', callerId: 'withheld'),
+        );
+        await _settle(tester);
+        await tester.runAsync(() async => e.remoteAnswer(id!));
+        await _settle(tester);
+        expect(find.text('NUMBER WITHHELD'), findsNothing);
+        expect(find.text('CALLING'), findsOneWidget);
+        await _end(tester, e);
+      },
+    );
   });
 }

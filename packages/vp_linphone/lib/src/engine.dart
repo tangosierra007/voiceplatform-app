@@ -215,6 +215,7 @@ final class VpLinphoneEngine implements CallEngine {
             )
           : null,
       endReason: m.endReason == null ? null : EndReason.values[m.endReason!.index],
+      callerApplied: m.incoming ? null : parseCallerApplied(m.headerCallerApplied),
     );
     if (s.state == CallState.ended) {
       _active.remove(s.id);
