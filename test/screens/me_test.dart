@@ -21,6 +21,7 @@ import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/net/live_events.dart';
 import 'package:voiceplatform_app/nav/routes.dart';
 import 'package:voiceplatform_app/platform/device_keys.dart';
+import 'package:voiceplatform_app/screens/me/me_screen.dart' show meAvatarDark;
 import 'package:voiceplatform_app/screens/signin/sign_in_screen.dart';
 import 'package:voiceplatform_app/screens/signin/signed_out_screen.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
@@ -288,6 +289,18 @@ void main() {
     expect(
       Theme.of(tester.element(find.text('Dark'))).brightness,
       Brightness.dark,
+    );
+    // On dark the avatar is lifted to the artboard's #3d3834, not ink on black
+    // (follow-up 48).
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 3000));
+    await _settle(tester);
+    bool filled(Widget w, Color colour) =>
+        w is Container &&
+        w.decoration is BoxDecoration &&
+        (w.decoration! as BoxDecoration).color == colour;
+    expect(
+      find.byWidgetPredicate((w) => filled(w, meAvatarDark)),
+      findsOneWidget,
     );
   });
 
