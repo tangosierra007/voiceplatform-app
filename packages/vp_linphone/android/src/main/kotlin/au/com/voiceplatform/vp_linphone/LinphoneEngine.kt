@@ -1477,6 +1477,15 @@ object LinphoneEngine {
 
         override fun onNetworkReachable(core: Core, reachable: Boolean) {
             log("network reachable $reachable")
+            // FU47: liblinphone leaves the account Ok (or None) when the network goes,
+            // so nothing told the app it was offline. Say so as a network failure, and
+            // when the network is back, re-send the account's real state so the
+            // banner clears even if no REGISTER follows.
+            if (account == null) return
+            emitRegistration(
+                if (reachable) currentRegistration()
+                else RegistrationMsg(RegStateMsg.FAILED, RegFailureMsg.NETWORK)
+            )
         }
     }
 }
