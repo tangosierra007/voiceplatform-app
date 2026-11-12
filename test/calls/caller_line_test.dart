@@ -341,10 +341,32 @@ void outgoingGroup() {
           () async => e.call('+61491570737', callerId: 'withheld'),
         );
         await _settle(tester);
+        expect(find.text('CALLING'), findsOneWidget);
         await tester.runAsync(() async => e.remoteAnswer(id!));
         await _settle(tester);
         expect(find.text('NUMBER WITHHELD'), findsNothing);
+        // Answered: "CONNECTED", never "CALLING" for the rest of the call
+        // (follow-up 63, an internal call on the Play 1.0.3 check).
+        expect(find.text('CALLING'), findsNothing);
+        expect(find.text('CONNECTED'), findsOneWidget);
+        await _end(tester, e);
+      },
+    );
+
+    testWidgets(
+      'an internal call: CALLING while it rings, CONNECTED once answered (follow-up 63)',
+      (tester) async {
+        final e = await _app(tester);
+        e.platformCallerId = (_) => null;
+        final id = await _dial(tester, e, '202');
         expect(find.text('CALLING'), findsOneWidget);
+        await tester.runAsync(() async => e.remoteRinging(id));
+        await _settle(tester);
+        expect(find.text('CALLING'), findsOneWidget);
+        await tester.runAsync(() async => e.remoteAnswer(id));
+        await _settle(tester);
+        expect(find.text('CALLING'), findsNothing);
+        expect(find.text('CONNECTED'), findsOneWidget);
         await _end(tester, e);
       },
     );
