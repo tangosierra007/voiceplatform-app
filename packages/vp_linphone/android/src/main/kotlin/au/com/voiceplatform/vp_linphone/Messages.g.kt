@@ -887,6 +887,12 @@ interface VpLinphoneHostApi {
   fun canUseFullScreenIntent(): Boolean
   fun openFullScreenIntentSettings()
   /**
+   * Whether the lock screen is up, shown or covered by our call screen
+   * (KeyguardManager.isKeyguardLocked). A system dialog (a permission
+   * prompt) can't show over it, so the app holds those until unlocked.
+   */
+  fun isKeyguardLocked(): Boolean
+  /**
    * True when the background registration put a new FCM token in the SIP
    * contact that the API has not been sent yet (`PUT /devices/me/push-token`).
    */
@@ -1359,6 +1365,21 @@ interface VpLinphoneHostApi {
             val wrapped: List<Any?> = try {
               api.openFullScreenIntentSettings()
               listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.isKeyguardLocked$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.isKeyguardLocked())
             } catch (exception: Throwable) {
               MessagesPigeonUtils.wrapError(exception)
             }

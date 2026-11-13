@@ -287,6 +287,16 @@ class FakeExtras implements PhoneExtras {
 
   @override
   Stream<String> get fullScreenDeniedCalls => deniedCalls.stream;
+
+  /// The phone's lock screen: up while a test says so.
+  bool locked = false;
+  int lockChecks = 0;
+
+  @override
+  Future<bool> isLocked() async {
+    lockChecks++;
+    return locked;
+  }
 }
 
 /// Voicemail as the API keeps it, for the count tests: heard and deleted

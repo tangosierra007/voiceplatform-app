@@ -98,6 +98,105 @@ void main() {
     await e.dispose();
   });
 
+  // FU69: the prompt can't show over the lock screen; opened there, it took
+  // the screen and the lock screen came back over the answered call.
+  testWidgets('answered on a locked phone: not asked until unlocked and back', (
+    tester,
+  ) async {
+    usePhone(tester);
+    final e = await _engine();
+    final mic = FakeMic();
+    final extras = FakeExtras()..locked = true;
+    await tester.pumpWidget(
+      await appUnderTest(engine: e, mic: mic, extras: extras),
+    );
+    await _settle(tester);
+    await tester.runAsync(
+      () async => e.simulateIncoming(remoteNumber: '+61355501987'),
+    );
+    await _settle(tester);
+    await tester.tap(find.bySemanticsLabel('Answer'));
+    await _settle(tester);
+    expect(e.activeCalls.single.state, CallState.connected);
+    expect(extras.lockChecks, greaterThan(0));
+    expect(mic.bluetoothAsks, 0);
+    // Still locked when the app comes back: still held.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _settle(tester);
+    expect(mic.bluetoothAsks, 0);
+    // Unlocked and back in front, call still up: asked, once.
+    extras.locked = false;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _settle(tester);
+    expect(mic.bluetoothAsks, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _settle(tester);
+    expect(mic.bluetoothAsks, 1);
+    await tester.pumpWidget(const SizedBox());
+    await e.dispose();
+  });
+
+  testWidgets(
+    'held while locked: asked at the call\'s next change once unlocked',
+    (tester) async {
+      usePhone(tester);
+      final e = await _engine();
+      final mic = FakeMic();
+      final extras = FakeExtras()..locked = true;
+      await tester.pumpWidget(
+        await appUnderTest(engine: e, mic: mic, extras: extras),
+      );
+      await _settle(tester);
+      await tester.runAsync(
+        () async => e.simulateIncoming(remoteNumber: '+61355501987'),
+      );
+      await _settle(tester);
+      await tester.tap(find.bySemanticsLabel('Answer'));
+      await _settle(tester);
+      expect(mic.bluetoothAsks, 0);
+      extras.locked = false;
+      await tester.runAsync(() async {
+        await e.hold(e.activeCalls.single.id);
+        await e.resume(e.activeCalls.single.id);
+      });
+      await _settle(tester);
+      expect(mic.bluetoothAsks, 1);
+      await tester.pumpWidget(const SizedBox());
+      await e.dispose();
+    },
+  );
+
+  testWidgets('a call that ended while locked is not asked for later', (
+    tester,
+  ) async {
+    usePhone(tester);
+    final e = await _engine();
+    final mic = FakeMic();
+    final extras = FakeExtras()..locked = true;
+    await tester.pumpWidget(
+      await appUnderTest(engine: e, mic: mic, extras: extras),
+    );
+    await _settle(tester);
+    await tester.runAsync(
+      () async => e.simulateIncoming(remoteNumber: '+61355501987'),
+    );
+    await _settle(tester);
+    await tester.tap(find.bySemanticsLabel('Answer'));
+    await _settle(tester);
+    await tester.runAsync(() async => e.hangup(e.activeCalls.single.id));
+    await _settle(tester);
+    extras.locked = false;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _settle(tester);
+    expect(mic.bluetoothAsks, 0);
+    await tester.pumpWidget(const SizedBox());
+    await e.dispose();
+  });
+
   testWidgets('answering after Settings: asked once connected', (tester) async {
     usePhone(tester);
     final e = await _engine();

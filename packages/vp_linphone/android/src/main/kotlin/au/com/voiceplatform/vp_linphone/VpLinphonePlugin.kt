@@ -1,6 +1,7 @@
 package au.com.voiceplatform.vp_linphone
 
 import android.app.Activity
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -207,6 +208,11 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
     override fun openBatteryOptimizationSettings() = VpPush.openBatterySettings(context)
     override fun canUseFullScreenIntent(): Boolean = IncomingCallNotifier.canUseFullScreenIntent(context)
     override fun openFullScreenIntentSettings() = VpPush.openFullScreenIntentSettings(context)
+
+    // True while the lock screen is up, also when the call screen covers it
+    // (FU69: a permission prompt then opens behind it).
+    override fun isKeyguardLocked(): Boolean =
+        context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
     override fun pushTokenUnsent(): Boolean = PushTokenFlag.isUnsent(context)
     override fun markPushTokenSent() = PushTokenFlag.markSent(context)
 }
