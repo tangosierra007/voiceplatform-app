@@ -22,6 +22,9 @@ import '../../widgets/vp_controls.dart';
 import '../../widgets/vp_icons.dart';
 import '../../widgets/vp_list.dart';
 
+/// The Me avatar's fill on dark (AppMeDark artboard; follow-up 48).
+const meAvatarDark = Color(0xFF3D3834);
+
 /// "Send call logs to support": WS3's `CallDiagnostics.sendCallLogs()` with
 /// the last call's scrubbed, gzipped log, uploaded to `POST
 /// /diagnostics/call-logs` (`application/gzip`, with the bearer and
@@ -107,7 +110,12 @@ class MeScreen extends ConsumerWidget {
                         height: 40,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: c.ink900,
+                          // Ink on light; on dark the AppMeDark artboard lifts it
+                          // to #3d3834, as ink on black nearly vanishes
+                          // (follow-up 48). No token holds that value.
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? meAvatarDark
+                              : c.ink900,
                           shape: BoxShape.circle,
                         ),
                         child: Text(

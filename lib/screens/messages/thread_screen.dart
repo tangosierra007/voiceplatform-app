@@ -348,7 +348,8 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
                   ),
                 ),
                 ExcludeSemantics(
-                  child: ThreadAvatar(title: title, hash: false),
+                  // "#" for a bare number, as the list shows (follow-up 48).
+                  child: ThreadAvatar(title: title),
                 ),
                 const SizedBox(width: 10),
                 Expanded(

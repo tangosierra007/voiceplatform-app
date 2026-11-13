@@ -229,9 +229,11 @@ class _InCallScreenState extends ConsumerState<InCallScreen> {
     // Outgoing: the caller ID the platform presented (X-VP-Caller-Applied,
     // follow-up 51), never the one asked for: a choice it refused shows the
     // number it really used. Until it says (dialling, or a platform that
-    // doesn't send it), nothing about the caller ID.
+    // doesn't send it), nothing about the caller ID: "CALLING", then
+    // "CONNECTED" once answered, as an incoming call's header does (an
+    // internal call carries no caller ID at all; follow-up 63).
     final applied = c.callerApplied;
-    if (applied == null) return 'CALLING';
+    if (applied == null) return c.connectedAt == null ? 'CALLING' : 'CONNECTED';
     if (applied == 'withheld') return 'NUMBER WITHHELD';
     final known = [
       book.callerIds[c.id],

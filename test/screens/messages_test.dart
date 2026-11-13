@@ -11,6 +11,7 @@ import 'package:voiceplatform_app/net/api.dart';
 import 'package:voiceplatform_app/net/live_events.dart';
 import 'package:voiceplatform_app/screens/messages/thread_screen.dart';
 import 'package:voiceplatform_app/shell/vp_tab_bar.dart';
+import 'package:voiceplatform_app/theme/app_theme.dart';
 
 import '../../tool/mock_server/fixtures.dart' as fx;
 import '../support/app_harness.dart';
@@ -164,6 +165,28 @@ void main() {
       );
     });
   });
+
+  testWidgets(
+    'a conversation with a bare number shows "#", as the list does (follow-up 48)',
+    (tester) async {
+      for (final title in ['02 5550 1234', '0491 570 156', '+61 2 5550 1234']) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            home: Scaffold(body: ThreadAvatar(title: title)),
+          ),
+        );
+        expect(find.text('#'), findsOneWidget, reason: title);
+      }
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(body: ThreadAvatar(title: 'Olivia Chen')),
+        ),
+      );
+      expect(find.text('OC'), findsOneWidget);
+    },
+  );
 
   testWidgets('Messages lists the threads as the artboard', (tester) async {
     usePhone(tester);

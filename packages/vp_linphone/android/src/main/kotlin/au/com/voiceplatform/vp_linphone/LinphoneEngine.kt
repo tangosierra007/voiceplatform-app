@@ -1200,7 +1200,15 @@ object LinphoneEngine {
         requestStop(context) {}
     }
 
-    private fun currentRegistration(): RegistrationMsg = when (account?.state) {
+    /**
+     * The account's state as the app sees it. With an account and no network it is a
+     * network failure (FU47), also for a Flutter engine that attaches late while offline.
+     */
+    private fun currentRegistration(
+        reachable: Boolean = core?.isNetworkReachable ?: true,
+    ): RegistrationMsg = if (account != null && !reachable) {
+        RegistrationMsg(RegStateMsg.FAILED, RegFailureMsg.NETWORK)
+    } else when (account?.state) {
         RegistrationState.Ok, RegistrationState.Refreshing -> RegistrationMsg(RegStateMsg.OK, sipCode = 200)
         RegistrationState.Progress -> RegistrationMsg(RegStateMsg.PROGRESS)
         RegistrationState.Failed -> RegistrationMsg(RegStateMsg.FAILED, RegFailureMsg.UNKNOWN)
@@ -1477,6 +1485,12 @@ object LinphoneEngine {
 
         override fun onNetworkReachable(core: Core, reachable: Boolean) {
             log("network reachable $reachable")
+            // FU47: liblinphone leaves the account Ok (or None) when the network goes,
+            // so nothing told the app it was offline. Say so as a network failure, and
+            // when the network is back, re-send the account's real state so the
+            // banner clears even if no REGISTER follows.
+            // With no account (signed out), NONE: a banner from before the sign-out goes.
+            emitRegistration(currentRegistration(reachable))
         }
     }
 }
