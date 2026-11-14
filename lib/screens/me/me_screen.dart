@@ -78,6 +78,7 @@ class MeScreen extends ConsumerWidget {
     final battery = ref.watch(batteryCardProvider).value;
     final fullScreen = ref.watch(fullScreenAccessProvider);
     final version = ref.watch(apiConfigProvider).appVersion;
+    final build = ref.watch(apiConfigProvider).appBuild;
     final canHours = me?.permissions.officeHours ?? false;
     final canRecordings = me?.permissions.recordings ?? false;
     final licence = switch (me?.licence) {
@@ -218,8 +219,12 @@ class MeScreen extends ConsumerWidget {
                     alignment: WrapAlignment.center,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      // The build number too (FU81): "1.0.5 · " read as
+                      // something missing after the dot.
                       Text(
-                        'Version $version · ',
+                        build.isEmpty
+                            ? 'Version $version · '
+                            : 'Version $version ($build) · ',
                         style: vpMuted(context, size: 12, line: 18),
                       ),
                       VpLink(

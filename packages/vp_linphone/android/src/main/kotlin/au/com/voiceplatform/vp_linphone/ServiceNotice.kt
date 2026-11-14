@@ -63,6 +63,13 @@ object ServiceNotice {
     fun reshowAfterFailedAnswer(wasAnswering: Boolean, state: CallStateMsg): Boolean =
         wasAnswering && state == CallStateMsg.INCOMING
 
+    /**
+     * Put up while the app's notifications were off (Android ran the service
+     * but showed nothing) and allowed now: put up again, so "Ready for calls"
+     * shows without waiting for a call to change it (FU81).
+     */
+    fun needsRepost(postedHidden: Boolean, allowedNow: Boolean): Boolean = postedHidden && allowedNow
+
     /** How [show] put the service in the foreground. */
     enum class Shown { WITH_MICROPHONE, PLAIN, FAILED }
 

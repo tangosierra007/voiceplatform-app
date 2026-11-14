@@ -76,7 +76,11 @@ void main() {
   testWidgets('Me as the artboard', (tester) async {
     usePhone(tester);
     await tester.pumpWidget(
-      await appUnderTest(clock: () => _now, appVersion: '1.0.3'),
+      await appUnderTest(
+        clock: () => _now,
+        appVersion: '1.0.3',
+        appBuild: '418',
+      ),
     );
     await _settle(tester);
     await openMe(tester);
@@ -104,7 +108,7 @@ void main() {
       expect(find.text(t), findsOneWidget, reason: t);
     }
     await tester.scrollUntilVisible(
-      find.text('Version 1.0.3 · '),
+      find.text('Version 1.0.3 (418) · '),
       200,
       scrollable: _vertical,
     );

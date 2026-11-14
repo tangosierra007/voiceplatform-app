@@ -1,9 +1,11 @@
 package au.com.voiceplatform.vp_linphone
 
 import android.app.Activity
+import android.app.Application
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -48,6 +50,23 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
 
     private val uiListener = object : TelecomBridge.UiListener {
         override fun onFullScreenIntentDenied(callId: String) = send { it.onFullScreenIntentDenied(callId) }
+    }
+
+    /**
+     * The app's activity resumed: back from the notifications prompt or from
+     * Settings, so the service's notice can show if it was put up while
+     * notifications were off (FU81).
+     */
+    private val resumeCallbacks = object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityResumed(a: Activity) {
+            if (a === activity) LinphoneEngine.onAppResumed()
+        }
+        override fun onActivityCreated(a: Activity, state: Bundle?) {}
+        override fun onActivityStarted(a: Activity) {}
+        override fun onActivityPaused(a: Activity) {}
+        override fun onActivityStopped(a: Activity) {}
+        override fun onActivitySaveInstanceState(a: Activity, state: Bundle) {}
+        override fun onActivityDestroyed(a: Activity) {}
     }
 
     private val newIntentListener = PluginRegistry.NewIntentListener { intent ->
@@ -104,6 +123,7 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         activity = binding.activity
         activityBinding = binding
         binding.addOnNewIntentListener(newIntentListener)
+        binding.activity.application.registerActivityLifecycleCallbacks(resumeCallbacks)
         handleIntent(binding.activity.intent)
     }
 
@@ -112,6 +132,7 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
 
     override fun onDetachedFromActivity() {
         activityBinding?.removeOnNewIntentListener(newIntentListener)
+        activity?.application?.unregisterActivityLifecycleCallbacks(resumeCallbacks)
         activityBinding = null
         activity = null
     }

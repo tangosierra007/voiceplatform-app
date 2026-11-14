@@ -31,6 +31,7 @@ Future<void> main() async {
             baseUrl: ApiConfig.defaultBaseUrl,
             platform: ApiConfig.platformName(defaultTargetPlatform),
             appVersion: info.version,
+            appBuild: info.buildNumber,
             deviceModel: model,
           ),
         ),
