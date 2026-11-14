@@ -88,11 +88,11 @@ class _CallFlowState extends ConsumerState<CallFlow> {
     if (!_bluetoothAsked.add(callId)) return;
     final locked = await ref.read(phoneExtrasProvider).isLocked();
     if (!mounted) return;
-    final live = ref
-        .read(callEngineProvider)
-        .activeCalls
-        .any((o) => o.id == callId && o.state == CallState.connected);
-    if (locked || !live) {
+    final calls = ref.read(callEngineProvider).activeCalls;
+    final live = calls.any(
+      (o) => o.id == callId && o.state == CallState.connected,
+    );
+    if (locked || !live || _ringing(calls)) {
       if (locked) _bluetoothOwed = true;
       _bluetoothAsked.remove(callId);
       return;
@@ -101,8 +101,14 @@ class _CallFlowState extends ConsumerState<CallFlow> {
     await ref.read(micPermissionProvider).requestBluetooth();
   }
 
+  /// Another call rings (call waiting): no prompt between the user and its
+  /// Answer button (WS6). The ask waits for the next change or resume.
+  static bool _ringing(Iterable<CallSnapshot> calls) =>
+      calls.any((o) => o.state == CallState.incoming);
+
   void _askHeldBluetooth() {
     final calls = ref.read(callEngineProvider).activeCalls;
+    if (_ringing(calls)) return;
     for (final c in calls) {
       if (c.state == CallState.connected && !_bluetoothAsked.contains(c.id)) {
         unawaited(_askBluetooth(c.id));

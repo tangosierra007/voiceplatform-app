@@ -295,6 +295,39 @@ void main() {
     await e.dispose();
   });
 
+  // Review: a held ask for a connected call must not open over a second
+  // call's Answer button (call waiting).
+  testWidgets('held: not shown while a second call rings', (tester) async {
+    usePhone(tester);
+    final e = await _engine();
+    final mic = FakeMic();
+    final extras = FakeExtras()..locked = true;
+    await tester.pumpWidget(
+      await appUnderTest(engine: e, mic: mic, extras: extras),
+    );
+    await _settle(tester);
+    await answer(tester, e);
+    late String second;
+    await tester.runAsync(
+      () async => second = e.simulateIncoming(remoteNumber: '+61355501988'),
+    );
+    await _settle(tester);
+    extras.locked = false;
+    await backInFront(tester);
+    expect(mic.bluetoothAsks, 0);
+    await tester.runAsync(() async => e.answer(second));
+    await _settle(tester);
+    expect(
+      e.activeCalls.any(
+        (c) => c.id == second && c.state == CallState.connected,
+      ),
+      isTrue,
+    );
+    expect(mic.bluetoothAsks, 1);
+    await tester.pumpWidget(const SizedBox());
+    await e.dispose();
+  });
+
   testWidgets('answering after Settings: asked once connected', (tester) async {
     usePhone(tester);
     final e = await _engine();
