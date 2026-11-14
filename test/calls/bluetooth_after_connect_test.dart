@@ -169,7 +169,62 @@ void main() {
     },
   );
 
-  testWidgets('a call that ended while locked is not asked for later', (
+  // FU80: an ask held while locked was dropped when its call ended, so a
+  // headset wasn't used until a call was answered unlocked.
+  Future<void> answer(WidgetTester tester, FakeCallEngine e) async {
+    await tester.runAsync(
+      () async => e.simulateIncoming(remoteNumber: '+61355501987'),
+    );
+    await _settle(tester);
+    await tester.tap(find.bySemanticsLabel('Answer'));
+    await _settle(tester);
+    expect(e.activeCalls.single.state, CallState.connected);
+  }
+
+  Future<void> hangUp(WidgetTester tester, FakeCallEngine e) async {
+    await tester.runAsync(() async => e.hangup(e.activeCalls.single.id));
+    await _settle(tester);
+    expect(e.activeCalls, isEmpty);
+  }
+
+  Future<void> backInFront(WidgetTester tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _settle(tester);
+  }
+
+  testWidgets(
+    'two calls ended while locked: asked once, unlocked and back in front',
+    (tester) async {
+      usePhone(tester);
+      final e = await _engine();
+      final mic = FakeMic();
+      final extras = FakeExtras()..locked = true;
+      await tester.pumpWidget(
+        await appUnderTest(engine: e, mic: mic, extras: extras),
+      );
+      await _settle(tester);
+      for (var i = 0; i < 2; i++) {
+        await answer(tester, e);
+        await hangUp(tester, e);
+      }
+      expect(mic.bluetoothAsks, 0);
+      // Never over the lock screen.
+      await backInFront(tester);
+      expect(mic.bluetoothAsks, 0);
+      extras.locked = false;
+      await backInFront(tester);
+      expect(mic.bluetoothAsks, 1);
+      // Never twice.
+      await backInFront(tester);
+      await backInFront(tester);
+      expect(mic.bluetoothAsks, 1);
+      await tester.pumpWidget(const SizedBox());
+      await e.dispose();
+    },
+  );
+
+  testWidgets('held after a locked call: the next call asks, and only it', (
     tester,
   ) async {
     usePhone(tester);
@@ -180,19 +235,62 @@ void main() {
       await appUnderTest(engine: e, mic: mic, extras: extras),
     );
     await _settle(tester);
-    await tester.runAsync(
-      () async => e.simulateIncoming(remoteNumber: '+61355501987'),
-    );
-    await _settle(tester);
-    await tester.tap(find.bySemanticsLabel('Answer'));
-    await _settle(tester);
-    await tester.runAsync(() async => e.hangup(e.activeCalls.single.id));
-    await _settle(tester);
-    extras.locked = false;
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await _settle(tester);
+    await answer(tester, e);
+    await hangUp(tester, e);
     expect(mic.bluetoothAsks, 0);
+    // Unlocked without the app coming to the front; the next call is first.
+    extras.locked = false;
+    await answer(tester, e);
+    expect(mic.bluetoothAsks, 1);
+    await hangUp(tester, e);
+    await backInFront(tester);
+    expect(mic.bluetoothAsks, 1);
+    await tester.pumpWidget(const SizedBox());
+    await e.dispose();
+  });
+
+  testWidgets(
+    'held: not shown while the next call rings, asked once answered',
+    (tester) async {
+      usePhone(tester);
+      final e = await _engine();
+      final mic = FakeMic();
+      final extras = FakeExtras()..locked = true;
+      await tester.pumpWidget(
+        await appUnderTest(engine: e, mic: mic, extras: extras),
+      );
+      await _settle(tester);
+      await answer(tester, e);
+      await hangUp(tester, e);
+      extras.locked = false;
+      await tester.runAsync(
+        () async => e.simulateIncoming(remoteNumber: '+61355501987'),
+      );
+      await _settle(tester);
+      await backInFront(tester);
+      expect(mic.bluetoothAsks, 0);
+      await tester.tap(find.bySemanticsLabel('Answer'));
+      await _settle(tester);
+      expect(mic.bluetoothAsks, 1);
+      await hangUp(tester, e);
+      await backInFront(tester);
+      expect(mic.bluetoothAsks, 1);
+      await tester.pumpWidget(const SizedBox());
+      await e.dispose();
+    },
+  );
+
+  testWidgets('nothing held: coming to the front asks nothing', (tester) async {
+    usePhone(tester);
+    final e = await _engine();
+    final mic = FakeMic();
+    await tester.pumpWidget(await appUnderTest(engine: e, mic: mic));
+    await _settle(tester);
+    await answer(tester, e);
+    expect(mic.bluetoothAsks, 1);
+    await hangUp(tester, e);
+    await backInFront(tester);
+    expect(mic.bluetoothAsks, 1);
     await tester.pumpWidget(const SizedBox());
     await e.dispose();
   });

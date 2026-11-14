@@ -36,6 +36,14 @@ class EngineService : Service(), IncomingCallNotifier.RingHost {
     private var shown: ServiceNotice.Notice? = null
     private var shownRing: Notification? = null
 
+    /**
+     * What is shown was put up while the app's notifications were off, so
+     * Android ran the service without showing it (FU81: after a fresh
+     * install the engine starts before POST_NOTIFICATIONS is answered, and
+     * "Ready for calls" stayed hidden until the first call changed it).
+     */
+    private var postedHidden = false
+
     override fun onCreate() {
         super.onCreate()
         EngineStartup.run(
@@ -108,6 +116,7 @@ class EngineService : Service(), IncomingCallNotifier.RingHost {
         }
         shown = notice
         shownRing = ring?.second
+        postedHidden = !notificationsAllowed()
         // Moving the foreground to another id removes the old notification: an
         // incoming call that still rings keeps its own (call waiting).
         val left = before?.takeIf { it.kind == ServiceNotice.Kind.INCOMING && it.callId != notice.callId }?.callId
@@ -121,6 +130,21 @@ class EngineService : Service(), IncomingCallNotifier.RingHost {
         }
         return true
     }
+
+    /**
+     * The app is in front again (after the notifications prompt, or back
+     * from Settings): what was put up while notifications were off is put up
+     * again, now that Android will show it (FU81).
+     */
+    fun repostIfNowAllowed() {
+        if (!ServiceNotice.needsRepost(postedHidden, notificationsAllowed())) return
+        shown = null
+        shownRing = null
+        apply()
+    }
+
+    private fun notificationsAllowed(): Boolean =
+        NotificationManagerCompat.from(this).areNotificationsEnabled()
 
     private fun startForeground(id: Int, notification: Notification, mic: Boolean) {
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL

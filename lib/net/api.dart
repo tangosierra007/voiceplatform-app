@@ -18,6 +18,7 @@ class ApiConfig {
     required this.baseUrl,
     required this.platform,
     required this.appVersion,
+    this.appBuild = '',
     this.deviceModel = 'Android',
   });
 
@@ -30,6 +31,10 @@ class ApiConfig {
 
   /// The app's version name from pubspec, for example `1.0.0`.
   final String appVersion;
+
+  /// The build number (versionCode on Android), for example `418`. Shown on
+  /// Me beside the version (FU81); not in [appHeader]. Empty when not known.
+  final String appBuild;
 
   /// The phone's model, for example `Pixel 8` (DeviceInfo at sign-in).
   final String deviceModel;

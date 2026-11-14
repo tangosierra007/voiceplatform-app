@@ -1314,6 +1314,11 @@ object LinphoneEngine {
         )
     }
 
+    /** The app came to the front: the service's notice, if notifications were off when it went up (FU81). */
+    fun onAppResumed() {
+        service?.repostIfNowAllowed()
+    }
+
     /** The service's notification and types follow the calls ([ServiceNotice]). */
     private fun updateService() {
         service?.update(calls.values.map { ServiceNotice.Call(it.id, it.incoming, it.state, it.answering) }, micGranted())

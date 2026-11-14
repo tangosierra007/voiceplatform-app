@@ -68,11 +68,22 @@ class _CallFlowState extends ConsumerState<CallFlow> {
   /// Calls BLUETOOTH_CONNECT has been asked for (or is being): once per call.
   final Set<String> _bluetoothAsked = {};
 
+  /// An ask was held because the phone was locked and hasn't been shown
+  /// since (FU80). It outlives its call: shown once, when the app next comes
+  /// to the front unlocked with no call up, or at the next call, whichever
+  /// is first. However many locked calls held it, it is one ask.
+  bool _bluetoothOwed = false;
+
+  /// The owed ask is on its way (two resumes close together ask once).
+  bool _owedAsking = false;
+
   /// BLUETOOTH_CONNECT for a connected call, once, and never while the lock
   /// screen is up (FU69): Android's permission prompt can't show over it, so
   /// it took the screen from the call screen and the lock screen came back
   /// over the call. Held, it is asked at the call's next change or when the
-  /// app comes back to the front, once the phone is unlocked.
+  /// app comes back to the front, once the phone is unlocked; if the call
+  /// ends first, when the app next comes to the front unlocked or at the
+  /// next call (FU80).
   Future<void> _askBluetooth(String callId) async {
     if (!_bluetoothAsked.add(callId)) return;
     final locked = await ref.read(phoneExtrasProvider).isLocked();
@@ -82,17 +93,39 @@ class _CallFlowState extends ConsumerState<CallFlow> {
         .activeCalls
         .any((o) => o.id == callId && o.state == CallState.connected);
     if (locked || !live) {
+      if (locked) _bluetoothOwed = true;
       _bluetoothAsked.remove(callId);
       return;
     }
+    _bluetoothOwed = false;
     await ref.read(micPermissionProvider).requestBluetooth();
   }
 
   void _askHeldBluetooth() {
-    for (final c in ref.read(callEngineProvider).activeCalls) {
+    final calls = ref.read(callEngineProvider).activeCalls;
+    for (final c in calls) {
       if (c.state == CallState.connected && !_bluetoothAsked.contains(c.id)) {
         unawaited(_askBluetooth(c.id));
       }
+    }
+    // A call ringing or being dialled asks for itself once it connects:
+    // never a prompt between the user and Answer (WS6).
+    if (calls.isEmpty) unawaited(_askOwedBluetooth());
+  }
+
+  /// The ask held for a call that has since ended (FU80): once, unlocked,
+  /// with no call up.
+  Future<void> _askOwedBluetooth() async {
+    if (!_bluetoothOwed || _owedAsking) return;
+    _owedAsking = true;
+    try {
+      final locked = await ref.read(phoneExtrasProvider).isLocked();
+      if (!mounted || locked || !_bluetoothOwed) return;
+      if (ref.read(callEngineProvider).activeCalls.isNotEmpty) return;
+      _bluetoothOwed = false;
+      await ref.read(micPermissionProvider).requestBluetooth();
+    } finally {
+      _owedAsking = false;
     }
   }
 
