@@ -34,6 +34,12 @@ abstract interface class PhoneExtras {
   /// The id of each call that rang while full-screen was denied, so it
   /// showed only as a notification.
   Stream<String> get fullScreenDeniedCalls;
+
+  /// Whether the phone's lock screen is up, including while the call screen
+  /// shows over it. Android's permission prompts can't show over the lock
+  /// screen: one opened then takes the screen and the lock screen comes back
+  /// over the call (FU69). False where it can't be told.
+  Future<bool> isLocked();
 }
 
 class _LinphoneExtras implements PhoneExtras {
@@ -85,6 +91,15 @@ class _LinphoneExtras implements PhoneExtras {
 
   @override
   Stream<String> get fullScreenDeniedCalls => engine.fullScreenIntentDenied;
+
+  @override
+  Future<bool> isLocked() async {
+    try {
+      return await engine.isKeyguardLocked();
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 class _NoExtras implements PhoneExtras {
@@ -110,6 +125,9 @@ class _NoExtras implements PhoneExtras {
 
   @override
   Stream<String> get fullScreenDeniedCalls => const Stream.empty();
+
+  @override
+  Future<bool> isLocked() async => false;
 }
 
 final phoneExtrasProvider = Provider<PhoneExtras>((ref) {

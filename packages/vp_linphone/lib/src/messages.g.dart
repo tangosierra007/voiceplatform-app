@@ -1093,6 +1093,28 @@ class VpLinphoneHostApi {
     _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
   }
 
+  /// Whether the lock screen is up, shown or covered by our call screen
+  /// (KeyguardManager.isKeyguardLocked). A system dialog (a permission
+  /// prompt) can't show over it, so the app holds those until unlocked.
+  Future<bool> isKeyguardLocked() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.isKeyguardLocked$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as bool;
+  }
+
   /// True when the background registration put a new FCM token in the SIP
   /// contact that the API has not been sent yet (`PUT /devices/me/push-token`).
   Future<bool> pushTokenUnsent() async {

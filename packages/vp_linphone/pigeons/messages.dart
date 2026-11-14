@@ -188,6 +188,11 @@ abstract class VpLinphoneHostApi {
   bool canUseFullScreenIntent();
   void openFullScreenIntentSettings();
 
+  /// Whether the lock screen is up, shown or covered by our call screen
+  /// (KeyguardManager.isKeyguardLocked). A system dialog (a permission
+  /// prompt) can't show over it, so the app holds those until unlocked.
+  bool isKeyguardLocked();
+
   /// True when the background registration put a new FCM token in the SIP
   /// contact that the API has not been sent yet (`PUT /devices/me/push-token`).
   bool pushTokenUnsent();

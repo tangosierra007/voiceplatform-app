@@ -310,6 +310,10 @@ final class VpLinphoneEngine implements CallEngine {
   Future<bool> canUseFullScreenIntent() => _guard(_host.canUseFullScreenIntent);
   Future<void> openFullScreenIntentSettings() => _guard(_host.openFullScreenIntentSettings);
 
+  /// The lock screen is up (shown, or covered by the call screen): a system
+  /// dialog such as a permission prompt would open behind it (FU69).
+  Future<bool> isKeyguardLocked() => _guard(_host.isKeyguardLocked);
+
   Future<VpBatteryStatus> batteryStatus() async {
     final b = await _guard(_host.batteryStatus);
     return VpBatteryStatus(

@@ -22,6 +22,9 @@ class _Host extends VpLinphoneHostApi {
       BatteryMsg(ignoringOptimizations: false, lateWakesLastWeek: 2, manufacturer: 'samsung');
   @override
   Future<bool> canUseFullScreenIntent() async => false;
+  bool locked = false;
+  @override
+  Future<bool> isKeyguardLocked() async => locked;
   @override
   Future<void> openBatteryOptimizationSettings() async => calls.add('battery');
   @override
@@ -124,6 +127,12 @@ void main() {
     await engine.openFullScreenIntentSettings();
     expect(host.calls, ['fsi']);
     await sub.cancel();
+  });
+
+  test('the lock screen as the platform side reports it (FU69)', () async {
+    expect(await engine.isKeyguardLocked(), isFalse);
+    host.locked = true;
+    expect(await engine.isKeyguardLocked(), isTrue);
   });
 
   test('battery status for the Me card, and the settings link', () async {

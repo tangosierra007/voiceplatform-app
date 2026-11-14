@@ -7,6 +7,7 @@ import 'package:vp_linphone/vp_linphone.dart' show VpUiRequest, VpUiRequestKind;
 
 import '../calls/call_actions.dart';
 import '../engine/engine_provider.dart';
+import '../engine/phone_extras.dart';
 import 'routes.dart';
 
 /// Moves between the tabs and the call screens as the engine's calls change:
@@ -24,11 +25,15 @@ class CallFlow extends ConsumerStatefulWidget {
 class _CallFlowState extends ConsumerState<CallFlow> {
   StreamSubscription<CallSnapshot>? _sub;
   StreamSubscription<VpUiRequest>? _ui;
+  late final AppLifecycleListener _lifecycle;
   String? _returnTo;
 
   @override
   void initState() {
     super.initState();
+    // Back in front (perhaps unlocked now): a Bluetooth ask held while the
+    // phone was locked goes ahead if its call is still up.
+    _lifecycle = AppLifecycleListener(onResume: _askHeldBluetooth);
     _sub = ref.read(callEngineProvider).calls.listen(_onCall);
     // The incoming-call notification and full-screen intent (WS3 3.2): a
     // cold start brings one request; a running app gets them as a stream.
@@ -41,6 +46,7 @@ class _CallFlowState extends ConsumerState<CallFlow> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _sub?.cancel();
     _ui?.cancel();
     super.dispose();
@@ -59,8 +65,36 @@ class _CallFlowState extends ConsumerState<CallFlow> {
 
   final Map<String, CallState> _last = {};
 
-  /// Calls BLUETOOTH_CONNECT has been asked for: once per call.
+  /// Calls BLUETOOTH_CONNECT has been asked for (or is being): once per call.
   final Set<String> _bluetoothAsked = {};
+
+  /// BLUETOOTH_CONNECT for a connected call, once, and never while the lock
+  /// screen is up (FU69): Android's permission prompt can't show over it, so
+  /// it took the screen from the call screen and the lock screen came back
+  /// over the call. Held, it is asked at the call's next change or when the
+  /// app comes back to the front, once the phone is unlocked.
+  Future<void> _askBluetooth(String callId) async {
+    if (!_bluetoothAsked.add(callId)) return;
+    final locked = await ref.read(phoneExtrasProvider).isLocked();
+    if (!mounted) return;
+    final live = ref
+        .read(callEngineProvider)
+        .activeCalls
+        .any((o) => o.id == callId && o.state == CallState.connected);
+    if (locked || !live) {
+      _bluetoothAsked.remove(callId);
+      return;
+    }
+    await ref.read(micPermissionProvider).requestBluetooth();
+  }
+
+  void _askHeldBluetooth() {
+    for (final c in ref.read(callEngineProvider).activeCalls) {
+      if (c.state == CallState.connected && !_bluetoothAsked.contains(c.id)) {
+        unawaited(_askBluetooth(c.id));
+      }
+    }
+  }
 
   void _onCall(CallSnapshot c) {
     final router = ref.read(routerProvider);
@@ -79,10 +113,9 @@ class _CallFlowState extends ConsumerState<CallFlow> {
         // BLUETOOTH_CONNECT once the call is up, never before answering
         // (WS6): the system dialog must not stand between the user and the
         // Answer button. Any path that ends connected passes here, including
-        // answering after a trip to Settings for the microphone.
-        if (_bluetoothAsked.add(c.id)) {
-          unawaited(ref.read(micPermissionProvider).requestBluetooth());
-        }
+        // answering after a trip to Settings for the microphone. Not over
+        // the lock screen (FU69; see _askBluetooth).
+        unawaited(_askBluetooth(c.id));
         // Only on the change to connected: a merge or a mute must not move.
         if (prev != CallState.connected &&
             prev != CallState.heldByMe &&
