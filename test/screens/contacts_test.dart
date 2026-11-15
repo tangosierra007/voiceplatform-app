@@ -99,6 +99,51 @@ void main() {
     await events.close();
   });
 
+  // Fold emulator run, 15 Nov: lab-b's Contacts said "1 COLLEAGUE · 2 FREE
+  // NOW", counting its own extension from the presence stream.
+  testWidgets('your own presence is not counted as a colleague free now', (
+    tester,
+  ) async {
+    usePhone(tester);
+    final events = StreamController<ServerEvent>.broadcast();
+    final live = LiveEvents(
+      connect: () => events.stream,
+      poll: (_) async => (items: null, etag: null),
+    );
+    await tester.pumpWidget(await appUnderTest(clock: () => _now, live: live));
+    await _settle(tester);
+    await tester.tap(_tab('Contacts'));
+    await _settle(tester);
+    expect(find.text('22 COLLEAGUES · 3 FREE NOW'), findsOneWidget);
+    // 202 is the signed-in user (the fixture's GET /me).
+    await tester.runAsync(() async {
+      events.add(
+        const ServerEvent('presence', {
+          'extension': '202',
+          'presence': 'available',
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _settle(tester);
+    expect(find.text('22 COLLEAGUES · 3 FREE NOW'), findsOneWidget);
+    // A colleague going free still counts.
+    await tester.runAsync(() async {
+      events.add(
+        const ServerEvent('presence', {
+          'extension': '201',
+          'presence': 'available',
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _settle(tester);
+    expect(find.text('22 COLLEAGUES · 4 FREE NOW'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await live.dispose();
+    await events.close();
+  });
+
   testWidgets('search filters by name and extension', (tester) async {
     usePhone(tester);
     await tester.pumpWidget(await appUnderTest(clock: () => _now));

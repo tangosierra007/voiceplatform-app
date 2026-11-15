@@ -468,9 +468,14 @@ class _Colleagues extends ConsumerWidget {
     final presence = ref.watch(presenceProvider);
     final list = dir.value?.items ?? const <Colleague>[];
     // The free count is counted from live presence, not a fixed figure.
+    // The presence stream also carries your own extension, which isn't a
+    // colleague: leave it out, as the Keypad's free list does.
+    final me = ref.watch(meProvider).value?.extensionValue;
     final free = presence.isEmpty
         ? (dir.value?.freeNow ?? 0)
-        : presence.values.where((p) => _isFree(p.presence)).length;
+        : presence.entries
+              .where((e) => e.key != me && _isFree(e.value.presence))
+              .length;
     final total = dir.value?.total ?? list.length;
     final shown = [
       for (final col in list)

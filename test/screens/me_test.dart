@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -114,6 +115,30 @@ void main() {
     );
     expect(find.bySemanticsLabel('Open source licences'), findsOneWidget);
     expect(find.bySemanticsLabel('Sign out'), findsOneWidget);
+  });
+
+  // Fold emulator run, 15 Nov: on the 411 dp cover screen at 200 % text the
+  // picked status read "Availabl / e".
+  testWidgets('200 % text, cover-screen width: no status word breaks', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(411, 797) * 2;
+    tester.view.devicePixelRatio = 2;
+    tester.view.padding = const FakeViewPadding(top: 48);
+    tester.view.viewPadding = const FakeViewPadding(top: 48);
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(await appUnderTest(clock: () => _now));
+    await _settle(tester);
+    await openMe(tester);
+    for (final word in ['Available', 'Away']) {
+      final p = tester.renderObject<RenderParagraph>(find.text(word));
+      // One line of 13 px at 200 % and a 1.2 line height is 31.2 px; two
+      // would be 62.4.
+      expect(p.size.height, lessThan(13 * 2 * 1.2 * 1.5), reason: word);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('holding the call logs row reports the test error', (
