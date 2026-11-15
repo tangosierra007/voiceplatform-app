@@ -576,9 +576,8 @@ class _StatusPicker extends ConsumerWidget {
                                 const SizedBox(width: 6),
                               ],
                               Flexible(
-                                child: Text(
+                                child: _SegmentLabel(
                                   label,
-                                  textAlign: TextAlign.center,
                                   style: VpType.body.copyWith(
                                     fontSize: 13,
                                     height: 1.2,
@@ -608,6 +607,37 @@ class _StatusPicker extends ConsumerWidget {
           child: Text(note, style: vpMuted(context, size: 12, line: 18)),
         ),
       ],
+    );
+  }
+}
+
+/// A status segment's label. Several words wrap between words; a single
+/// word ("Available", "Away") never breaks inside itself: with large text in
+/// a narrow window (a Fold's cover screen at 200 %, 15 Nov) it scales down to
+/// fit instead of reading "Availabl / e".
+class _SegmentLabel extends StatelessWidget {
+  const _SegmentLabel(this.label, {required this.style});
+  final String label;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(label, textAlign: TextAlign.center, style: style);
+    if (label.contains(' ')) return text;
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final word = TextPainter(
+          text: TextSpan(text: label, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        )..layout();
+        final fits = word.width <= box.maxWidth;
+        word.dispose();
+        // Drawn as before whenever the word fits.
+        return fits ? text : FittedBox(fit: BoxFit.scaleDown, child: text);
+      },
     );
   }
 }
