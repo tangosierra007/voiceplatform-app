@@ -467,11 +467,35 @@ class _Colleagues extends ConsumerWidget {
     final dir = ref.watch(colleagueDirectoryProvider);
     final presence = ref.watch(presenceProvider);
     final list = dir.value?.items ?? const <Colleague>[];
-    // The free count is counted from live presence, not a fixed figure.
+    // Desks (spec 31, G14): extensions with no signed-in person. The
+    // platform leaves out the ones an admin switched out of the apps.
+    final desks = dir.value?.desks ?? const <Desk>[];
+    final deskExtensions = {for (final d in desks) d.extensionValue};
+    // The free count is counted from live presence, not a fixed figure;
+    // desks have their own count.
     final free = presence.isEmpty
         ? (dir.value?.freeNow ?? 0)
-        : presence.values.where((p) => _isFree(p.presence)).length;
+        : presence.entries
+              .where(
+                (e) =>
+                    !deskExtensions.contains(e.key) &&
+                    _isFree(e.value.presence),
+              )
+              .length;
     final total = dir.value?.total ?? list.length;
+    final desksFree = presence.isEmpty
+        ? (dir.value?.desksFree ?? 0)
+        : desks
+              .where(
+                (d) => _isFree(
+                  (presence[d.extensionValue] ?? d.presence).presence,
+                ),
+              )
+              .length;
+    final shownDesks = [
+      for (final d in desks)
+        if (_matches(query, [d.name, d.extensionValue, d.team])) d,
+    ];
     final shown = [
       for (final col in list)
         if (_matches(query, [
@@ -503,7 +527,7 @@ class _Colleagues extends ConsumerWidget {
             ),
           if (dir.hasError && !dir.hasValue)
             const VpEmpty("Colleagues didn't load. Pull down to try again.")
-          else if (dir.hasValue && shown.isEmpty)
+          else if (dir.hasValue && shown.isEmpty && shownDesks.isEmpty)
             VpEmpty(query.isEmpty ? 'No colleagues yet.' : 'No one matches.'),
           for (final col in shown)
             ColleagueRow(
@@ -511,6 +535,16 @@ class _Colleagues extends ConsumerWidget {
               presence: presence[col.extensionValue] ?? col.presence,
               selected: col.userId == shownId,
               onTap: onPick == null ? null : () => onPick!(col.userId),
+            ),
+          if (shownDesks.isNotEmpty)
+            VpBand(
+              '${desks.length} ${desks.length == 1 ? 'desk' : 'desks'} · '
+              '$desksFree free now',
+            ),
+          for (final d in shownDesks)
+            DeskRow(
+              desk: d,
+              presence: presence[d.extensionValue] ?? d.presence,
             ),
         ],
       ),
@@ -550,7 +584,12 @@ class ColleagueRow extends ConsumerWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _PresenceLine(colleague: col, presence: presence),
+          child: _PresenceLine(
+            name: col.name,
+            role: col.role,
+            extension: col.extensionValue,
+            presence: presence,
+          ),
         ),
         const SizedBox(width: 8),
         VpRoundIconButton(
@@ -563,10 +602,52 @@ class ColleagueRow extends ConsumerWidget {
   }
 }
 
-/// The subtitle ticks once a second while the colleague is on a call.
+/// A desk (spec 31, G14): an extension with no signed-in person, such as a
+/// front desk or a shared phone. Name, extension and status, and a call
+/// button; no page of its own.
+class DeskRow extends ConsumerWidget {
+  const DeskRow({super.key, required this.desk, required this.presence});
+  final Desk desk;
+  final PresenceEntry presence;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return VpRow(
+      children: [
+        ExcludeSemantics(
+          child: PresenceAvatar(name: desk.name, presence: presence.presence),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _PresenceLine(
+            name: desk.name,
+            extension: desk.extensionValue,
+            presence: presence,
+          ),
+        ),
+        const SizedBox(width: 8),
+        VpRoundIconButton(
+          icon: VpIcon.phone,
+          label: 'Call ${desk.name}',
+          onPressed: () => dialNumber(context, ref, desk.extensionValue),
+        ),
+      ],
+    );
+  }
+}
+
+/// The subtitle ticks once a second while the colleague or desk is on a
+/// call.
 class _PresenceLine extends ConsumerStatefulWidget {
-  const _PresenceLine({required this.colleague, required this.presence});
-  final Colleague colleague;
+  const _PresenceLine({
+    required this.name,
+    required this.extension,
+    required this.presence,
+    this.role,
+  });
+  final String name;
+  final String? role;
+  final String extension;
   final PresenceEntry presence;
 
   @override
@@ -612,7 +693,6 @@ class _PresenceLineState extends ConsumerState<_PresenceLine> {
   @override
   Widget build(BuildContext context) {
     final p = widget.presence;
-    final col = widget.colleague;
     final now = ref.watch(clockProvider)();
     final status = switch (p.presence) {
       Presence.onCall when p.since != null =>
@@ -622,14 +702,14 @@ class _PresenceLineState extends ConsumerState<_PresenceLine> {
       _ => presenceText(p.presence),
     };
     final sub = [
-      col.role,
-      col.extensionValue,
+      widget.role,
+      widget.extension,
       status,
     ].whereType<String>().join(' · ');
     return Semantics(
-      label: '${col.name}, $sub',
+      label: '${widget.name}, $sub',
       excludeSemantics: true,
-      child: VpRowText(title: col.name, subtitle: sub),
+      child: VpRowText(title: widget.name, subtitle: sub),
     );
   }
 }

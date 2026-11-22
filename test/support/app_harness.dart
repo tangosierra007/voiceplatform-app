@@ -98,6 +98,9 @@ Future<Widget> appUnderTest({
 
   /// Voicemail that changes as the app hears and deletes it (counts tests).
   VoicemailServer? voicemail,
+
+  /// In place of the fixture's `GET /directory/colleagues` reply (desks).
+  Colleagues? directory,
 }) async {
   SharedPreferences.setMockInitialValues({
     if (theme != ThemePreference.system)
@@ -160,7 +163,7 @@ Future<Widget> appUnderTest({
       ),
       addressBookScrubberProvider.overrideWithValue(addressBook ?? (_) {}),
       colleagueDirectoryProvider.overrideWith(
-        (ref) async => fixtureDirectory(now: clock?.call()),
+        (ref) async => directory ?? fixtureDirectory(now: clock?.call()),
       ),
       colleaguesProvider.overrideWith(
         (ref) async => fixtureColleagues(now: clock?.call()),

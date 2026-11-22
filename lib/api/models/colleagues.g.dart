@@ -12,6 +12,10 @@ Colleagues _$ColleaguesFromJson(Map<String, dynamic> json) => Colleagues(
   items: (json['items'] as List<dynamic>)
       .map((e) => Colleague.fromJson(e as Map<String, dynamic>))
       .toList(),
+  desks: (json['desks'] as List<dynamic>?)
+      ?.map((e) => Desk.fromJson(e as Map<String, dynamic>))
+      .toList(),
+  desksFree: (json['desksFree'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$ColleaguesToJson(Colleagues instance) =>
@@ -19,4 +23,6 @@ Map<String, dynamic> _$ColleaguesToJson(Colleagues instance) =>
       'total': instance.total,
       'freeNow': instance.freeNow,
       'items': instance.items.map((e) => e.toJson()).toList(),
+      'desks': ?instance.desks?.map((e) => e.toJson()).toList(),
+      'desksFree': ?instance.desksFree,
     };

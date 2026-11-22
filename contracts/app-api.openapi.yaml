@@ -1247,6 +1247,27 @@ components:
         total: { type: integer, examples: [22] }
         freeNow: { type: integer, examples: [4] }
         items: { type: array, items: { $ref: "#/components/schemas/Colleague" } }
+        desks:
+          type: array
+          description: >-
+            Additive (spec 31, G14): active extensions with no active user (a front desk, a shared
+            phone, a person invited but not signed in yet), by display name, never one an admin
+            switched out of the apps. Sent while the platform lists desks (on by default,
+            decision 257); a reply without it is still valid. items, total and freeNow stay
+            people only.
+          items: { $ref: "#/components/schemas/Desk" }
+        desksFree: { type: integer, examples: [1] }
+
+    Desk:
+      type: object
+      required: [extensionId, extension, name, initials, presence]
+      properties:
+        extensionId: { type: string, format: uuid }
+        extension: { type: string, examples: ["201"] }
+        name: { type: string, examples: ["Reception"] }
+        initials: { type: string, examples: ["R"] }
+        team: { type: string }
+        presence: { $ref: "#/components/schemas/PresenceEntry" }
 
     Team:
       type: object
