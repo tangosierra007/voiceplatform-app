@@ -352,3 +352,24 @@ Messages and Thread behaviour and SMS part counting; Send body; `message` and `s
 - One owner at a time for the shared player (`mediaOwnerProvider`): opening a recording or a greeting resets the voicemail card, and leaving Recordings stops its recording.
 - SMS parts are packed part by part: a GSM-7 extension character or a surrogate pair never straddles two parts (152 a + € + 152 a and 66 a + 😀 + 66 a are 3 parts); the 10-part limit is tested at its edges.
 - Office hours: the row and its fetch need `permissions.officeHours`.
+
+## The Keypad on a short window (FU56, Q309-4, task 401)
+
+TJ's answer to Q309-4 (22 Nov): one row of common keys, the rest behind More. The 12 dial keys and the call button can't go behind More, so the controls around them collapse (pack question Q401-1). Spec 22's Keypad section takes the same text.
+
+- **When.** The Keypad's own height (the window less the status bar, and less the tab bar on a phone) under the height where the normal layout's call button ends, so the normal layout never has to scroll to show it. Measured with the bundled fonts and pinned in `keypadShortBelow` (`lib/shell/layout.dart`); `test/screens/short_keypad_test.dart` fails if the normal layout grows past them.
+
+  | | Text under 150 % | 150 % and up |
+  | --- | --- | --- |
+  | Phone layout | under 630 dp | under 704 dp |
+  | Wide layout (the emergency note under the call button) | under 692 dp | under 784 dp |
+  | Offline (the banner) | add 76 dp, plus 230 dp for each 100 % of text over 100 % | always short |
+  | During a call (the back-to-call strip) | add 20 dp plus 24 dp for each 100 % of text | the same |
+
+  "150 % and up" is the rule that already stacks the chips, measured at 13 px. The A3 folded landscape (443 dp tall) and the Fold emulator's cover in landscape (411 dp) are short at every text size; the artboard phone (390 x 844) at 200 % text is short (its call button scrolled before), as is the shell with "Can't reach VoicePlatform" over the Keypad (the call button sat under the tab bar); the artboard phone at 100 % and 130 %, AppOffline at 100 %, and every wide golden at 1030 dp tall are unchanged.
+- **The row** (48 dp): Back to call during a call (read as the strip is: "<name> · on a call. Back to the call"), or the Offline chip offline; the number with its match, scaled to fit; Delete with a number typed (hold to clear); More.
+- **Behind More** (a bottom sheet, rows at least 48 dp, each with its own label): "Status: Available" (opens the status sheet), "Calls show 03 5550 1200" with "Change caller ID" (opens the picker; off offline or with no numbers), and offline the banner's text. The status and caller ID sheets scroll when the window is too short for them.
+- **The keys**: a 3 x 4 grid with the call button beside the bottom row (right of #), so four rows, not five. Keys and call button as large as fits, 78 dp at most, never under 48 dp; at 400 dp tall and 200 % text they are about 52 dp.
+- **000**: in the wide layout the note "For 000, 112 or 106 the phone's own dialler opens." stays under the keys, its text capped at 150 % and two lines. Offline the number's place says "For 000, use your phone's own dialler. It works without the app." Dialling 000 still goes to AppEmergency through the one `startCall` path.
+- Above the thresholds nothing changes: AppKeypad and FoldKeypad as built.
+- Goldens: `keypad_short_*` (797 x 443 light and dark, 797 x 443 and 797 x 400 at 200 %, the artboard phone at 200 %, offline, More open); `shell_me_failed_*` redrawn (now short, so the call button shows). Not yet seen on the real Fold: TJ checks it there before merge.
