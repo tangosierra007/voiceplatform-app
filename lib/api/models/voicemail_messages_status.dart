@@ -4,6 +4,7 @@
 
 import 'package:json_annotation/json_annotation.dart';
 
+/// Which messages (`GET /voicemail/messages`)
 @JsonEnum()
 enum VoicemailMessagesStatus {
   /// The name has been replaced because it contains a keyword. Original name: `new`.

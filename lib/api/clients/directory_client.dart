@@ -41,6 +41,8 @@ abstract class DirectoryClient {
   /// A comment line every 25 s keeps the connection open. One stream per device; a second.
   /// one closes the first. Changes fan out across API replicas with PostgreSQL NOTIFY on a.
   /// per-tenant channel, so a stream only ever carries its own tenant's events (T1).
+  /// There is no `signed_out` event: when the device is revoked the stream simply closes,.
+  /// and the app's reconnect then gets 401 `device_revoked`.
   ///
   /// [lastEventId] - Ignored for presence (a fresh snapshot is sent); kept for the SSE client.
   @GET('/events')

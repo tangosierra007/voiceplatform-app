@@ -4,6 +4,7 @@
 
 import 'package:json_annotation/json_annotation.dart';
 
+/// Which greeting (`/voicemail/greetings/{kind}`)
 @JsonEnum()
 enum VoicemailGreetingsKind {
   @JsonValue('unavailable')

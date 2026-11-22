@@ -445,7 +445,11 @@ paths:
                 properties:
                   { deskPhone: { type: string, description: "For example `Desk phone 202`" } }
         "409": { description: "`no_desk_phone`: no registered desk phone" }
-        "422": { description: "`number_barred`" }
+        "422":
+          description: >-
+            `number_barred`, `invalid_number` (not a number that can be called) or
+            `caller_id_not_allowed` (a caller ID the user may not present)
+        "503": { description: "`calls_unavailable`: the call can't be placed right now" }
 
   /directory/colleagues:
     get:
@@ -500,6 +504,8 @@ paths:
         A comment line every 25 s keeps the connection open. One stream per device; a second
         one closes the first. Changes fan out across API replicas with PostgreSQL NOTIFY on a
         per-tenant channel, so a stream only ever carries its own tenant's events (T1).
+        There is no `signed_out` event: when the device is revoked the stream simply closes,
+        and the app's reconnect then gets 401 `device_revoked`.
       parameters:
         - name: Last-Event-ID
           in: header
@@ -540,7 +546,7 @@ paths:
       parameters:
         - name: filter
           in: query
-          schema: { type: string, enum: [all, missed, voicemail], default: all }
+          schema: { $ref: "#/components/schemas/HistoryFilter", default: all }
         - name: mine
           in: query
           description: '"Mine only": calls to or from this extension, not its groups'
@@ -607,7 +613,7 @@ paths:
         - {
             name: status,
             in: query,
-            schema: { type: string, enum: [new, heard, all], default: all },
+            schema: { $ref: "#/components/schemas/VoicemailMessagesStatus", default: all },
           }
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Before" }
@@ -674,7 +680,7 @@ paths:
             name: kind,
             in: path,
             required: true,
-            schema: { type: string, enum: [unavailable, busy, name] },
+            schema: { $ref: "#/components/schemas/VoicemailGreetingsKind" },
           }
       requestBody:
         required: true
@@ -696,7 +702,7 @@ paths:
             name: kind,
             in: path,
             required: true,
-            schema: { type: string, enum: [unavailable, busy, name] },
+            schema: { $ref: "#/components/schemas/VoicemailGreetingsKind" },
           }
       responses:
         "204": { description: Removed }
@@ -710,7 +716,7 @@ paths:
             name: kind,
             in: path,
             required: true,
-            schema: { type: string, enum: [unavailable, busy, name] },
+            schema: { $ref: "#/components/schemas/VoicemailGreetingsKind" },
           }
       responses:
         "200": { $ref: "#/components/responses/MediaUrl" }
@@ -862,7 +868,15 @@ paths:
                 type: object
                 required: [reference]
                 properties: { reference: { type: string, examples: ["LOG-7F3K9Q"] } }
+        "400": { description: "`invalid_log`: not gzip" }
         "413": { description: "`log_too_large`" }
+        "415": { description: "`invalid_log`: not sent as `application/gzip`" }
+        "422": { description: "`invalid_log`: the unpacked log couldn't be read" }
+        "429":
+          description: >-
+            `rate_limited` (too many from this tenant; `Retry-After`) or `upload_in_progress`
+            (another from this phone is still being sent)
+        "503": { description: "`storage_unavailable` or `busy`; try again later" }
 
 components:
   securitySchemes:
@@ -910,6 +924,20 @@ components:
               expiresAt: { type: string, format: date-time }
 
   schemas:
+    HistoryFilter:
+      description: Recents filter (`GET /history`)
+      type: string
+      enum: [all, missed, voicemail]
+      default: all
+    VoicemailMessagesStatus:
+      description: Which messages (`GET /voicemail/messages`)
+      type: string
+      enum: [new, heard, all]
+      default: all
+    VoicemailGreetingsKind:
+      description: Which greeting (`/voicemail/greetings/{kind}`)
+      type: string
+      enum: [unavailable, busy, name]
     Error:
       type: object
       required: [error, message]
