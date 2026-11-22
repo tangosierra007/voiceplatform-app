@@ -5,6 +5,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voiceplatform_app/api/export.dart';
 import 'package:voiceplatform_app/net/api.dart' show MeUnavailable;
@@ -37,6 +38,10 @@ Future<void> resize(WidgetTester tester, Size size) async {
 
 const unfolded = Size(884, 1030);
 const phone = Size(390, 844);
+
+/// The Fold's cover screen turned to landscape: 2092 x 1080 px, 411 dp tall
+/// (task 484's emulator run).
+const coverLandscape = Size(796, 411);
 
 Finder _rail(String label) =>
     find.descendant(of: find.byType(VpNavRail), matching: find.text(label));
@@ -240,6 +245,76 @@ void main() {
           final right = box.localToGlobal(box.size.bottomRight(Offset.zero)).dx;
           expect(left, greaterThanOrEqualTo(rail.left), reason: label);
           expect(right, lessThanOrEqualTo(rail.right - 1), reason: label);
+        }
+      });
+    }
+
+    // Task 489 (F484-2, the Fold's cover screen turned to landscape at 200 %
+    // text): the Recents badge covered its clock icon and "Me" drew larger
+    // than the other labels.
+    for (final text in [1.0, 2.0]) {
+      final pct = '${(text * 100).toInt()}%';
+      testWidgets('cover screen at $pct: one label size for every item', (
+        tester,
+      ) async {
+        useWindow(tester, coverLandscape);
+        tester.platformDispatcher.textScaleFactorTestValue = text;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpWidget(await appUnderTest());
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final heights = {
+          for (final label in _railLabels(tester))
+            label: tester.getRect(_rail(label)).height,
+        };
+        expect(heights.keys, contains('Me'));
+        for (final MapEntry(:key, :value) in heights.entries) {
+          expect(value, closeTo(heights['Me']!, 0.01), reason: key);
+        }
+        // Still grows with the text size: 11 px at 100 %; at 200 % as large
+        // as the widest label ("Messages") allows in 64 px, about 13 px.
+        expect(heights['Me']!, text == 1 ? closeTo(11, 0.01) : greaterThan(12));
+      });
+
+      testWidgets('cover screen at $pct: the badges stay off their icons', (
+        tester,
+      ) async {
+        useWindow(tester, coverLandscape);
+        tester.platformDispatcher.textScaleFactorTestValue = text;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpWidget(await appUnderTest());
+        await tester.pumpAndSettle();
+        final rail = tester.getRect(find.byType(VpNavRail));
+        for (final (tab, count) in [
+          (AppTab.recents, '2'),
+          (AppTab.messages, '1'),
+        ]) {
+          final item = find.ancestor(
+            of: _rail(tab.label),
+            matching: find.byType(Stack),
+          );
+          final icon = tester.getRect(
+            find.descendant(of: item.first, matching: find.byType(SvgPicture)),
+          );
+          final badge = tester.getRect(
+            find.ancestor(
+              of: find.descendant(of: item.first, matching: find.text(count)),
+              matching: find.byType(VpCountBadge),
+            ),
+          );
+          // As the artboards at 100 %: on the icon's top right corner, at
+          // most 1 px over it, whatever the text size.
+          expect(
+            badge.left,
+            greaterThanOrEqualTo(icon.right - 1),
+            reason: tab.label,
+          );
+          expect(
+            badge.right,
+            lessThanOrEqualTo(rail.right - 1),
+            reason: tab.label,
+          );
+          expect(badge.top, lessThan(icon.top), reason: tab.label);
         }
       });
     }

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:call_engine/call_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,10 +43,50 @@ class VpNavRail extends StatelessWidget {
   final ValueChanged<AppTab> onSelect;
   final Map<AppTab, int> badges;
 
+  /// One text size for every label (task 489): the user's text size, made
+  /// smaller only as far as the widest visible label needs to fit the 64 px
+  /// column. Before, each label shrank on its own, so at 200 % a short
+  /// label ("Me") drew larger than the long ones.
+  static TextScaler labelScaler(BuildContext context, List<AppTab> tabs) {
+    final scaler = MediaQuery.textScalerOf(context);
+    // As the Text draws it: the ambient style (letter spacing and the like)
+    // under the label's own.
+    final style = DefaultTextStyle.of(context).style
+        .merge(_RailItem.labelStyle);
+    double widestAt(TextScaler s) {
+      var widest = 0.0;
+      for (final t in tabs) {
+        final p = TextPainter(
+          text: TextSpan(text: t.label, style: style),
+          textDirection: TextDirection.ltr,
+          textScaler: s,
+          maxLines: 1,
+        )..layout();
+        widest = math.max(widest, p.width);
+        p.dispose();
+      }
+      return widest;
+    }
+
+    // The labels share one font size, so a linear scaler draws them exactly.
+    final base = _RailItem.labelStyle.fontSize!;
+    var fitted = TextScaler.linear(scaler.scale(base) / base);
+    // Text width is not quite proportional to its size (glyph advances are
+    // rounded), so measure again until the widest label fits.
+    for (var i = 0; i < 4; i++) {
+      final widest = widestAt(fitted);
+      if (widest <= _RailItem.width) break;
+      final size = fitted.scale(base) * _RailItem.width / widest * 0.999;
+      fitted = TextScaler.linear(size / base);
+    }
+    return fitted;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.vp;
     final insets = MediaQuery.paddingOf(context);
+    final labels = labelScaler(context, tabs);
     // As the Fold artboards: the status bar runs across the whole width on
     // the canvas, and the rail starts below it.
     return RepaintBoundary(
@@ -90,6 +132,7 @@ class VpNavRail extends StatelessWidget {
                                   tab: t,
                                   active: t == current,
                                   badge: badges[t] ?? 0,
+                                  labelScaler: labels,
                                   onTap: () => onSelect(t),
                                 ),
                               ],
@@ -117,15 +160,26 @@ class _RailItem extends StatelessWidget {
     required this.tab,
     required this.active,
     required this.badge,
+    required this.labelScaler,
     required this.onTap,
   });
 
   final AppTab tab;
   final bool active;
   final int badge;
+  final TextScaler labelScaler;
   final VoidCallback onTap;
 
-  static const _labelStyle = TextStyle(
+  /// The item's column.
+  static const width = 64.0;
+
+  /// The badge's left edge at 100 %: right 4 with the 18 px badge, as the
+  /// artboards draw it, on the 22 px icon's top right corner (the icon runs
+  /// from 21 to 43). A badge grown by large text keeps this left edge and
+  /// grows to the right, so it never covers more of the icon (task 489).
+  static const badgeLeft = width - 4 - 18;
+
+  static const labelStyle = TextStyle(
     fontFamily: VpFonts.body,
     fontSize: 11,
     height: 1,
@@ -152,7 +206,7 @@ class _RailItem extends StatelessWidget {
         highlightShape: BoxShape.rectangle,
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          width: 64,
+          width: width,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -179,17 +233,21 @@ class _RailItem extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // Grows with the text size and shrinks to fit the 64 px
-                    // column, so 200 % never runs past the item.
+                    // The rail's one label size (VpNavRail.labelScaler): it
+                    // grows with the text size and the widest label fits
+                    // the 64 px column, so 200 % never runs past the item.
+                    // The FittedBox only guards against a font that
+                    // measures differently.
                     SizedBox(
-                      width: 64,
+                      width: width,
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
                           tab.label,
                           maxLines: 1,
                           softWrap: false,
-                          style: _labelStyle.copyWith(
+                          textScaler: labelScaler,
+                          style: labelStyle.copyWith(
                             color: active ? c.text : c.textMuted,
                           ),
                         ),
@@ -201,8 +259,15 @@ class _RailItem extends StatelessWidget {
               if (badge > 0)
                 Positioned(
                   top: -2,
-                  right: 4,
-                  child: VpCountBadge(count: badge),
+                  left: 0,
+                  // Up to the rail's right border: the item is centred in
+                  // the 80 px rail, 8 px either side.
+                  right: -((VpNavRail.width - width) / 2 - 1),
+                  height: _badgeBox,
+                  child: CustomSingleChildLayout(
+                    delegate: const _BadgeLayout(),
+                    child: VpCountBadge(count: badge),
+                  ),
                 ),
             ],
           ),
@@ -210,6 +275,30 @@ class _RailItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The box the count badge is laid out in: tall enough for the badge at
+/// its 1.5x text size limit (27 px).
+const _badgeBox = 28.0;
+
+/// Puts the count badge at [_RailItem.badgeLeft], or further left only when
+/// a wide count ("99+" at large text) would otherwise pass the rail's
+/// border. The badge sizes itself, as it does in the tab bar.
+class _BadgeLayout extends SingleChildLayoutDelegate {
+  const _BadgeLayout();
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      const BoxConstraints();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    math.max(0, math.min(_RailItem.badgeLeft, size.width - childSize.width)),
+    0,
+  );
+
+  @override
+  bool shouldRelayout(_BadgeLayout oldDelegate) => false;
 }
 
 /// My own status at the foot of the rail: my initials with the presence

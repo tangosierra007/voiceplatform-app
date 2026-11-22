@@ -60,6 +60,22 @@ void main() {
     });
   }
 
+  // Task 489 (F484-2): the Fold's cover screen turned to landscape (796 x
+  // 411) at 200 % text, on Recents. One label size for every item, and the
+  // count badges on their icons' top right corners, not over the icons.
+  testWidgets('rail on Recents, light, cover screen at 200%', (tester) async {
+    _window(tester, const Size(796, 411));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(await appUnderTest(theme: ThemePreference.light));
+    await tester.pumpAndSettle();
+    await _open(tester, 'Recents');
+    await expectLater(
+      find.byType(VpNavRail),
+      matchesGoldenFile('rail_cover_200pct_light.png'),
+    );
+  });
+
   for (final width in [599.0, 600.0]) {
     testWidgets('shell on Recents, light, ${width.toInt()} x 900', (
       tester,
