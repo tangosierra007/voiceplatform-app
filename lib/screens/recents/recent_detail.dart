@@ -27,15 +27,18 @@ String callWhen(DateTime at, DateTime now) {
   return whenShort(at, now);
 }
 
-/// One call in "Recent calls with …": `Missed, left voicemail`,
-/// `Answered by Ava, 3:05`, `Answered by Mia on her desk phone`,
-/// `You called, 1:37`.
+/// One call in "Recent calls with …": `Missed, left voicemail` (or `Missed,
+/// went to voicemail` when no message was kept), `Answered by Ava, 3:05`,
+/// `Answered by Mia on her desk phone`, `You called, 1:37`.
 String callWithLine(HistoryEntry h, {String? myFirstName}) {
   final d = h.durationSeconds;
   final dur = d == null ? '' : ', ${minutesSeconds(d)}';
   final out = h.direction == HistoryEntryDirection.outgoing;
   return switch (h.outcome) {
-    HistoryEntryOutcome.voicemail => 'Missed, left voicemail',
+    HistoryEntryOutcome.voicemail =>
+      h.voicemailId == null
+          ? 'Missed, went to voicemail'
+          : 'Missed, left voicemail',
     HistoryEntryOutcome.missed => out ? 'You called, no answer' : 'Missed',
     HistoryEntryOutcome.answeredElsewhere =>
       h.answeredBy == null || h.answeredBy!.isEmpty

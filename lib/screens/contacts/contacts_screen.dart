@@ -467,11 +467,21 @@ class _Colleagues extends ConsumerWidget {
     final dir = ref.watch(colleagueDirectoryProvider);
     final presence = ref.watch(presenceProvider);
     final list = dir.value?.items ?? const <Colleague>[];
-    // The free count is counted from live presence, not a fixed figure.
-    final free = presence.isEmpty
-        ? (dir.value?.freeNow ?? 0)
-        : presence.values.where((p) => _isFree(p.presence)).length;
     final total = dir.value?.total ?? list.length;
+    // The free count comes from the same place as each row's status (live
+    // presence, else the directory's own), counted over the colleagues, so
+    // the band and the rows agree (FU56). Live presence holds every
+    // extension of the tenant, the user's own included, which the directory
+    // leaves out: counting all of it counted the user as a free colleague.
+    final free = list.isEmpty
+        ? (dir.value?.freeNow ?? 0)
+        : list
+              .where(
+                (col) => _isFree(
+                  (presence[col.extensionValue] ?? col.presence).presence,
+                ),
+              )
+              .length;
     final shown = [
       for (final col in list)
         if (_matches(query, [

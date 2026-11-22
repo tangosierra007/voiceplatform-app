@@ -177,13 +177,24 @@ class _KeypadPane extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Row(
-                          children: [
-                            _StatusChip(offline: offline),
-                            const SizedBox(width: 8),
-                            Expanded(child: CallerIdChip(dim: offline)),
-                          ],
-                        ),
+                        // Large text (FU56): one chip a line, so the
+                        // caller ID keeps its number.
+                        if (_Chip.largeText(context))
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StatusChip(offline: offline),
+                              CallerIdChip(dim: offline, alignEnd: false),
+                            ],
+                          )
+                        else
+                          Row(
+                            children: [
+                              _StatusChip(offline: offline),
+                              const SizedBox(width: 8),
+                              Expanded(child: CallerIdChip(dim: offline)),
+                            ],
+                          ),
                         Expanded(
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
@@ -544,6 +555,7 @@ class _Chip extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.semantics,
+    this.shortLabel,
   });
   final String label;
   final Color? dot;
@@ -554,6 +566,38 @@ class _Chip extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final String? semantics;
+
+  /// Shown instead of [label] with large text (150 % and up), so what
+  /// matters stays readable rather than cut off (FU56: at 200 % "Calls show
+  /// 03 55…" lost the number). The screen reader still says [semantics] or
+  /// [label] in full. Chosen by the text size, not by measuring, since the
+  /// keypad's row asks its chips for their intrinsic sizes.
+  final String? shortLabel;
+
+  /// The text size from which [shortLabel] is shown.
+  static const shortLabelScale = 1.5;
+
+  /// True at [shortLabelScale] and up, measured at the chip's own 13 px:
+  /// Android 14 scales text non-linearly, so a 200 % setting grows large
+  /// text far less than small (the emulator pass, FU56).
+  static bool largeText(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(13) >= 13 * shortLabelScale;
+
+  Widget _label(BuildContext context, Color fg) {
+    final short = shortLabel;
+    return Text(
+      short != null && largeText(context) ? short : label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: VpType.body.copyWith(
+        fontSize: 13,
+        height: 1.2,
+        fontWeight: FontWeight.w700,
+        fontVariations: const [FontVariation('wght', 700)],
+        color: fg,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -601,20 +645,7 @@ class _Chip extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                       ],
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: VpType.body.copyWith(
-                            fontSize: 13,
-                            height: 1.2,
-                            fontWeight: FontWeight.w700,
-                            fontVariations: const [FontVariation('wght', 700)],
-                            color: fg,
-                          ),
-                        ),
-                      ),
+                      Flexible(child: _label(context, fg)),
                       if (trailing != null) ...[
                         const SizedBox(width: 6),
                         trailing!,
@@ -729,6 +760,7 @@ class CallerIdChip extends ConsumerWidget {
         widthFactor: alignEnd ? null : 1,
         child: _Chip(
           label: callsShow(picked),
+          shortLabel: callsShowShort(picked),
           semantics: '${callsShow(picked)}. Change caller ID',
           trailing: VpSvgIcon(VpIcon.chevronDown, size: 14, colour: c.text),
           onTap: dim || ids.isEmpty

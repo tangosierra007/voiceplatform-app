@@ -37,6 +37,14 @@ String callsShow(CallerId? id) {
   return 'Calls show ${formatAuNumber(id.value)}';
 }
 
+/// [callsShow] without "Calls show", for a chip too narrow for the whole
+/// line (200 % text): "03 5550 1200", "Withheld", "Your number".
+String callsShowShort(CallerId? id) {
+  if (id == null) return 'Your number';
+  if (id.value == 'withheld') return 'Withheld';
+  return formatAuNumber(id.value);
+}
+
 /// My status for the keypad chip: Available, Do not disturb, Away.
 final myStatusProvider = NotifierProvider<MyStatusNotifier, StatusStatus?>(
   MyStatusNotifier.new,
