@@ -128,6 +128,7 @@ class MockServer {
     ('POST', _p('/auth/email-requests/{id}/complete'), false, _complete),
     ('POST', _p('/auth/qr/complete'), false, _qrComplete),
     ('POST', _p('/auth/refresh'), false, _refresh),
+    ('POST', _p('/auth/sign-out'), false, _lateSignOut),
     ('POST', _p('/auth/licence-requests'), false, _licenceRequest),
     ('GET', _p('/me'), true, (r) => r.json(200, me(status: _status))),
     ('PUT', _p('/me/status'), true, _putStatus),
@@ -580,6 +581,40 @@ class MockServer {
       return r.error(410, 'refusal_expired', 'Start again to ask your admin.');
     }
     return r.empty(202);
+  }
+
+  /// Every sign-out made offline that reached the mock (for tests).
+  final lateSignOuts = <Map<String, Object?>>[];
+
+  /// Answers every sign-out made offline with a 503 (for tests).
+  bool lateSignOutDown = false;
+
+  /// The revoked fixture's token answers 401, as a token the platform
+  /// doesn't know does; anything else well formed is signed out (204).
+  Future<void> _lateSignOut(_Req r) async {
+    final body = await r.body();
+    if (body['deviceId'] is! String ||
+        body['refreshToken'] is! String ||
+        DateTime.tryParse('${body['timestamp']}') == null ||
+        body['signature'] is! String ||
+        (body['signature'] as String).isEmpty) {
+      return r.error(
+        400,
+        'validation',
+        'deviceId, refreshToken, timestamp and signature are required',
+      );
+    }
+    lateSignOuts.add(body);
+    if (lateSignOutDown) {
+      return r.error(503, 'unavailable', 'Try again later');
+    }
+    if (body['refreshToken'] == SignInFixtures.revokedRefreshToken) {
+      return r.json(401, {
+        'error': 'refresh_invalid',
+        'message': 'Sign in again.',
+      });
+    }
+    return r.empty(204);
   }
 
   /// The last FCM token the app stored (for tests).

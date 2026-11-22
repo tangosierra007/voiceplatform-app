@@ -78,6 +78,21 @@ abstract class SigninClient {
     @Body() required RefreshInput body,
   });
 
+  /// A sign-out made with no network, sent on the next connection.
+  ///
+  /// When Sign out can't reach the platform, the app signs the refresh token it held with.
+  /// the device key over `sign-out.<deviceId>.<refreshToken>.<timestamp>` (the timestamp of.
+  /// the sign-out), keeps only that record, clears everything else, and sends it here first.
+  /// on its next connection, once. Revokes the device as Sign out does (its registration.
+  /// removed, tokens and push token ended, audited `app.device_revoked` with reason.
+  /// `signed_out`). Accepted up to 30 days after the timestamp. 204 also when the device was.
+  /// already revoked; 401 `refresh_invalid` for a wrong signature, token or age. On 204 or any.
+  /// 4xx the app drops the record; on no answer or a 5xx it keeps it for the next connection.
+  @POST('/auth/sign-out')
+  Future<void> postAuthSignOut({
+    @Body() required RefreshInput body,
+  });
+
   /// "Ask my admin to upgrade" (AppBasic, A6).
   ///
   /// Carries the `refusalToken` from a `licence_basic` refusal (single use, 1 hour). Notifies.

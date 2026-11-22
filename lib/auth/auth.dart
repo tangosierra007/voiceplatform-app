@@ -26,6 +26,7 @@ import '../shell/shell_status.dart';
 import '../theme/theme_preference.dart';
 import 'app_lock.dart';
 import 'local_wipe.dart';
+import 'pending_sign_out.dart';
 import 'session_store.dart';
 import 'version.dart';
 
@@ -200,6 +201,8 @@ class AuthController extends Notifier<AuthState> {
   }
 
   SessionStore get _store => ref.read(sessionStoreProvider);
+  PendingSignOutStore get _pendingSignOut =>
+      ref.read(pendingSignOutStoreProvider);
   DeviceKeys get _keys => ref.read(deviceKeysProvider);
   AppApi get _api => ref.read(appApiProvider);
   DateTime _now() => ref.read(clockProvider)();
@@ -214,6 +217,8 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> _restore() async {
+    // A sign-out made offline last time goes first, never holding up start.
+    unawaited(sendPendingSignOut());
     final stored = await _store.read();
     if (stored == null) {
       // A link opened the app cold and already answered (for example "This
@@ -231,6 +236,7 @@ class AuthController extends Notifier<AuthState> {
 
   /// AppSignIn: "Email me a sign-in link".
   Future<void> requestEmail(String email) async {
+    unawaited(sendPendingSignOut());
     final secret = ref.read(requestSecretProvider)();
     final accepted = await _call(
       () => _api.signin.postAuthEmailRequests(
@@ -315,6 +321,7 @@ class AuthController extends Notifier<AuthState> {
 
   /// "Scan the QR code instead", or a `vpapp://signin/<token>` link.
   Future<void> completeWithQr(String qrToken) async {
+    unawaited(sendPendingSignOut());
     final key = await _keys.publicKey();
     final session = await _call(
       () => _api.signin.postAuthQrComplete(
@@ -455,14 +462,81 @@ class AuthController extends Notifier<AuthState> {
     await refresh();
   }
 
-  /// Me, Sign out: tells the platform (best effort), then clears the phone.
+  /// Me, Sign out: tells the platform, then clears the phone. When the
+  /// platform can't be told (offline), a signed sign-out is kept for the
+  /// next connection first (spec 22, "Sign out with no network").
   Future<void> signOut() async {
     try {
       await _api.device.postDevicesMeSignOut();
     } catch (_) {
-      // Offline: the phone is still cleared; the admin can revoke it.
+      await _keepPendingSignOut();
     }
     await signOutLocally();
+  }
+
+  /// Signs `sign-out.<deviceId>.<refreshToken>.<timestamp>` with the device
+  /// key while it still exists, and keeps that record alone.
+  Future<void> _keepPendingSignOut() async {
+    try {
+      final stored = await _store.read();
+      if (stored == null) return;
+      final ts = _now().toUtc().toIso8601String();
+      final signature = await _keys.sign(
+        PendingSignOut.message(stored.deviceId, stored.refreshToken, ts),
+      );
+      await _pendingSignOut.write(
+        PendingSignOut(
+          deviceId: stored.deviceId,
+          refreshToken: stored.refreshToken,
+          timestamp: ts,
+          signature: signature,
+        ),
+      );
+    } catch (_) {
+      // No key or no storage: the phone is still cleared; the admin can
+      // sign the device out from the portal.
+    }
+  }
+
+  Future<void>? _sendingSignOut;
+
+  /// Sends a sign-out kept from an offline Sign out, once: dropped after a
+  /// 204 or any 4xx (done, or never acceptable), kept after no answer or a
+  /// 5xx, and dropped unsent once older than [PendingSignOut.maxAge].
+  /// Concurrent calls share one request.
+  Future<void> sendPendingSignOut() => _sendingSignOut ??= _sendPendingSignOut()
+      .whenComplete(() => _sendingSignOut = null);
+
+  Future<void> _sendPendingSignOut() async {
+    PendingSignOut? p;
+    try {
+      p = await _pendingSignOut.read();
+    } catch (_) {
+      return;
+    }
+    if (p == null) return;
+    try {
+      if (_now().difference(p.signedAt) > PendingSignOut.maxAge) {
+        await _pendingSignOut.clear();
+        return;
+      }
+      await _api.signin.postAuthSignOut(
+        body: RefreshInput(
+          deviceId: p.deviceId,
+          refreshToken: p.refreshToken,
+          timestamp: DateTime.parse(p.timestamp),
+          signature: p.signature,
+        ),
+      );
+      await _pendingSignOut.clear();
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status != null && status >= 400 && status < 500) {
+        await _pendingSignOut.clear();
+      }
+    } catch (_) {
+      // Kept for the next connection.
+    }
   }
 
   /// AppSignedOut: Sign in again.
