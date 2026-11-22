@@ -82,7 +82,7 @@ Future<Widget> appUnderTest({
   bool offline = false,
   DeskPhoneCall? deskPhone,
   EngineUi? ui,
-  StatusStatus myStatus = StatusStatus.available,
+  StatusStatus? myStatus = StatusStatus.available,
   FakeMediaPlayer? player,
   FixedPhoneContacts? phoneSource,
   Future<void> Function()? onHistorySeen,
@@ -169,7 +169,10 @@ Future<Widget> appUnderTest({
       meProvider.overrideWith(
         (ref) async => me != null
             ? await me()
-            : voicemail?.me() ?? Me.fromJson(fx.me(status: myStatus.json!)),
+            : voicemail?.me() ??
+                  Me.fromJson(
+                    fx.me(status: (myStatus ?? StatusStatus.available).json!),
+                  ),
       ),
       historyProvider.overrideWith(
         (ref, f) async => history != null

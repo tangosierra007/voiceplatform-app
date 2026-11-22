@@ -335,6 +335,32 @@ void main() {
       expect(find.text(_meError), findsOneWidget);
     });
 
+    testWidgets('error with nothing known: no status is shown as chosen '
+        '(WS4 leftover)', (tester) async {
+      usePhone(tester);
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        await appUnderTest(
+          status: null,
+          // As in the app: the status comes from `/me`, so it's unknown.
+          myStatus: null,
+          me: () async => throw const MeUnavailable(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(_tab('Me'));
+      await tester.pumpAndSettle();
+      expect(find.text(_meError), findsOneWidget);
+      for (final label in ['Available', 'Do not disturb', 'Away']) {
+        expect(
+          tester.getSemantics(find.bySemanticsLabel(label)),
+          isSemantics(isSelected: false, isButton: true),
+          reason: label,
+        );
+      }
+      handle.dispose();
+    });
+
     testWidgets('fresh install, /me unreachable (the A53 case): the banner on '
         'every tab says tabs may be missing; Try again recovers', (
       tester,
