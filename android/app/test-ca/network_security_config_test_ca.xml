@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- G8, debug builds only: copied into the debug build's generated resources,
+     with res/raw/vp_test_ca.pem, when the VP_TEST_CA_B64 dart define is given
+     (android/app/build.gradle.kts). Native HTTPS (voicemail streaming) then
+     trusts the system's CAs plus the test stack's CA. Cleartext stays as in
+     src/debug/res/xml/network_security_config.xml. Release and profile builds
+     have no network security config at all. -->
+<network-security-config>
+    <base-config>
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="@raw/vp_test_ca"/>
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

@@ -36,6 +36,10 @@ key.properties
 voiceplatform-app-*.json
 firebase-push-*.json
 play-upload-*.json
+# G8: the test stack CA for debug builds is passed as a define, never committed
+*.pem
+*.crt
+*.key
 
 .DS_Store
 # Flutter build outputs
