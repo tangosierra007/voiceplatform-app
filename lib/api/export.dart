@@ -44,6 +44,7 @@ export 'models/presence.dart';
 export 'models/presence_entry.dart';
 export 'models/colleague.dart';
 export 'models/colleagues.dart';
+export 'models/desk.dart';
 export 'models/team.dart';
 export 'models/shared_contact.dart';
 export 'models/history_entry.dart';

@@ -52,7 +52,12 @@ class PresenceNotifier extends Notifier<Map<String, PresenceEntry>> {
     final sub = live.events.listen(_onEvent);
     ref.onDispose(sub.cancel);
     final colleagues = ref.watch(colleaguesProvider).value ?? const [];
-    return {for (final c in colleagues) c.extensionValue: c.presence};
+    final desks =
+        ref.watch(colleagueDirectoryProvider).value?.desks ?? const [];
+    return {
+      for (final d in desks) d.extensionValue: d.presence,
+      for (final c in colleagues) c.extensionValue: c.presence,
+    };
   }
 
   void _onEvent(ServerEvent e) {
