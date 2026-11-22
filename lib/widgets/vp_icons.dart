@@ -119,6 +119,11 @@ enum VpIcon {
   ),
   stop('<rect x="7" y="7" width="10" height="10" rx="1.5"/>'),
 
+  /// The short Keypad's More (FU56): three dots, as the keypad icon's.
+  more(
+    '<circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/>',
+  ),
+
   /// AppEmergency "Call 000 now", the keypad call button.
   phone(
     '<path d="M6.6 3.5h2.3c.4 0 .8.3.9.7l1 3.3c.1.4 0 .8-.3 1.1l-1.4 1.3a12 12 0 0 0 5 5l1.3-1.4c.3-.3.7-.4 1.1-.3l3.3 1c.4.1.7.5.7.9v2.3c0 1.1-.9 2-2 2A17.5 17.5 0 0 1 4.6 5.5c0-1.1.9-2 2-2z"/>',

@@ -74,7 +74,9 @@ void main() {
     testWidgets(
       'the caller ID chip never cuts its text at $width dp, ${scale}x',
       (tester) async {
-        _window(tester, Size(width, 844), scale);
+        // 1030 dp tall at 200 %: at 844 the Keypad is short there (task
+        // 401) and the caller ID is behind More, read in full.
+        _window(tester, Size(width, scale == 1.0 ? 844 : 1030), scale);
         final handle = tester.ensureSemantics();
         await tester.pumpWidget(await appUnderTest());
         await _settle(tester);

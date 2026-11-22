@@ -63,3 +63,38 @@ const double phoneSideMinWidth = 240;
   final side = available - phone;
   return side < phoneSideMinWidth ? null : (phone: phone, side: side);
 }
+
+/// The Keypad's short layout (FU56, Q309-4, task 401): one control row and
+/// More, the keys with the call button beside the bottom row. Used when the
+/// Keypad's own height is under this, that is whenever the normal layout
+/// would scroll to show the call button (and, in the wide layout, the
+/// emergency note under it).
+///
+/// The numbers are where the normal layout's call button (or note) ends,
+/// measured with the bundled fonts and rounded up; test/screens/
+/// short_keypad_test.dart fails if the normal layout grows past them. Online:
+/// 624 dp on the phone, 700 at 200 % text; 656 to 689 with the note, 780 at
+/// 200 %. Offline the banner adds 81 dp at 100 % and grows fast with the
+/// text, so from 150 % offline is always short. The back-to-call strip adds
+/// its own height.
+///
+/// [textScale] is the text scale at 13 px (the keypad chips' own measure);
+/// "large" is 150 % and up, where the chips stack.
+double keypadShortBelow({
+  required double textScale,
+  required bool note,
+  bool offline = false,
+  bool inCall = false,
+}) {
+  final large = textScale >= 1.5;
+  if (offline && large) return double.infinity;
+  var below = switch ((large, note && !offline)) {
+    (false, false) => 630.0,
+    (true, false) => 704.0,
+    (false, true) => 692.0,
+    (true, true) => 784.0,
+  };
+  if (offline) below += 76 + 230 * (textScale - 1);
+  if (inCall) below += 20 + 24 * textScale;
+  return below;
+}

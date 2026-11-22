@@ -157,148 +157,469 @@ class _KeypadPane extends ConsumerWidget {
     }
 
     return LayoutBuilder(
-      builder: (context, box) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: box.maxHeight),
-          child: IntrinsicHeight(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (offline) const _OfflineBanner(),
-                if (current != null) _BackToCall(call: current),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      side,
-                      offline ? 12 : 6,
-                      side,
-                      12,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Large text (FU56): one chip a line, so the
-                        // caller ID keeps its number.
-                        if (_Chip.largeText(context))
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _StatusChip(offline: offline),
-                              CallerIdChip(dim: offline, alignEnd: false),
-                            ],
-                          )
-                        else
-                          Row(
-                            children: [
-                              _StatusChip(offline: offline),
-                              const SizedBox(width: 8),
-                              Expanded(child: CallerIdChip(dim: offline)),
-                            ],
-                          ),
-                        Expanded(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: offline ? 90 : 120,
+      builder: (context, box) {
+        // A short window (FU56, Q309-4): one control row and More, the keys
+        // and the call button always in view.
+        final shortBelow = keypadShortBelow(
+          textScale: MediaQuery.textScalerOf(context).scale(13) / 13,
+          note: note,
+          offline: offline,
+          inCall: current != null,
+        );
+        if (box.maxHeight < shortBelow) {
+          return _ShortKeypad(
+            side: side,
+            note: note,
+            offline: offline,
+            number: number,
+            matchLine: matchLine,
+            current: current,
+            onKey: press,
+            onCall: call,
+          );
+        }
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: box.maxHeight),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (offline) const _OfflineBanner(),
+                  if (current != null) _BackToCall(call: current),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        side,
+                        offline ? 12 : 6,
+                        side,
+                        12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Large text (FU56): one chip a line, so the
+                          // caller ID keeps its number.
+                          if (_Chip.largeText(context))
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _StatusChip(offline: offline),
+                                CallerIdChip(dim: offline, alignEnd: false),
+                              ],
+                            )
+                          else
+                            Row(
+                              children: [
+                                _StatusChip(offline: offline),
+                                const SizedBox(width: 8),
+                                Expanded(child: CallerIdChip(dim: offline)),
+                              ],
                             ),
-                            child: Center(
-                              child: offline
-                                  ? Text(
-                                      "For 000, use your phone's own dialler.\nIt works without the app.",
-                                      textAlign: TextAlign.center,
-                                      style: VpType.body.copyWith(
-                                        fontSize: 14,
-                                        height: 20 / 14,
-                                        color: c.textMuted,
-                                      ),
-                                    )
-                                  : _Display(number: number, line: matchLine),
-                            ),
-                          ),
-                        ),
-                        _Keys(
-                          enabled: !offline,
-                          onKey: press,
-                          onLongZero: () => press('+'),
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            const Expanded(child: SizedBox()),
-                            Expanded(
+                          Expanded(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: offline ? 90 : 120,
+                              ),
                               child: Center(
-                                child: _CallButton(
-                                  offline: offline,
-                                  onPressed: offline || number.isEmpty
-                                      ? null
-                                      : call,
-                                ),
+                                child: offline
+                                    ? Text(
+                                        _offlineNote,
+                                        textAlign: TextAlign.center,
+                                        style: VpType.body.copyWith(
+                                          fontSize: 14,
+                                          height: 20 / 14,
+                                          color: c.textMuted,
+                                        ),
+                                      )
+                                    : _Display(number: number, line: matchLine),
                               ),
                             ),
-                            Expanded(
-                              child: Center(
-                                child: number.isEmpty || offline
-                                    ? const SizedBox(width: 48, height: 48)
-                                    : Semantics(
-                                        button: true,
-                                        label: 'Delete',
-                                        hint: 'Hold to clear',
-                                        excludeSemantics: true,
-                                        onTap: () => dialled.set(
-                                          number.substring(
-                                            0,
-                                            number.length - 1,
-                                          ),
-                                        ),
-                                        child: InkResponse(
-                                          onTap: () => dialled.set(
-                                            number.substring(
-                                              0,
-                                              number.length - 1,
-                                            ),
-                                          ),
-                                          onLongPress: () => dialled.set(''),
-                                          radius: 28,
-                                          child: SizedBox(
-                                            width: 48,
-                                            height: 48,
-                                            child: Center(
-                                              child: VpSvgIcon(
-                                                VpIcon.backspace,
-                                                size: 28,
-                                                colour: c.textMuted,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                          ),
+                          _Keys(
+                            enabled: !offline,
+                            onKey: press,
+                            onLongZero: () => press('+'),
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              const Expanded(child: SizedBox()),
+                              Expanded(
+                                child: Center(
+                                  child: _CallButton(
+                                    offline: offline,
+                                    onPressed: offline || number.isEmpty
+                                        ? null
+                                        : call,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Center(
+                                  child: number.isEmpty || offline
+                                      ? const SizedBox(width: 48, height: 48)
+                                      : _DeleteKey(number: number),
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Offline, the display already says where 000 goes.
+                          if (note && !offline) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              _emergencyNote,
+                              textAlign: TextAlign.center,
+                              style: VpType.body.copyWith(
+                                fontSize: 12,
+                                height: 16 / 12,
+                                color: c.textMuted,
                               ),
                             ),
                           ],
-                        ),
-                        // Offline, the display already says where 000 goes.
-                        if (note && !offline) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            "For 000, 112 or 106 the phone's own dialler opens.",
-                            textAlign: TextAlign.center,
-                            style: VpType.body.copyWith(
-                              fontSize: 12,
-                              height: 16 / 12,
-                              color: c.textMuted,
-                            ),
-                          ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The wide layout's emergency note (FoldKeypad).
+const _emergencyNote = "For 000, 112 or 106 the phone's own dialler opens.";
+
+/// Offline, in the number's place.
+const _offlineNote =
+    "For 000, use your phone's own dialler.\nIt works without the app.";
+
+/// Delete: a tap takes one digit, a hold clears; 48 px to touch.
+class _DeleteKey extends ConsumerWidget {
+  const _DeleteKey({required this.number});
+  final String number;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dialled = ref.read(dialledProvider.notifier);
+    void back() => dialled.set(number.substring(0, number.length - 1));
+    return Semantics(
+      button: true,
+      label: 'Delete',
+      hint: 'Hold to clear',
+      excludeSemantics: true,
+      onTap: back,
+      child: InkResponse(
+        onTap: back,
+        onLongPress: () => dialled.set(''),
+        radius: 28,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: VpSvgIcon(
+              VpIcon.backspace,
+              size: 28,
+              colour: context.vp.textMuted,
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// The Keypad on a short window (FU56, Q309-4, task 401): one row of the
+/// controls used while dialling (Back to call or Offline, the number,
+/// Delete, More), the rest (status, caller ID, the offline banner's text)
+/// behind More; the keys in four rows with the call button beside the
+/// bottom one, as large as fits, 78 px at most and never under 48 px.
+class _ShortKeypad extends ConsumerWidget {
+  const _ShortKeypad({
+    required this.side,
+    required this.note,
+    required this.offline,
+    required this.number,
+    required this.matchLine,
+    required this.current,
+    required this.onKey,
+    required this.onCall,
+  });
+
+  final double side;
+  final bool note;
+  final bool offline;
+  final String number;
+  final String? matchLine;
+  final CallSnapshot? current;
+  final ValueChanged<String> onKey;
+  final Future<void> Function() onCall;
+
+  /// The gaps between keys, down and across.
+  static const _gap = 8.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.vp;
+    final call = current;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(side, 4, side, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 48,
+            child: Row(
+              children: [
+                if (call != null)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 140),
+                    child: _BackToCallChip(call: call),
+                  )
+                else if (offline)
+                  const _StatusChip(offline: true),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: offline
+                        ? Text(
+                            _offlineNote,
+                            textAlign: TextAlign.center,
+                            style: VpType.body.copyWith(
+                              fontSize: 14,
+                              height: 20 / 14,
+                              color: c.textMuted,
+                            ),
+                          )
+                        : _Display(number: number, line: matchLine),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                if (number.isEmpty || offline)
+                  const SizedBox(width: 48, height: 48)
+                else
+                  _DeleteKey(number: number),
+                _MoreButton(offline: offline),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                // Four rows down; three keys and the call button across.
+                final down = (box.maxHeight - 3 * _gap) / 4;
+                final across = (box.maxWidth - 3 * _gap) / 4;
+                final size = math.max(
+                  48.0,
+                  math.min(78.0, math.min(down, across)),
+                );
+                const keys = [
+                  '1',
+                  '2',
+                  '3',
+                  '4',
+                  '5',
+                  '6',
+                  '7',
+                  '8',
+                  '9',
+                  '*',
+                  '0',
+                  '#',
+                ];
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var r = 0; r < 4; r++) ...[
+                        if (r > 0) const SizedBox(height: _gap),
+                        Row(
+                          children: [
+                            for (var i = 0; i < 3; i++)
+                              Expanded(
+                                child: Center(
+                                  child: _Key(
+                                    digit: keys[r * 3 + i],
+                                    letters:
+                                        KeypadScreen._letters[keys[r * 3 + i]]!,
+                                    enabled: !offline,
+                                    size: size,
+                                    onTap: () => onKey(keys[r * 3 + i]),
+                                    onLongPress: keys[r * 3 + i] == '0'
+                                        ? () => onKey('+')
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            Expanded(
+                              child: Center(
+                                child: r == 3
+                                    ? _CallButton(
+                                        offline: offline,
+                                        size: size,
+                                        onPressed: offline || number.isEmpty
+                                            ? null
+                                            : onCall,
+                                      )
+                                    : SizedBox(width: size, height: size),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          if (note && !offline) ...[
+            const SizedBox(height: 6),
+            // Capped at 150 % and two lines, so the keys keep 48 px.
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.5,
+              child: Text(
+                _emergencyNote,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: VpType.body.copyWith(
+                  fontSize: 12,
+                  height: 16 / 12,
+                  color: c.textMuted,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// More, on the short Keypad: status, caller ID, and offline the banner's
+/// text.
+class _MoreButton extends ConsumerWidget {
+  const _MoreButton({required this.offline});
+  final bool offline;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Semantics(
+    button: true,
+    label: 'More',
+    hint: offline ? 'Why the app is offline' : 'Status and caller ID',
+    excludeSemantics: true,
+    onTap: () => _moreSheet(context, ref, offline: offline),
+    child: InkResponse(
+      onTap: () => _moreSheet(context, ref, offline: offline),
+      radius: 28,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(
+          child: VpSvgIcon(VpIcon.more, size: 28, colour: context.vp.text),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _moreSheet(
+  BuildContext context,
+  WidgetRef ref, {
+  required bool offline,
+}) {
+  final c = context.vp;
+  final status = ref.read(myStatusProvider) ?? StatusStatus.available;
+  final statusLabel = switch (status) {
+    StatusStatus.dnd => 'Do not disturb',
+    StatusStatus.away => 'Away',
+    _ => 'Available',
+  };
+  final picked = ref.read(selectedCallerIdProvider);
+  final ids = ref.read(callerIdsProvider).value ?? const <CallerId>[];
+  return showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    builder: (sheet) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (offline)
+              ListTile(
+                leading: VpSvgIcon(
+                  VpIcon.wifiOff,
+                  size: 24,
+                  colour: c.textMuted,
+                ),
+                title: const Text('No internet on this phone'),
+                subtitle: const Text(
+                  "The app can't make or take calls right now. Calls to you ring your desk phone, then voicemail. We'll reconnect by ourselves.",
+                ),
+              )
+            else
+              Semantics(
+                button: true,
+                label: 'Status: $statusLabel',
+                excludeSemantics: true,
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  showStatusSheet(context, ref, status);
+                },
+                child: ListTile(
+                  minTileHeight: 48,
+                  title: Text('Status: $statusLabel'),
+                  trailing: VpSvgIcon(
+                    VpIcon.chevronDown,
+                    size: 16,
+                    colour: c.textMuted,
+                  ),
+                  onTap: () {
+                    Navigator.of(sheet).pop();
+                    showStatusSheet(context, ref, status);
+                  },
+                ),
+              ),
+            Semantics(
+              button: true,
+              enabled: !offline && ids.isNotEmpty,
+              label: '${callsShow(picked)}. Change caller ID',
+              excludeSemantics: true,
+              onTap: offline || ids.isEmpty
+                  ? null
+                  : () {
+                      Navigator.of(sheet).pop();
+                      _callerIdSheet(context, ref, ids, picked);
+                    },
+              child: ListTile(
+                minTileHeight: 48,
+                enabled: !offline && ids.isNotEmpty,
+                title: Text(callsShow(picked)),
+                subtitle: const Text('Change caller ID'),
+                trailing: VpSvgIcon(
+                  VpIcon.chevronDown,
+                  size: 16,
+                  colour: c.textMuted,
+                ),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _callerIdSheet(context, ref, ids, picked);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _Display extends StatelessWidget {
@@ -394,12 +715,16 @@ class _Key extends StatelessWidget {
     required this.enabled,
     required this.onTap,
     this.onLongPress,
+    this.size = 78,
   });
   final String digit;
   final String letters;
   final bool enabled;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+
+  /// 78 px as drawn; smaller on the short Keypad, never under 48.
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -426,15 +751,15 @@ class _Key extends StatelessWidget {
             onTap: enabled ? onTap : null,
             onLongPress: enabled ? onLongPress : null,
             child: Container(
-              width: 78,
-              height: 78,
+              width: size,
+              height: size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(color: c.border, offset: const Offset(0, 1)),
                 ],
               ),
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(8 * size / 78),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Column(
@@ -481,9 +806,16 @@ class _Key extends StatelessWidget {
 
 /// Orange fill with an ink handset; dashed and off while offline.
 class _CallButton extends StatelessWidget {
-  const _CallButton({required this.offline, required this.onPressed});
+  const _CallButton({
+    required this.offline,
+    required this.onPressed,
+    this.size = 78,
+  });
   final bool offline;
   final VoidCallback? onPressed;
+
+  /// 78 px as drawn; smaller on the short Keypad, never under 48.
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -495,8 +827,8 @@ class _CallButton extends StatelessWidget {
         enabled: false,
         excludeSemantics: true,
         child: Container(
-          width: 78,
-          height: 78,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: c.surfaceRaised,
             shape: BoxShape.circle,
@@ -505,7 +837,7 @@ class _CallButton extends StatelessWidget {
           child: Center(
             child: VpSvgIcon(
               VpIcon.phone,
-              size: 30,
+              size: 30 * size / 78,
               colour: c.textMuted,
               strokeWidth: 2.2,
             ),
@@ -526,12 +858,12 @@ class _CallButton extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onPressed,
           child: SizedBox(
-            width: 78,
-            height: 78,
+            width: size,
+            height: size,
             child: Center(
               child: VpSvgIcon(
                 VpIcon.phone,
-                size: 30,
+                size: 30 * size / 78,
                 colour: c.onBrand,
                 strokeWidth: 2.2,
               ),
@@ -706,7 +1038,8 @@ Future<void> showStatusSheet(
   context: context,
   useRootNavigator: true,
   builder: (context) => SafeArea(
-    child: Padding(
+    // Scrolls on a short window at large text (FU56).
+    child: SingleChildScrollView(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -800,23 +1133,26 @@ Future<void> _callerIdSheet(
 ) => showModalBottomSheet<void>(
   context: context,
   useRootNavigator: true,
+  // Scrolls on a short window (FU56): five numbers outgrow 443 dp's sheet.
   builder: (context) => SafeArea(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final id in ids)
-          ListTile(
-            title: Text(id.label),
-            selected: id.value == picked?.value,
-            trailing: id.value == picked?.value
-                ? const Icon(Icons.check)
-                : null,
-            onTap: () {
-              ref.read(selectedCallerIdProvider.notifier).pick(id);
-              Navigator.of(context).pop();
-            },
-          ),
-      ],
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final id in ids)
+            ListTile(
+              title: Text(id.label),
+              selected: id.value == picked?.value,
+              trailing: id.value == picked?.value
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () {
+                ref.read(selectedCallerIdProvider.notifier).pick(id);
+                Navigator.of(context).pop();
+              },
+            ),
+        ],
+      ),
     ),
   ),
 );
@@ -924,6 +1260,32 @@ class _BackToCall extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The short Keypad's Back to call: a chip in the control row, read as the
+/// strip is.
+class _BackToCallChip extends ConsumerWidget {
+  const _BackToCallChip({required this.call});
+  final CallSnapshot call;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.vp;
+    final name = callTitle(
+      call,
+      callerName(call, ref.watch(contactMatcherProvider)),
+    );
+    final held = call.state == CallState.heldByMe;
+    final text = held ? '$name · on hold' : '$name · on a call';
+    return _Chip(
+      label: 'Back to call',
+      semantics: '$text. Back to the call',
+      background: c.brandTint,
+      foreground: c.brandText,
+      border: Colors.transparent,
+      onTap: () => context.go(Routes.inCall(call.id)),
     );
   }
 }
