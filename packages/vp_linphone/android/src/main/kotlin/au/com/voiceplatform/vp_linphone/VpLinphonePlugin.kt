@@ -236,4 +236,15 @@ class VpLinphonePlugin : FlutterPlugin, ActivityAware, VpLinphoneHostApi {
         context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
     override fun pushTokenUnsent(): Boolean = PushTokenFlag.isUnsent(context)
     override fun markPushTokenSent() = PushTokenFlag.markSent(context)
+
+    // The kept account (Q356-1): Dart sees its issue time only, never the password.
+    override fun keptAccountIssuedAt(): Long? =
+        runCatching { CredentialStore(context).load()?.issuedAtMillis }.getOrNull()
+
+    override fun registerKept(pushProvider: String?, pushPrid: String?, pushParam: String?): Boolean =
+        ReregisterWork.registerOrQueue(context) {
+            LinphoneEngine.registerKept(pushProvider, pushPrid, pushParam)
+        }
+
+    override fun forgetKeptAccount() = CredentialStore(context).clear()
 }

@@ -424,7 +424,7 @@ object LinphoneEngine {
                 CredentialStore(it).save(
                     AccountRecord(
                         authUsername, password, sipDomain, outboundProxy, displayName, expiresSeconds, instanceId,
-                        pushProvider, pushPrid, pushParam,
+                        pushProvider, pushPrid, pushParam, issuedAtMillis = System.currentTimeMillis(),
                     ),
                 )
             }
@@ -435,6 +435,32 @@ object LinphoneEngine {
             authUsername, password, sipDomain, outboundProxy, displayName, expiresSeconds, instanceId,
             pushProvider, pushPrid, pushParam,
         )
+    }
+
+    /**
+     * A normal app start registers with the account [CredentialStore] keeps
+     * instead of a new POST, while the app judges it under 7 days old
+     * (Q356-1). The password stays on this side; the issue time is kept as
+     * it was, so the 7 days run from the POST. New push params replace the
+     * kept ones when given. False when no account is kept (or it can't be
+     * read): the app asks the API then.
+     */
+    fun registerKept(pushProvider: String?, pushPrid: String?, pushParam: String?): Boolean {
+        val ctx = appContext ?: return false
+        val store = CredentialStore(ctx)
+        val kept = runCatching { store.load() }.getOrNull() ?: return false
+        val next = AccountSetup.withPush(kept, pushProvider, pushPrid, pushParam)
+        if (next != kept) {
+            runCatching { store.save(next) }.onFailure { e -> log("push params not kept: ${e.javaClass.simpleName}") }
+        }
+        // After a sign-out the log stays shut until an account registers.
+        logFile?.open()
+        registerNow(
+            next.authUsername, next.password, next.domain, next.outboundProxy, next.displayName,
+            next.expiresSeconds, next.instanceId, next.pushProvider, next.pushPrid, next.pushParam,
+        )
+        log("registered with the kept account")
+        return true
     }
 
     private fun registerNow(

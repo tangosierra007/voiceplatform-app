@@ -333,6 +333,19 @@ final class VpLinphoneEngine implements CallEngine {
   /// The token reached the API (`PUT /devices/me/push-token`).
   Future<void> markPushTokenSent() => _guard(_host.markPushTokenSent);
 
+  /// When the account the native side keeps was issued (the last
+  /// [register]); null when none is kept. The password never comes back
+  /// (APP4, Q356-1).
+  Future<DateTime?> keptAccountIssuedAt() async => _time(await _guard(_host.keptAccountIssuedAt));
+
+  /// Registers with the kept account, the password staying native, with
+  /// [push] replacing the kept params when given. False when none is kept.
+  Future<bool> registerKept({PushParams? push}) =>
+      _guard(() => _host.registerKept(push?.provider, push?.prid, push?.param));
+
+  /// Deletes the kept account from the phone (the sign-out wipe).
+  Future<void> forgetKeptAccount() => _guard(_host.forgetKeptAccount);
+
   static DateTime? _time(int? ms) => ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
 }
 

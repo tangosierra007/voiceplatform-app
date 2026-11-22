@@ -899,6 +899,23 @@ interface VpLinphoneHostApi {
   fun pushTokenUnsent(): Boolean
   /** The app sent the token to the API. */
   fun markPushTokenSent()
+  /**
+   * When the kept account's password was issued, in milliseconds since the
+   * epoch; null when none is kept, it can't be read, or it was kept before
+   * the time was stored. Never the password itself (APP4, Q356-1).
+   */
+  fun keptAccountIssuedAt(): Long?
+  /**
+   * Registers with the kept account, with these push params when all three
+   * are given. The password never crosses the channel. False when none is
+   * kept.
+   */
+  fun registerKept(pushProvider: String?, pushPrid: String?, pushParam: String?): Boolean
+  /**
+   * Deletes the kept account from the phone (sign-out, before the sign-out
+   * call returns; Q356-1).
+   */
+  fun forgetKeptAccount()
 
   companion object {
     /** The codec used by VpLinphoneHostApi. */
@@ -1410,6 +1427,56 @@ interface VpLinphoneHostApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               api.markPushTokenSent()
+              listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.keptAccountIssuedAt$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.keptAccountIssuedAt())
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.registerKept$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val pushProviderArg = args[0] as String?
+            val pushPridArg = args[1] as String?
+            val pushParamArg = args[2] as String?
+            val wrapped: List<Any?> = try {
+              listOf(api.registerKept(pushProviderArg, pushPridArg, pushParamArg))
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.forgetKeptAccount$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.forgetKeptAccount()
               listOf(null)
             } catch (exception: Throwable) {
               MessagesPigeonUtils.wrapError(exception)

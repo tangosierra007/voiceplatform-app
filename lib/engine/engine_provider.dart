@@ -12,6 +12,7 @@ import '../net/api.dart';
 import '../theme/theme_preference.dart';
 import 'fake_call_engine.dart';
 import 'full_screen_access.dart';
+import 'kept_account.dart';
 
 /// Which CallEngine the build uses: `--dart-define=VP_ENGINE=linphone|fake`.
 /// Debug builds default to the fake (screens without SIP); release and
@@ -65,19 +66,27 @@ final appResumesProvider = Provider<Stream<void>>((ref) {
   return resumes.stream;
 });
 
-/// Starts and registers the engine while someone is signed in: SIP
-/// credentials from `POST /devices/me/sip-credentials` go straight into
-/// `register()` and are never kept or logged (APP4). Signed out, it
-/// unregisters and stops.
+/// Starts and registers the engine while someone is signed in. Signed out,
+/// it unregisters and stops.
+///
+/// Q356-1 (TJ, 22 Nov): a normal start registers with the account the
+/// engine keeps encrypted on the phone ([KeptSipAccount]); the app asks
+/// `POST /devices/me/sip-credentials` for a new one only when none is kept,
+/// the kept one is refused (401 or 403), or it is 7 days old
+/// ([keptAccountMaxAge]). Fresh credentials go straight into `register()`;
+/// the password is never read back into Dart or logged (APP4). Sign-out
+/// wipes the kept account before it returns (`localDataWipersProvider`);
+/// a removed device's password is refused by the edge at once, and the POST
+/// that follows answers `device_revoked`.
 ///
 /// A start or registration that fails (offline, or Android refusing the
 /// engine's service while the phone is locked) is tried again the next time
-/// the app comes to the foreground, so the API's expiry (decision 170) and
-/// fresh credentials always reach the engine; until then only the copy the
-/// native side keeps for push wakes registers.
+/// the app comes to the foreground; until then only the copy the native side
+/// keeps for push wakes registers.
 ///
-/// Not re-run on a timer or on every resume: each `up()` POSTs
-/// sip-credentials, which rotates the password and drops the binding.
+/// Not re-run on a timer or on every resume: each POST rotates the password
+/// and drops the binding. A resume asks for a new one only once the account
+/// in use is 7 days old, with no call up.
 final engineSessionProvider = Provider<void>((ref) {
   final engine = ref.watch(callEngineProvider);
   var started = false;
@@ -109,6 +118,19 @@ final engineSessionProvider = Provider<void>((ref) {
 
   /// The last [up] reached `register()`.
   var registered = false;
+
+  /// The engine is registering with the kept account (not a fresh POST), and
+  /// when its password was issued (either way), for the 7-day check.
+  var onKept = false;
+  DateTime? inUseIssuedAt;
+
+  /// The kept account was refused: skip it until a POST has gone through.
+  var forceFresh = false;
+
+  /// A refusal no run has acted on yet (cleared when a run reaches the POST).
+  var refusalPending = false;
+
+  DateTime now() => ref.read(clockProvider)();
 
   /// Bumped by every sign-out ([down]): a run of [upOnce] from an earlier
   /// session stops at its next step and never registers.
@@ -206,8 +228,42 @@ final engineSessionProvider = Provider<void>((ref) {
       if (token != null && push != null && await push.tokenUnsent()) {
         await putPushToken(token);
       }
+      final pushParams = token == null ? null : VpPushTokens.paramsFor(token);
+      // Q356-1: the kept account while it is under 7 days old and not
+      // refused; no POST, so no rotation and no dropped contacts.
+      final kept = ref.read(keptSipAccountProvider);
+      if (kept != null && !forceFresh) {
+        DateTime? issued;
+        try {
+          issued = await kept.issuedAt();
+        } catch (_) {}
+        if (gone()) return;
+        if (!keptAccountTooOld(issued, now())) {
+          var used = false;
+          onKept = true;
+          inLocalStep = true;
+          try {
+            used = await kept.register(push: pushParams);
+          } catch (_) {
+            // Unreadable or not registrable: ask the API below.
+          } finally {
+            inLocalStep = false;
+          }
+          if (used) {
+            inUseIssuedAt = issued;
+            registered = true;
+            if (gone()) return;
+            if (token != null) await putPushToken(token);
+            // Refused while this run went on: a new password, now.
+            if (!forceFresh || gone()) return;
+          }
+        }
+      }
+      onKept = false;
       // Last stop before the POST (it rotates the credentials).
       if (gone()) return;
+      registered = false;
+      refusalPending = false;
       final c = await ref
           .read(appApiProvider)
           .device
@@ -226,13 +282,15 @@ final engineSessionProvider = Provider<void>((ref) {
             displayName: c.displayName,
             expiresSeconds: c.expiresSeconds,
             instanceId: c.instanceId,
-            push: token == null ? null : VpPushTokens.paramsFor(token),
+            push: pushParams,
           ),
         );
       } finally {
         inLocalStep = false;
       }
       registered = true;
+      forceFresh = false;
+      inUseIssuedAt = now();
       if (gone()) return;
       if (token != null) await putPushToken(token);
     } catch (_) {
@@ -279,6 +337,10 @@ final engineSessionProvider = Provider<void>((ref) {
   Future<void> downOnce() async {
     session++;
     registered = false;
+    onKept = false;
+    forceFresh = false;
+    refusalPending = false;
+    inUseIssuedAt = null;
     final run = running;
     if (run != null && inLocalStep) {
       try {
@@ -328,7 +390,32 @@ final engineSessionProvider = Provider<void>((ref) {
   // resume starts the engine (a no-op when it runs) and registers again if
   // still signed in. Not on `none`: a new account reports it before it
   // registers.
+  bool signedIn() =>
+      ref.read(authProvider) is SignedIn &&
+      ref.read(accessTokenProvider) != null;
+
   final cleared = engine.registration.listen((e) {
+    // Q356-1: the kept password refused (401, 403): a new one from the API,
+    // once. A run still going acts on it itself (it checks [forceFresh]
+    // after its register); otherwise, or if it ended before it could, a new
+    // run starts. A refused fresh password never loops: [onKept] is false.
+    if (onKept && refusedCredentials(e)) {
+      onKept = false;
+      forceFresh = true;
+      refusalPending = true;
+      registered = false;
+      final run = running;
+      void again() {
+        if (refusalPending && signedIn()) unawaited(up());
+      }
+
+      if (run == null) {
+        again();
+      } else {
+        unawaited(run.whenComplete(again));
+      }
+      return;
+    }
     if (e.state != RegistrationState.cleared) return;
     registered = false;
     started = false;
@@ -336,11 +423,17 @@ final engineSessionProvider = Provider<void>((ref) {
   ref.onDispose(cleared.cancel);
 
   // Back in the foreground after a start or registration that didn't go
-  // through: try again, with fresh credentials.
+  // through: try again. Registered, a new password only once the one in use
+  // is 7 days old, and never with a call up (the POST drops the binding).
   final resumes = ref.read(appResumesProvider).listen((_) {
-    if (registered) return;
-    final s = ref.read(authProvider);
-    if (s is SignedIn && ref.read(accessTokenProvider) != null) unawaited(up());
+    if (registered) {
+      final issued = inUseIssuedAt;
+      if (issued == null || engine.activeCalls.isNotEmpty) return;
+      if (!keptAccountTooOld(issued, now()) || !signedIn()) return;
+      forceFresh = true;
+      registered = false;
+    }
+    if (signedIn()) unawaited(up());
   });
   ref.onDispose(resumes.cancel);
   apply(ref.read(authProvider), ref.read(accessTokenProvider));
