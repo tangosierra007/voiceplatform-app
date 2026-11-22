@@ -4,6 +4,7 @@
 
 import 'package:json_annotation/json_annotation.dart';
 
+/// Recents filter (`GET /history`)
 @JsonEnum()
 enum HistoryFilter {
   @JsonValue('all')
