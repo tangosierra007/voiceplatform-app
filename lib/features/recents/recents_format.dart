@@ -55,6 +55,11 @@ String historyTitle(HistoryEntry h, ContactMatcher matcher) {
 /// The line under it: `Missed · left voicemail`, `Incoming · 4:12`,
 /// `Answered by Mia on her desk phone`.
 String historySubtitle(HistoryEntry h) {
+  // Voicemail answered, but a message only when one was kept (FU56: a
+  // caller who hangs up during the greeting left nothing).
+  final voicemail = h.voicemailId == null
+      ? 'Missed · went to voicemail'
+      : 'Missed · left voicemail';
   final dir = h.direction == HistoryEntryDirection.outgoing
       ? 'Outgoing'
       : 'Incoming';
@@ -64,7 +69,7 @@ String historySubtitle(HistoryEntry h) {
       h.direction == HistoryEntryDirection.outgoing
           ? 'Outgoing · No answer'
           : 'Missed',
-    HistoryEntryOutcome.voicemail => 'Missed · left voicemail',
+    HistoryEntryOutcome.voicemail => voicemail,
     HistoryEntryOutcome.answeredElsewhere =>
       h.answeredBy == null || h.answeredBy!.isEmpty
           ? 'Answered elsewhere'

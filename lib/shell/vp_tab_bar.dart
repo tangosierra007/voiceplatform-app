@@ -20,6 +20,10 @@ enum AppTab {
   final String svg;
 }
 
+/// Kept clear each side of a tab label once large text fills its slot, so
+/// two labels are always at least twice this apart.
+const double tabLabelGutter = 3;
+
 /// The tab bar exactly as the artboards draw it (`nav.tabs` in
 /// AppKeypad.dc.html and AppKeypadDark.dc.html):
 /// padding 8 6 26, a 1 px top border, items spaced around; each item a
@@ -101,6 +105,12 @@ class _TabItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) => _build(context, box.maxWidth),
+    );
+  }
+
+  Widget _build(BuildContext context, double slotWidth) {
     final c = context.vp;
     final iconColour = active ? c.brandText : c.textMuted;
 
@@ -125,15 +135,24 @@ class _TabItem extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 3),
-          // Grows with the text size and shrinks to fit the slot, so 200 %
-          // never runs past the tab.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              tab.label,
-              maxLines: 1,
-              softWrap: false,
-              style: _labelStyle.copyWith(color: active ? c.text : c.textMuted),
+          // Grows with the text size and shrinks to fit the slot less a
+          // gutter each side, so at 200 % neighbouring labels never run
+          // together (FU56). A cap, not padding: at normal sizes nothing
+          // moves.
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(0, slotWidth - 2 * tabLabelGutter),
+            ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                tab.label,
+                maxLines: 1,
+                softWrap: false,
+                style: _labelStyle.copyWith(
+                  color: active ? c.text : c.textMuted,
+                ),
+              ),
             ),
           ),
         ],

@@ -96,7 +96,7 @@ void main() {
 
   group('wording', () {
     test('each call in "Recent calls with"', () {
-      expect(callWithLine(_h('voicemail')), 'Missed, left voicemail');
+      expect(callWithLine(_h('voicemail')), 'Missed, went to voicemail');
       expect(callWithLine(_h('missed')), 'Missed');
       expect(
         callWithLine(_h('answered', seconds: 185), myFirstName: 'Ava'),
