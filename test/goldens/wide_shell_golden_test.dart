@@ -7,6 +7,12 @@
 // detail, the phone-width keypad and the centred screens come in the next
 // wide-layout PRs, which update the 600 dp golden.
 //
+// The shell goldens show Recents' dates, so they run at a fixed time, 3:40 pm
+// on Tuesday 27 October in Melbourne, as wide_recents_golden_test.dart does.
+// Without it, the rows of 27 October turned from "Tue" into "27 Oct" a week
+// after the goldens were drawn, and both failed by 0.12 % on every platform
+// (task 363).
+//
 //   flutter test --update-goldens test/goldens
 @Tags(['golden'])
 library;
@@ -19,6 +25,8 @@ import 'package:voiceplatform_app/theme/theme_preference.dart';
 
 import '../support/app_harness.dart';
 import '../support/phone.dart';
+
+final _now = DateTime.utc(2026, 10, 27, 4, 40);
 
 void _window(WidgetTester tester, Size size) {
   tester.view.physicalSize = size * 2;
@@ -65,7 +73,9 @@ void main() {
       tester,
     ) async {
       _window(tester, Size(width, 900));
-      await tester.pumpWidget(await appUnderTest(theme: ThemePreference.light));
+      await tester.pumpWidget(
+        await appUnderTest(theme: ThemePreference.light, clock: () => _now),
+      );
       await tester.pumpAndSettle();
       await _open(tester, 'Recents');
       await expectLater(
