@@ -71,7 +71,7 @@ class FixedPhoneContacts implements PhoneContactsSource {
 
 class PresetStatus extends MyStatusNotifier {
   PresetStatus(this.initial);
-  final StatusStatus initial;
+  final StatusStatus? initial;
   final sent = <StatusInputStatus>[];
   final sentUntil = <DateTime?>[];
 

@@ -482,7 +482,9 @@ class _StatusPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.vp;
-    final status = ref.watch(myStatusProvider) ?? StatusStatus.available;
+    // Unknown until `GET /me` answers: no option is shown as chosen, so a
+    // failed Me never claims "Available" (WS4 leftover).
+    final status = ref.watch(myStatusProvider);
     final until = ref.watch(dndUntilProvider);
     Future<void> pick(StatusInputStatus s) async {
       DateTime? end;
