@@ -5,7 +5,9 @@
 //
 // The tab screens beside the rail are still the phone screens: list and
 // detail, the phone-width keypad and the centred screens come in the next
-// wide-layout PRs, which update the 600 dp golden.
+// wide-layout PRs, which update the 600 dp golden. Both widths run at
+// 3:40 pm on Tuesday 27 October in Melbourne, as the other wide goldens do,
+// so the dates in Recents don't move with the run date.
 //
 //   flutter test --update-goldens test/goldens
 @Tags(['golden'])
@@ -19,6 +21,8 @@ import 'package:voiceplatform_app/theme/theme_preference.dart';
 
 import '../support/app_harness.dart';
 import '../support/phone.dart';
+
+final _now = DateTime.utc(2026, 10, 27, 4, 40);
 
 void _window(WidgetTester tester, Size size) {
   tester.view.physicalSize = size * 2;
@@ -65,7 +69,9 @@ void main() {
       tester,
     ) async {
       _window(tester, Size(width, 900));
-      await tester.pumpWidget(await appUnderTest(theme: ThemePreference.light));
+      await tester.pumpWidget(
+        await appUnderTest(theme: ThemePreference.light, clock: () => _now),
+      );
       await tester.pumpAndSettle();
       await _open(tester, 'Recents');
       await expectLater(
