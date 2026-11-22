@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../calls/directory.dart';
+import '../diagnostics/refusal_diagnostic.dart' show refusalDiagnosticsProvider;
 import '../diagnostics/scrubber.dart';
 import '../engine/full_screen_access.dart' show fullScreenPromptProvider;
 import '../features/messages/messages_data.dart';
@@ -441,7 +442,10 @@ class AuthController extends Notifier<AuthState> {
         }
       } else if (status == 403 && data is Map<String, Object?>) {
         await signOutLocally();
-        state = LicenceRefused(LicenceRefusal.fromJson(data));
+        final refusal = LicenceRefusal.fromJson(data);
+        // After the wipe, so it outlives this sign-out (Q364-1).
+        await _keepRefusalDiagnostic(refusal);
+        state = LicenceRefused(refusal);
       }
       return false;
     }
@@ -463,6 +467,18 @@ class AuthController extends Notifier<AuthState> {
       // Offline: the phone is still cleared; the admin can revoke it.
     }
     await signOutLocally();
+  }
+
+  /// Q364-1: a licence refusal keeps one diagnostic for support, with the
+  /// time, the refusal code and the app version only, for 7 days.
+  Future<void> _keepRefusalDiagnostic(LicenceRefusal r) async {
+    try {
+      await ref
+          .read(refusalDiagnosticsProvider)
+          .record(r.error.json ?? 'unknown');
+    } catch (_) {
+      // Storage unavailable: the refusal itself still shows.
+    }
   }
 
   /// AppSignedOut: Sign in again.
@@ -518,7 +534,9 @@ class AuthController extends Notifier<AuthState> {
       if (res.statusCode == 403 &&
           data is Map<String, Object?> &&
           data['error'] == 'licence_basic') {
-        state = LicenceRefused(LicenceRefusal.fromJson(data));
+        final refusal = LicenceRefusal.fromJson(data);
+        await _keepRefusalDiagnostic(refusal);
+        state = LicenceRefused(refusal);
         throw const SignInFailure('', code: 'licence_basic');
       }
       if (data is Map<String, Object?> && data['message'] is String) {

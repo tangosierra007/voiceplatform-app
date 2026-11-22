@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth/app_lock.dart';
 import 'auth/links.dart';
 import 'auth/version.dart';
+import 'diagnostics/refusal_diagnostic.dart';
 import 'engine/engine_provider.dart';
 import 'engine/full_screen_access.dart';
 import 'engine/push_handler.dart';
@@ -33,6 +34,9 @@ class _VoicePlatformAppState extends ConsumerState<VoicePlatformApp> {
     final router = ref.watch(routerProvider);
     // Registers the engine while signed in (SIP credentials into register()).
     ref.watch(engineSessionProvider);
+    // Licence refusal diagnostics 7 days old go, on start and each wake
+    // (Q364-1).
+    ref.watch(refusalDiagnosticPurgeProvider);
     // Data pushes: a text, a voicemail, signed out, new config.
     ref.watch(pushHandlerProvider);
     // Kept listening across call screens, so a call that rang while
