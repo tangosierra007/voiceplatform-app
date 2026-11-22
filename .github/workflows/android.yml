@@ -1,6 +1,7 @@
 name: android
 
-# Android CI: analyze, test, debug APK, release App Bundle, and the upload to
+# Android CI: analyze, test, debug APK, release App Bundle, a release APK
+# launched on an emulator (pull requests only), and the upload to
 # Play internal testing (manual dispatch from main, or a v* tag only).
 #
 # Versions: versionName is the `version:` name in pubspec.yaml; versionCode is
@@ -157,6 +158,92 @@ jobs:
             build/app/outputs/flutter-apk/app-debug.apk
             build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
+
+  release-launch:
+    name: Release build launches on an emulator
+    # Task 421 (Q309-11), after build 369 crashed at launch: a release APK built
+    # as an upload build is (R8 and resource shrinking, release flavour), signed
+    # with a throwaway key made here (never the upload key), installed on an
+    # emulator, and started. Fails on a build error, a crash, or no first frame.
+    # Pull requests only, to keep CI minutes down. The phone check before every
+    # upload stays the rule (docs/store/release-checklist.md).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    concurrency:
+      group: android-release-launch-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      AVD_IMAGE: "system-images;android-36;google_apis;x86_64"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install Android SDK components and the emulator image
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" "$ANDROID_NDK" emulator "$AVD_IMAGE" > /dev/null
+      - name: Throwaway signing key (never the upload key)
+        run: |
+          umask 077
+          # A random password for this run only, kept in the runner's temp folder.
+          openssl rand -hex 16 > "$RUNNER_TEMP/throwaway.pw"
+          pw=$(cat "$RUNNER_TEMP/throwaway.pw")
+          echo "::add-mask::$pw"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/throwaway.jks" -storepass "$pw" -keypass "$pw" \
+            -alias ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=CI throwaway" -noprompt
+      - run: flutter pub get
+      - name: Release APK, as an upload build but with the throwaway key
+        # x86_64 only, for the emulator; the shrinking and release settings are the upload build's.
+        run: |
+          pw=$(cat "$RUNNER_TEMP/throwaway.pw")
+          VP_UPLOAD_STORE_FILE="$RUNNER_TEMP/throwaway.jks" VP_UPLOAD_STORE_PASSWORD="$pw" \
+            VP_UPLOAD_KEY_ALIAS=ci VP_UPLOAD_KEY_PASSWORD="$pw" \
+            flutter build apk --release --target-platform android-x64
+      - name: Enable KVM
+        # GitHub's documented udev rule for hardware acceleration on its Linux runners.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start the emulator
+        run: |
+          set -euo pipefail
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n ci -k "$AVD_IMAGE" -d pixel_6 --force > /dev/null
+          nohup "$ANDROID_HOME/emulator/emulator" -avd ci -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect -port 5554 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          adb -s emulator-5554 wait-for-device
+          for _ in $(seq 1 180); do
+            [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break
+            sleep 2
+          done
+          [ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1 ] || { tail -50 "$RUNNER_TEMP/emulator.log"; exit 1; }
+          adb -s emulator-5554 shell input keyevent 82
+      - name: Launch the release build and check the first screen
+        run: bash .github/scripts/release-launch-smoke.sh build/app/outputs/flutter-apk/app-release.apk emulator-5554 60
+      - name: Keep the logcat on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-launch-logcat-${{ github.run_number }}
+          path: release-launch-logcat.txt
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Remove the throwaway key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/throwaway.jks" "$RUNNER_TEMP/throwaway.pw"
 
   play-track-guard:
     name: Play track guard (internal only)

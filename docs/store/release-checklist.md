@@ -8,6 +8,7 @@ For TJ and mobile-lead together. Internal testing only; nothing else in Play Con
 - **1.0.2:** tag `v1.0.2` on `49d00c6`, 10 Nov 2026. The app asks for full-screen access when it's off (task 2, #62; A53 tests passed 10 Nov). Run #390; the first upload attempt failed because the Google Play Android Developer API was off in the Cloud project (TJ enabled it 10 Nov). First release item: the full-screen intent declaration (`declarations.md`), which goes to Google's review only once the whole app dashboard is complete.
 
 1. **Before the run**
+   - [ ] The pull request's "Release build launches on an emulator" job passed (a release APK, shrunk as an upload build, installed on an emulator and started: no crash, first frame drawn). It is an extra net only: the release-mode test on a phone before every upload stays the rule (open, sign in, a call each way, locked).
    - [ ] `main` is green; `pubspec.yaml` `version:` is the versionName wanted (for example `1.0.0`). The versionCode is the run number of `android.yml` (it only goes up).
    - [x] The `play-internal` environment has its five secrets (set 27 Oct), a required reviewer (TJ) with admin bypass off, and deploys only from `main` and `v*` tags.
    - [x] A tag ruleset protects `v*` tags.
