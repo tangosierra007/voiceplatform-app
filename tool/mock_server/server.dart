@@ -717,6 +717,7 @@ class MockServer {
     if (c['team'] != null) 'team': c['team'],
     if (c['role'] != null) 'role': c['role'],
     if (c['mobile'] != null) 'mobile': c['mobile'],
+    if (c['voicemailDial'] != null) 'voicemailDial': c['voicemailDial'],
     'presence': _presenceEntry('${c['n']}'),
   };
 

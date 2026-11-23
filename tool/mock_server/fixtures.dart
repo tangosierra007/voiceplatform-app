@@ -144,6 +144,9 @@ const colleagues = [
     'initials': 'MR',
     'team': 'Sales',
     'presence': 'available',
+    // Her mailbox takes messages: Send to voicemail (A5). No one else in the
+    // sample has the field, so their pages show no such button.
+    'voicemailDial': '*99206',
   },
   {
     'n': 302,

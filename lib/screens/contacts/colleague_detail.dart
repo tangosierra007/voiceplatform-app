@@ -74,14 +74,20 @@ String labelWord(String label) {
   return label[0].toLowerCase() + rest;
 }
 
-/// FoldContacts' detail: the colleague with presence, Call (extension) and
-/// Call mobile, their contact details and teams, and the calls with them.
-/// Beside the list when [wide]; on the phone, the same detail as its own
-/// page with Back ([onBack]).
+/// FoldContacts' detail: the colleague with presence, Call (extension),
+/// Call mobile and Send to voicemail, their contact details and teams, and
+/// the calls with them. Beside the list when [wide]; on the phone, the same
+/// detail as its own page with Back ([onBack]).
 ///
-/// What the app can't show yet, never as a dead button:
-/// - "Send to voicemail" (A5: no direct-to-voicemail call in the contract);
-/// - an email address (not in the directory's colleague).
+/// Send to voicemail (A5) dials the colleague's `voicemailDial` exactly as
+/// the directory gives it (`*99<ext>`, spec 13 Voicemail direct): their
+/// mailbox answers and nothing of theirs rings. It shows only when the field
+/// is there (their mailbox takes messages); the app never builds the code.
+/// It places a new call; sending a call you're on there is the transfer
+/// screen's (task 567, blind transfer only).
+///
+/// What the app can't show yet, never as a dead button: an email address
+/// (not in the directory's colleague).
 class ColleagueDetail extends ConsumerWidget {
   const ColleagueDetail({
     super.key,
@@ -118,6 +124,7 @@ class ColleagueDetail extends ConsumerWidget {
         if (t.members.contains(col.userId)) t.name,
     ];
     final mobile = col.mobile;
+    final voicemail = col.voicemailDial;
     final calls = [
       ...?ref.watch(callsWithProvider(col.extensionValue)).value,
       if (mobile != null) ...?ref.watch(callsWithProvider(mobile)).value,
@@ -143,10 +150,14 @@ class ColleagueDetail extends ConsumerWidget {
                 primary: false,
                 onPressed: () => dialNumber(context, ref, mobile),
               ),
+            if (voicemail != null)
+              _CallButton(
+                label: 'Send to voicemail',
+                primary: false,
+                onPressed: () => dialNumber(context, ref, voicemail),
+              ),
           ],
         ),
-        // GAP(A5): "Send to voicemail" goes here once the contract can call a
-        // colleague's voicemail without ringing them.
         DetailCard(
           title: 'Contact',
           children: [

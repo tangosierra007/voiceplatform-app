@@ -16,6 +16,7 @@ class Colleague {
     required this.initials,
     required this.extensionValue,
     required this.presence,
+    this.voicemailDial,
     this.team,
     this.role,
     this.mobile,
@@ -30,6 +31,9 @@ class Colleague {
   /// The name has been replaced because it contains a keyword. Original name: `extension`.
   @JsonKey(name: 'extension')
   final String extensionValue;
+
+  /// What to dial to leave this colleague a message without ringing them (spec 13 Voicemail direct, A5). Present only when their mailbox takes messages; the app dials it as given and never builds the code.
+  final String? voicemailDial;
   final String? team;
   final String? role;
 
