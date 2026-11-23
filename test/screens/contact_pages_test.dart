@@ -301,6 +301,57 @@ void main() {
     await _end(tester, e);
   });
 
+  // A5, spec 13 Voicemail direct: `voicemailDial` is dialled exactly as the
+  // directory gives it, through the one call path; a colleague without it
+  // (their mailbox takes no messages) has no such button.
+  testWidgets("phone: Send to voicemail dials the colleague's voicemailDial; "
+      'none without it', (tester) async {
+    _window(tester, _phone);
+    final e = await _open(tester);
+    await tester.scrollUntilVisible(
+      find.text('Mia Rossi'),
+      100,
+      scrollable: _list.first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mia Rossi'));
+    await _settle(tester);
+    expect(_shown(tester), 'Mia Rossi');
+    expect(find.text('Call 206'), findsOneWidget);
+    expect(_button('Send to voicemail'), findsOneWidget);
+    await _callAndHangUp(tester, e, find.text('Send to voicemail'));
+    expect(e.called, ['*99206'], reason: 'the code as given, not the ext');
+
+    await tester.tap(_button('Back to Contacts'));
+    await _settle(tester);
+    await tester.scrollUntilVisible(
+      find.text('Priya Shah'),
+      100,
+      scrollable: _list.first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Priya Shah'));
+    await _settle(tester);
+    expect(_shown(tester), 'Priya Shah');
+    expect(find.text('Call mobile'), findsOneWidget);
+    expect(find.text('Send to voicemail'), findsNothing);
+    expect(e.called, ['*99206'], reason: 'nothing else dialled');
+    expect(tester.takeException(), isNull);
+    await _end(tester, e);
+  });
+
+  testWidgets('884 dp: Send to voicemail beside the list too', (tester) async {
+    _window(tester, _unfolded);
+    final e = await _open(tester);
+    await tester.tap(find.text('Mia Rossi'));
+    await _settle(tester);
+    expect(find.byType(ListDetailLayout), findsOneWidget);
+    expect(_shown(tester), 'Mia Rossi');
+    await _callAndHangUp(tester, e, find.text('Send to voicemail'));
+    expect(e.called, ['*99206']);
+    await _end(tester, e);
+  });
+
   testWidgets("phone: a phone contact's own page, each number a call; Back "
       'to Phone contacts', (tester) async {
     _window(tester, _phone);

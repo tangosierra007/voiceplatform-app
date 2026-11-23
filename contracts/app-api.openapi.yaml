@@ -1235,6 +1235,14 @@ components:
         name: { type: string }
         initials: { type: string }
         extension: { type: string }
+        voicemailDial:
+          type: string
+          pattern: "^\\*99[0-9]{2,8}$"
+          examples: ["*99201"]
+          description: >-
+            What to dial to leave this colleague a message without ringing them
+            (spec 13 Voicemail direct, A5). Present only when their mailbox takes
+            messages; the app dials it as given and never builds the code.
         team: { type: string, examples: ["Sales"] }
         role: { type: string, examples: ["Reception"] }
         mobile: { type: string, description: "Only when the colleague shares it" }

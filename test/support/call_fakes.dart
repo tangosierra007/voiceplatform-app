@@ -103,6 +103,7 @@ List<Colleague> fixtureColleagues({DateTime? now}) => [
       'team': ?c['team'],
       'role': ?c['role'],
       'mobile': ?c['mobile'],
+      'voicemailDial': ?c['voicemailDial'],
       'presence': {
         'extension': '${c['n']}',
         'presence': c['presence'],
