@@ -239,7 +239,7 @@ object LinphoneEngine {
         val c = factory.createCoreWithConfig(config, context)
         coreInstance = lastInstance
         try {
-            configure(c)
+            configure(c, context)
             c.addListener(coreListener)
             check(c.start() == 0) { "Core.start failed" }
         } catch (t: Throwable) {
@@ -295,7 +295,7 @@ object LinphoneEngine {
         )
     }
 
-    private fun configure(c: Core) {
+    private fun configure(c: Core, context: Context) {
         c.setUserAgent(USER_AGENT, VERSION)
         // Client TLS only: no UDP or TCP listener, a random local TLS port.
         val t = c.transports
@@ -305,6 +305,12 @@ object LinphoneEngine {
         c.setTransports(t)
         c.verifyServerCertificates(true)
         c.verifyServerCn(true)
+        // G8: a debug build given the test stack's CA trusts it as well as the
+        // bundled roots; release and profile builds never (TestCaTrust).
+        TestCaTrust.forApp(context, c.rootCa)?.let {
+            c.setRootCaData(it)
+            log("debug build: test stack CA trusted for SIP TLS")
+        }
         // APP13: SRTP (SDES) on every call, mandatory: RTP/SAVP only in the SDP,
         // and liblinphone answers 488 to an offer without crypto. No SRTP in
         // the build means no engine, never plain RTP.

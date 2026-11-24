@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:io' show HttpClient;
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/export.dart';
 import '../auth/auth.dart';
 import '../shell/shell_status.dart';
+import 'test_ca.dart';
 
 export '../api/app_api.dart';
 export '../api/export.dart';
@@ -74,7 +77,14 @@ class AppHeadersInterceptor extends Interceptor {
   }
 }
 
-Dio buildDio(ApiConfig config, {required String? Function() accessToken}) {
+/// [trustedCaPem] is an extra CA trusted beside the system's roots; it
+/// defaults to [testStackCaPem] (G8), which is null in every release and
+/// profile build.
+Dio buildDio(
+  ApiConfig config, {
+  required String? Function() accessToken,
+  String? trustedCaPem,
+}) {
   final dio = Dio(
     BaseOptions(
       baseUrl: config.baseUrl,
@@ -82,6 +92,12 @@ Dio buildDio(ApiConfig config, {required String? Function() accessToken}) {
       receiveTimeout: const Duration(seconds: 20),
     ),
   );
+  final pem = trustedCaPem ?? testStackCaPem;
+  if (pem != null) {
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () => HttpClient(context: testCaContext(pem)),
+    );
+  }
   dio.interceptors.add(
     AppHeadersInterceptor(
       appHeader: config.appHeader,

@@ -4,6 +4,8 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Debug only: cleartext to the local mock server (see the file). -->
-    <application android:networkSecurityConfig="@xml/network_security_config"/>
+    <!-- Debug only: cleartext to the local mock server (see the file), and with
+         the VP_TEST_CA_B64 define the test stack CA as well (G8; build.gradle.kts
+         sets the placeholder). -->
+    <application android:networkSecurityConfig="${vpNetworkSecurityConfig}"/>
 </manifest>

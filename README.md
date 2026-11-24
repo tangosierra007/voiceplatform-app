@@ -56,6 +56,17 @@ dart tool/check_phone_numbers.dart --commits origin/main..HEAD # your commits
 
 A digit string that looks like a number but is not one (a version, a long ID) goes in `tool/phone_numbers/allow_list.txt` with a reason; the file explains how. CI runs the check and reads the allow-list from `main`, never from your branch. A pull request that changes `tool/check_phone_numbers.dart`, `tool/phone_numbers/` or `.github/workflows/secret-scan.yml` fails until the project lead adds the `phone-check-approved` label.
 
+## Debug builds against a test stack
+
+A debug build can trust one extra CA, a test stack's, for the API's HTTPS, native HTTPS (voicemail streaming) and SIP TLS. Pass base64 of the CA's PEM file, the certificate only, as a define:
+
+```
+flutter run --dart-define=VP_API_BASE=https://<test stack>/app/v1 --dart-define=VP_ENGINE=linphone \
+  --dart-define=VP_TEST_CA_B64=$(base64 -w0 test-stack-ca.pem)
+```
+
+On Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes('test-stack-ca.pem'))`. Release and profile builds ignore it, and `vpCheckReleaseNoTestCa` (run after every release build) fails one whose APK or bundle has any of it. CA files (`*.pem`, `*.crt`) are never committed.
+
 ## Status
 
 Early development. Nothing to install yet.
