@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../calls/directory.dart';
 import '../diagnostics/scrubber.dart';
 import '../engine/full_screen_access.dart' show fullScreenPromptProvider;
+import '../engine/kept_account.dart' show keptSipAccountProvider;
 import '../features/messages/messages_data.dart';
 import '../features/recents/recents_data.dart' show pickedRecentProvider;
 import '../net/api.dart';
@@ -159,6 +160,9 @@ final localDataWipersProvider = Provider<List<Future<void> Function()>>(
     },
     // Crash-report scope and the on-disk outbox.
     clearDiagnosticsOnDevice,
+    // The SIP account the engine keeps (Q356-1): gone before sign-out
+    // returns, ahead of the engine's own unregister.
+    () async => ref.read(keptSipAccountProvider)?.wipe(),
   ],
 );
 

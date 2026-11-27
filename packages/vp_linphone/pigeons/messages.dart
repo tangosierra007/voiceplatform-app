@@ -199,6 +199,20 @@ abstract class VpLinphoneHostApi {
 
   /// The app sent the token to the API.
   void markPushTokenSent();
+
+  /// When the kept account's password was issued, in milliseconds since the
+  /// epoch; null when none is kept, it can't be read, or it was kept before
+  /// the time was stored. Never the password itself (APP4, Q356-1).
+  int? keptAccountIssuedAt();
+
+  /// Registers with the kept account, with these push params when all three
+  /// are given. The password never crosses the channel. False when none is
+  /// kept.
+  bool registerKept(String? pushProvider, String? pushPrid, String? pushParam);
+
+  /// Deletes the kept account from the phone (sign-out, before the sign-out
+  /// call returns; Q356-1).
+  void forgetKeptAccount();
 }
 
 /// Kotlin to Dart events.

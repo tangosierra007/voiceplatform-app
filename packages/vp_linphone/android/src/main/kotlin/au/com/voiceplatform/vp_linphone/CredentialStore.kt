@@ -10,7 +10,13 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** The account register() was given, as needed to re-register after a push wake. */
+/**
+ * The account register() was given, as needed to re-register after a push
+ * wake or on a normal app start. [issuedAtMillis] is when the API issued the
+ * password (the time register() kept it): the app asks for a new one once it
+ * is 7 days old (Q356-1). Null for a record kept before the time was stored,
+ * which the app treats as too old.
+ */
 data class AccountRecord(
     val authUsername: String,
     val password: String,
@@ -22,13 +28,14 @@ data class AccountRecord(
     val pushProvider: String?,
     val pushPrid: String?,
     val pushParam: String?,
+    val issuedAtMillis: Long? = null,
 ) {
     override fun toString() = "AccountRecord($authUsername@$domain)"
 
     fun encode(): ByteArray {
         val fields = listOf(
             authUsername, password, domain, outboundProxy, displayName, expiresSeconds.toString(), instanceId,
-            pushProvider, pushPrid, pushParam,
+            pushProvider, pushPrid, pushParam, issuedAtMillis?.toString(),
         )
         val sb = StringBuilder(VERSION_TAG)
         for (f in fields) {
@@ -38,11 +45,17 @@ data class AccountRecord(
     }
 
     companion object {
-        private const val VERSION_TAG = "v1|"
+        /** v2 adds the issue time; a v1 record (10 fields) still reads, with none. */
+        private const val VERSION_TAG = "v2|"
+        private const val VERSION_1_TAG = "v1|"
 
         fun decode(bytes: ByteArray): AccountRecord? {
             val s = bytes.toString(Charsets.UTF_8)
-            if (!s.startsWith(VERSION_TAG)) return null
+            val fieldCount = when {
+                s.startsWith(VERSION_TAG) -> 11
+                s.startsWith(VERSION_1_TAG) -> 10
+                else -> return null
+            }
             var i = VERSION_TAG.length
             val out = mutableListOf<String?>()
             while (i < s.length) {
@@ -59,11 +72,12 @@ data class AccountRecord(
                 out += s.substring(colon + 1, end)
                 i = end
             }
-            if (out.size != 10) return null
+            if (out.size != fieldCount) return null
+            val issuedAt = if (fieldCount == 11) out[10]?.let { it.toLongOrNull() ?: return null } else null
             return AccountRecord(
                 out[0] ?: return null, out[1] ?: return null, out[2] ?: return null, out[3] ?: return null,
                 out[4] ?: return null, out[5]?.toIntOrNull() ?: return null, out[6] ?: return null,
-                out[7], out[8], out[9],
+                out[7], out[8], out[9], issuedAt,
             )
         }
     }
@@ -73,9 +87,10 @@ data class AccountRecord(
  * Keeps the [AccountRecord] across process death so a push can wake the
  * engine and re-register while the app is not running (spec 22: credentials
  * in memory and the platform keystore only). AES-256-GCM with a key that
- * never leaves Android Keystore; the file is in noBackupFilesDir. Nothing
- * here is readable back through the Flutter API (APP4). Cleared by
- * unregister().
+ * never leaves Android Keystore; the file is in noBackupFilesDir. The
+ * password is never readable back through the Flutter API (APP4): Dart sees
+ * only the issue time, and asks this side to register with the kept account.
+ * Cleared by unregister() and by the app's sign-out wipe.
  */
 class CredentialStore(context: Context) {
     private val file = File(context.noBackupFilesDir, "vp_linphone/account.bin")

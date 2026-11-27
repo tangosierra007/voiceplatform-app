@@ -1150,6 +1150,66 @@ class VpLinphoneHostApi {
 
     _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
   }
+
+  /// When the kept account's password was issued, in milliseconds since the
+  /// epoch; null when none is kept, it can't be read, or it was kept before
+  /// the time was stored. Never the password itself (APP4, Q356-1).
+  Future<int?> keptAccountIssuedAt() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.keptAccountIssuedAt$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return pigeonVar_replyValue as int?;
+  }
+
+  /// Registers with the kept account, with these push params when all three
+  /// are given. The password never crosses the channel. False when none is
+  /// kept.
+  Future<bool> registerKept(String? pushProvider, String? pushPrid, String? pushParam) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.registerKept$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[pushProvider, pushPrid, pushParam]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as bool;
+  }
+
+  /// Deletes the kept account from the phone (sign-out, before the sign-out
+  /// call returns; Q356-1).
+  Future<void> forgetKeptAccount() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.vp_linphone.VpLinphoneHostApi.forgetKeptAccount$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
+  }
 }
 
 /// Kotlin to Dart events.

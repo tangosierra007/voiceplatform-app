@@ -80,6 +80,18 @@ object AccountSetup {
         return register()
     }
 
+    /**
+     * The kept account with the app's current push params, when it gives a
+     * full set; otherwise as kept. The password and the issue time never
+     * change here (Q356-1: the 7 days run from the API's POST).
+     */
+    fun withPush(kept: AccountRecord, provider: String?, prid: String?, param: String?): AccountRecord =
+        if (provider != null && prid != null && param != null) {
+            kept.copy(pushProvider = provider, pushPrid = prid, pushParam = param)
+        } else {
+            kept
+        }
+
     const val MIN_EXPIRES_S = 60
     const val MAX_EXPIRES_S = 604_800
 

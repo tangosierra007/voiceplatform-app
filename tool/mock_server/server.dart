@@ -684,7 +684,12 @@ class MockServer {
     return r.empty(204);
   }
 
+  /// How many times the app asked for SIP credentials (each one rotates the
+  /// password on the real API; Q356-1 tests count them).
+  int sipCredentialPosts = 0;
+
   Future<void> _sipCredentials(_Req r) {
+    sipCredentialPosts++;
     r.req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     return r.json(200, {
       'authUsername': 'mock-202-pixel8',
