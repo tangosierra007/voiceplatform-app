@@ -39,6 +39,10 @@ Future<void> main() async {
       child: const VoicePlatformApp(),
     ),
   );
+  // The release launch test in CI waits for this line in logcat (task 421).
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => debugPrint('VP_FIRST_FRAME'),
+  );
 }
 
 /// The bundled fonts' OFL texts, so Open source licences lists them.
