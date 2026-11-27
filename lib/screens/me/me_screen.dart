@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../../auth/auth.dart';
 import '../../calls/me_state.dart';
 import '../../calls/numbers.dart';
 import '../../diagnostics/diagnostics.dart';
+import '../../diagnostics/refusal_diagnostic.dart';
 import '../../engine/engine_provider.dart';
 import '../../engine/full_screen_access.dart';
 import '../../engine/phone_extras.dart';
@@ -30,26 +32,42 @@ const meAvatarDark = Color(0xFF3D3834);
 /// /diagnostics/call-logs` (`application/gzip`, with the bearer and
 /// X-VP-App). Answers the reference to quote, or null when no call has been
 /// logged on this phone yet.
+///
+/// Licence refusal diagnostics under 7 days old (Q364-1: time, refusal code
+/// and app version only) go first in the same upload, even with no call
+/// logged, and are deleted once sent. The Me screen shows them before it
+/// sends.
 final sendCallLogsProvider = Provider<Future<String?> Function()>((ref) {
   return () async {
+    final store = ref.read(refusalDiagnosticsProvider);
+    final refusals = await store.read();
+    Future<String> upload(Uint8List gz) async {
+      final r = await ref
+          .read(dioProvider)
+          .post<Map<String, Object?>>(
+            '/diagnostics/call-logs',
+            data: Stream.fromIterable([gz]),
+            options: Options(
+              contentType: 'application/gzip',
+              headers: {Headers.contentLengthHeader: gz.length},
+            ),
+          );
+      return PostDiagnosticsCallLogsResponse.fromJson(r.data!).reference;
+    }
+
     final d = CallDiagnostics(
       engine: ref.read(callEngineProvider),
-      upload: (gz) async {
-        final r = await ref
-            .read(dioProvider)
-            .post<Map<String, Object?>>(
-              '/diagnostics/call-logs',
-              data: Stream.fromIterable([gz]),
-              options: Options(
-                contentType: 'application/gzip',
-                headers: {Headers.contentLengthHeader: gz.length},
-              ),
-            );
-        return PostDiagnosticsCallLogsResponse.fromJson(r.data!).reference;
-      },
+      upload: upload,
     );
     try {
-      return await d.sendCallLogs();
+      if (refusals.isEmpty) return await d.sendCallLogs();
+      final reference = await upload(
+        withRefusalLines(await d.lastCallLog(), refusals),
+      );
+      try {
+        await store.clear();
+      } catch (_) {}
+      return reference;
     } on NoCallLog {
       return null;
     }
@@ -307,6 +325,37 @@ class MeScreen extends ConsumerWidget {
   }
 
   Future<void> _sendLogs(BuildContext context, WidgetRef ref) async {
+    // Q364-1: a licence refusal diagnostic goes too; the person sees it
+    // first, word for word, and can cancel.
+    List<RefusalDiagnostic> refusals = const [];
+    try {
+      refusals = await ref.read(refusalDiagnosticsProvider).read();
+    } catch (_) {}
+    if (!context.mounted) return;
+    if (refusals.isNotEmpty) {
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('Send call logs to support?'),
+          content: Text(
+            'Also sent, from this phone:\n'
+            '${refusals.map((r) => r.shown).join('\n')}\n\n'
+            'Nothing else about the refusal is kept.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(d).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(d).pop(true),
+              child: const Text('Send'),
+            ),
+          ],
+        ),
+      );
+      if (yes != true || !context.mounted) return;
+    }
     try {
       final reference = await ref.read(sendCallLogsProvider)();
       if (!context.mounted) return;
